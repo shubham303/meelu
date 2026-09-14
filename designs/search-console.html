@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search performance — design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --bad: #dc2626;
+    --m-clicks: #2563eb;
+    --m-impressions: #eb6834;
+    --m-ctr: #1baf7a;
+    --m-position: #d97706;
+    --s1: #2563eb;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --s4: #d97706;
+    --s5: #d55181;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .serif { font-family: 'Fraunces', Georgia, serif; font-weight: 500; }
+  .wrap { max-width: 1088px; margin: 0 auto; padding: 32px 24px 64px; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+  header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  header.page h1 { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; }
+  header.page .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 640px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: transparent;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+
+  .filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .seg button { all: unset; cursor: pointer; padding: 6px 12px; font-size: 13px; color: var(--ink-2); }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); font-weight: 500; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .chips { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; max-width: 340px;
+    border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface);
+    padding: 5px 8px 5px 10px; font-size: 13px;
+  }
+  .chip .val { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip button { all: unset; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; text-align: center; line-height: 20px; color: var(--ink-2); flex: none; }
+  .chip button:hover { background: var(--wash); color: var(--ink); }
+  .chips .hint { font-size: 12px; color: var(--muted); }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    all: unset; cursor: pointer; display: block; box-sizing: border-box;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 18px 14px;
+  }
+  .tile:hover { background: var(--wash); }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile[aria-pressed="true"] { border-color: var(--tile-color); background: var(--surface); box-shadow: inset 0 3px 0 var(--tile-color); }
+  .tile .k { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 7px; }
+  .tile .k .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--tile-color); }
+  .tile .v { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; margin-top: 6px; }
+  .tile .d { font-size: 12px; margin-top: 4px; color: var(--muted); }
+  .tile .d.up { color: var(--good); }
+  .tile .d.down { color: var(--bad); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .chart-card { padding: 20px 20px 10px; margin-bottom: 16px; }
+  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .chart-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .chart-head .scope { color: var(--ink-2); }
+  .chart-head .hint { font-size: 11px; color: var(--muted); }
+  .chart-box { position: relative; }
+  svg text { font: 11px 'Geist', ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 3;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(31, 45, 61, 0.10); padding: 8px 10px; min-width: 150px; max-width: 300px;
+  }
+  .tooltip .t-date { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .tooltip .t-row { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+  .tooltip .t-key { width: 14px; height: 0; border-top: 3px solid var(--series); border-radius: 2px; flex: none; }
+  .tooltip .t-val { font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tooltip .t-name { color: var(--ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .idx-card { padding: 20px; margin-bottom: 16px; }
+  .idx-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .idx-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .idx-head .hint { font-size: 11px; color: var(--muted); }
+  .meter { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 12px; }
+  .meter span { display: block; height: 100%; }
+  .idx-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+  .lg { display: inline-flex; align-items: center; gap: 7px; }
+  .lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sdot { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+  .st-indexed { background: #15803d; }
+  .st-notindexed { background: #d97706; }
+  .st-excluded { background: #ec835a; }
+  .st-unchecked { background: var(--line-strong); }
+
+  .panel { padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .panel-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .panel-head .tools { display: inline-flex; gap: 8px; align-items: center; }
+  .panel-head input {
+    border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink);
+    padding: 5px 10px; font: inherit; font-size: 13px; width: 160px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th:first-child { text-align: left; padding-left: 16px; }
+  td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  td:first-child { text-align: left; padding-left: 16px; color: var(--ink); max-width: 0; width: 44%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--wash); }
+  tbody tr.sel { background: var(--accent-wash); }
+  tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--row-color); }
+  tbody tr.sel td.pg { font-weight: 600; }
+  th.chk, td.chk { width: 36px; max-width: none; padding: 8px 2px 8px 14px; text-align: center; overflow: visible; }
+  th.pg, td.pg { text-align: left; }
+  td.pg { color: var(--ink); max-width: 0; width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 6px; }
+  th.pg { padding-left: 6px; }
+  th.sub, td.sub { text-align: left; }
+  td.sub { color: var(--ink-2); max-width: 0; width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.idx { text-align: left; white-space: nowrap; }
+  td.idx .sdot { width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; }
+  td.idx .canon { color: var(--bad); font-weight: 600; margin-left: 5px; cursor: help; }
+  input.rowchk { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; vertical-align: -2px; }
+  th.act, td.act { width: 36px; max-width: none; padding-right: 14px; text-align: center; overflow: visible; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--accent); }
+  th.sortable[aria-sort] { color: var(--ink); }
+  .resync {
+    all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 6px;
+    text-align: center; line-height: 24px; color: var(--ink-2); font-size: 14px;
+  }
+  .resync:hover:not(:disabled) { background: var(--wash); color: var(--accent); }
+  .resync:disabled { opacity: 0.5; cursor: default; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .resync.busy { display: inline-block; animation: spin 0.8s linear infinite; }
+
+  .foot { padding: 10px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  .foot.pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pager .btns { display: inline-flex; gap: 6px; }
+  .pager button {
+    all: unset; cursor: pointer; padding: 4px 10px; border: 1px solid var(--line-strong);
+    border-radius: 8px; font-size: 12px; color: var(--ink-2); background: var(--surface);
+  }
+  .pager button:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
+  .pager button:disabled { opacity: 0.4; cursor: default; }
+  .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 860px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .panel { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">‹ Site</div>
+  <header class="page">
+    <div>
+      <h1>Search performance</h1>
+      <p class="sub">What Google actually sends — query × page × day, 16 months kept for year-over-year. Synced 2 hours ago, free.</p>
+    </div>
+    <div class="actions">
+      <button class="btn">Sync now</button>
+      <button class="btn primary">✦ Ask</button>
+    </div>
+  </header>
+
+  <div class="filters">
+    <div class="seg" id="range-seg" role="group" aria-label="Date range">
+      <button data-range="28">28 days</button>
+      <button data-range="90" aria-pressed="true">90 days</button>
+      <button data-range="180">180 days</button>
+    </div>
+    <span class="chips" id="chips"></span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card chart-card">
+    <div class="chart-head">
+      <h2><span id="chart-metric">Clicks</span> · <span class="scope" id="chart-scope">all pages</span></h2>
+      <span class="hint" id="chart-hint">per day</span>
+    </div>
+    <div class="chart-box" id="chart-box">
+      <svg id="chart" width="100%" height="260" role="img" aria-label="Daily metric chart"></svg>
+      <div class="tooltip" id="tooltip">
+        <div class="t-date" id="tt-date"></div>
+        <div id="tt-rows"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card idx-card">
+    <div class="idx-head">
+      <h2>Index coverage</h2>
+      <span class="hint">from URL inspection · stalest pages re-checked each sync</span>
+    </div>
+    <div class="meter" id="idx-meter"></div>
+    <div class="idx-legend" id="idx-legend"></div>
+  </section>
+
+    <section class="card panel">
+      <div class="panel-head">
+        <h2>Pages</h2>
+        <span class="tools">
+          <input type="search" id="page-search" placeholder="Filter pages…" aria-label="Filter pages">
+        </span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th class="chk"></th>
+            <th class="pg sortable" data-key="url">Page</th>
+            <th class="sortable" data-key="clicks">Clicks</th>
+            <th class="sortable" data-key="impressions">Impr.</th>
+            <th class="sortable" data-key="ctr">CTR</th>
+            <th class="sortable" data-key="position">Pos.</th>
+            <th class="pg sortable" data-key="index">Index</th>
+            <th class="sortable" data-key="crawled">Crawled</th>
+            <th class="sortable" data-key="inspected">Inspected</th>
+            <th class="act"></th>
+          </tr>
+        </thead>
+        <tbody id="pages-body"></tbody>
+      </table>
+      <div class="foot pager">
+        <span id="pages-count"></span>
+        <span class="btns">
+          <button id="pages-prev" aria-label="Previous page">‹ Prev</button>
+          <button id="pages-next" aria-label="Next page">Next ›</button>
+        </span>
+      </div>
+    </section>
+
+    <section class="card panel">
+      <div class="panel-head"><h2>Top queries</h2></div>
+      <table>
+        <thead>
+          <tr><th>Query</th><th class="sub">Page</th><th>Clicks</th><th>Impr.</th><th>Pos.</th></tr>
+        </thead>
+        <tbody id="queries-body"></tbody>
+      </table>
+      <div class="foot pager">
+        <span id="queries-count"></span>
+        <span class="btns">
+          <button id="queries-prev" aria-label="Previous queries page">‹ Prev</button>
+          <button id="queries-next" aria-label="Next queries page">Next ›</button>
+        </span>
+      </div>
+    </section>
+
+  <p class="note">Property sc-domain:meelu.io — chosen at connect time. Positions are Search Console averages, not live checks.</p>
+</div>
+
+<script>
+(() => {
+  const DAYS = 180;
+  const END = new Date();
+  END.setDate(END.getDate() - 3);
+  const MAX_SELECT = 5;
+  const PAGE_SIZE = 20;
+  const QUERY_PAGE_SIZE = 10;
+
+  let seed = 42;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+
+  const PAGES = [
+    { url: "/", w: 30, ctr: 0.055, pos: 4.2 },
+    { url: "/pricing", w: 14, ctr: 0.048, pos: 6.1 },
+    { url: "/blog/seo-for-founders", w: 22, ctr: 0.041, pos: 7.8 },
+    { url: "/blog/technical-seo-checklist", w: 17, ctr: 0.036, pos: 9.4 },
+    { url: "/blog/search-console-guide", w: 12, ctr: 0.032, pos: 11.2 },
+    { url: "/features/site-audit", w: 9, ctr: 0.029, pos: 12.6 },
+    { url: "/blog/content-quality", w: 8, ctr: 0.026, pos: 14.1 },
+    { url: "/docs/getting-started", w: 6, ctr: 0.038, pos: 8.9 },
+    { url: "/features/keyword-tracking", w: 5, ctr: 0.022, pos: 16.3 },
+    { url: "/blog/crawl-budget", w: 4, ctr: 0.019, pos: 18.7 },
+    { url: "/about", w: 3, ctr: 0.031, pos: 10.4 },
+    { url: "/blog/internal-linking", w: 3, ctr: 0.017, pos: 21.2 },
+  ];
+
+  const TOPICS = [
+    "core-web-vitals", "schema-markup", "meta-descriptions", "canonical-tags", "robots-txt",
+    "sitemap-best-practices", "duplicate-content", "page-speed", "mobile-first-indexing",
+    "structured-data", "local-seo", "backlink-outreach", "anchor-text", "orphan-pages",
+    "redirect-chains", "hreflang-setup", "image-seo", "title-tags", "url-structure",
+    "seo-audits", "keyword-research", "long-tail-keywords", "featured-snippets",
+    "search-intent", "topic-clusters", "pillar-pages", "content-refresh", "seo-reporting",
+    "index-bloat", "pagination-seo", "faceted-navigation", "javascript-seo", "log-file-analysis",
+    "crawl-errors", "noindex-tags", "seo-migrations", "domain-authority", "serp-features",
+    "ai-search-visibility", "zero-click-searches",
+  ];
+  for (const t of TOPICS) {
+    PAGES.push({
+      url: "/blog/" + t,
+      w: +(0.5 + rnd() * 2.5).toFixed(2),
+      ctr: 0.01 + rnd() * 0.02,
+      pos: 15 + rnd() * 25,
+    });
+  }
+
+  const QUERIES = [
+    { q: "seo tool for founders", p: 2 }, { q: "meelu", p: 0 },
+    { q: "technical seo checklist", p: 3 }, { q: "search console guide", p: 4 },
+    { q: "site audit tool", p: 5 }, { q: "meelu pricing", p: 1 },
+    { q: "content quality seo", p: 6 }, { q: "how to improve crawl budget", p: 9 },
+    { q: "keyword rank tracker", p: 8 }, { q: "internal linking strategy", p: 11 },
+    { q: "seo without an agency", p: 2 }, { q: "getting started meelu", p: 7 },
+  ];
+  TOPICS.forEach((t, k) => {
+    QUERIES.push({ q: t.replace(/-/g, " "), p: 12 + k });
+    if (k % 3 === 0) QUERIES.push({ q: "what is " + t.replace(/-/g, " "), p: 12 + k });
+  });
+
+  const series = PAGES.map((p) => {
+    const impressions = [];
+    const clicks = [];
+    const position = [];
+    let level = p.w * 40 * (0.7 + rnd() * 0.6);
+    for (let i = 0; i < DAYS; i++) {
+      const d = new Date(END);
+      d.setDate(d.getDate() - (DAYS - 1 - i));
+      const dow = d.getDay();
+      const weekend = dow === 0 || dow === 6 ? 0.62 : 1;
+      level *= 1 + (rnd() - 0.47) * 0.06;
+      level = Math.max(p.w * 12, Math.min(p.w * 90, level));
+      const imp = Math.round(level * weekend * (0.85 + rnd() * 0.3));
+      const ctr = p.ctr * (0.75 + rnd() * 0.5);
+      impressions.push(Math.max(1, imp));
+      clicks.push(Math.round(imp * ctr));
+      position.push(+(p.pos * (0.88 + rnd() * 0.24)).toFixed(1));
+    }
+    return { impressions, clicks, position };
+  });
+
+  const IDX_META = {
+    indexed: { label: "Indexed", cls: "st-indexed" },
+    notindexed: { label: "Crawled — not indexed", cls: "st-notindexed" },
+    excluded: { label: "Excluded", cls: "st-excluded" },
+    unchecked: { label: "Not checked", cls: "st-unchecked" },
+  };
+  const COVERAGE = {
+    indexed: "Submitted and indexed",
+    notindexed: "Crawled — currently not indexed",
+    excluded: "Excluded by ‘noindex’ tag",
+    unchecked: null,
+  };
+  const inspection = PAGES.map((p) => {
+    let st;
+    if (p.w >= 4) st = "indexed";
+    else {
+      const r = rnd();
+      st = r < 0.6 ? "indexed" : r < 0.8 ? "notindexed" : r < 0.9 ? "excluded" : "unchecked";
+    }
+    return {
+      state: st,
+      coverage: COVERAGE[st],
+      lastCrawlDays: st === "unchecked" ? null : Math.round(1 + rnd() * 30),
+      checkedDays: st === "unchecked" ? null : Math.round(rnd() * 14),
+      canonicalMismatch: st === "indexed" && rnd() < 0.08,
+    };
+  });
+
+  const dayLabel = (i) => {
+    const d = new Date(END);
+    d.setDate(d.getDate() - (DAYS - 1 - i));
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  };
+
+  const METRICS = {
+    clicks: { name: "Clicks", color: "var(--m-clicks)", fmt: (v) => compact(v), invert: false },
+    impressions: { name: "Impressions", color: "var(--m-impressions)", fmt: (v) => compact(v), invert: false },
+    ctr: { name: "CTR", color: "var(--m-ctr)", fmt: (v) => (v * 100).toFixed(1) + "%", invert: false },
+    position: { name: "Avg position", color: "var(--m-position)", fmt: (v) => v.toFixed(1), invert: true },
+  };
+  const SLOTS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)"];
+
+  function compact(v) {
+    if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+    if (v >= 10_000) return (v / 1000).toFixed(1) + "K";
+    return Math.round(v).toLocaleString("en-US");
+  }
+
+  const state = {
+    metric: "clicks", range: 90,
+    selected: [], slotOf: new Map(),
+    search: "", tablePage: 0, queryPage: 0,
+    sort: { key: "clicks", dir: -1 },
+  };
+  const IDX_ORDER = { indexed: 0, notindexed: 1, excluded: 2, unchecked: 3 };
+  const ASC_FIRST = new Set(["url", "position", "index", "crawled", "inspected"]);
+
+  function sortValue(r) {
+    const ins = inspection[r.i];
+    switch (state.sort.key) {
+      case "url": return r.url;
+      case "clicks": return r.t.clicks;
+      case "impressions": return r.t.impressions;
+      case "ctr": return r.t.ctr;
+      case "position": return r.t.position;
+      case "index": return IDX_ORDER[ins.state];
+      case "crawled": return ins.lastCrawlDays;
+      case "inspected": return ins.checkedDays;
+    }
+  }
+
+  function compareRows(a, b) {
+    const va = sortValue(a);
+    const vb = sortValue(b);
+    if (va === null && vb === null) return 0;
+    if (va === null) return 1;
+    if (vb === null) return -1;
+    if (typeof va === "string") return va.localeCompare(vb) * state.sort.dir;
+    return (va - vb) * state.sort.dir;
+  }
+
+  const slotColor = (i) => SLOTS[state.slotOf.get(i)];
+
+  function slice(idxs, from, to) {
+    const use = idxs === null ? series.map((_, i) => i) : idxs;
+    const out = { clicks: [], impressions: [], ctr: [], position: [] };
+    for (let i = from; i < to; i++) {
+      let c = 0, m = 0, pw = 0;
+      for (const k of use) {
+        c += series[k].clicks[i];
+        m += series[k].impressions[i];
+        pw += series[k].position[i] * series[k].impressions[i];
+      }
+      out.clicks.push(c);
+      out.impressions.push(m);
+      out.ctr.push(m ? c / m : 0);
+      out.position.push(m ? pw / m : 0);
+    }
+    return out;
+  }
+
+  function totals(data) {
+    const c = data.clicks.reduce((a, b) => a + b, 0);
+    const m = data.impressions.reduce((a, b) => a + b, 0);
+    const pw = data.position.reduce((a, v, i) => a + v * data.impressions[i], 0);
+    return { clicks: c, impressions: m, ctr: m ? c / m : 0, position: m ? pw / m : 0 };
+  }
+
+  const scopeIdxs = () => (state.selected.length ? state.selected : null);
+
+  const tilesEl = document.getElementById("tiles");
+  function renderTiles(cur, prev) {
+    tilesEl.innerHTML = "";
+    for (const key of Object.keys(METRICS)) {
+      const mt = METRICS[key];
+      const tile = document.createElement("button");
+      tile.className = "tile";
+      tile.style.setProperty("--tile-color", mt.color);
+      tile.setAttribute("aria-pressed", String(state.metric === key));
+
+      const k = document.createElement("div");
+      k.className = "k";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      k.append(sw, document.createTextNode(mt.name));
+
+      const v = document.createElement("div");
+      v.className = "v";
+      v.textContent = key === "clicks" || key === "impressions" ? compact(cur[key]) : mt.fmt(cur[key]);
+
+      const d = document.createElement("div");
+      d.className = "d";
+      const diff = cur[key] - prev[key];
+      const good = mt.invert ? diff < 0 : diff > 0;
+      if (Math.abs(prev[key]) > 1e-9) {
+        const pct = (diff / Math.abs(prev[key])) * 100;
+        d.textContent = (diff >= 0 ? "▲ " : "▼ ") + Math.abs(pct).toFixed(0) + "% vs previous " + state.range + "d";
+        d.classList.add(good ? "up" : "down");
+      } else {
+        d.textContent = "no prior data";
+      }
+
+      tile.append(k, v, d);
+      tile.addEventListener("click", () => { state.metric = key; render(); });
+      tilesEl.append(tile);
+    }
+  }
+
+  function renderChips() {
+    const box = document.getElementById("chips");
+    box.innerHTML = "";
+    for (const i of state.selected) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      const dot = document.createElement("span");
+      dot.className = "sdot";
+      dot.style.background = slotColor(i);
+      const val = document.createElement("span");
+      val.className = "val";
+      val.textContent = PAGES[i].url;
+      const x = document.createElement("button");
+      x.textContent = "×";
+      x.setAttribute("aria-label", "Remove " + PAGES[i].url);
+      x.addEventListener("click", () => {
+        state.selected = state.selected.filter((s) => s !== i);
+        state.slotOf.delete(i);
+        render();
+      });
+      chip.append(dot, val, x);
+      box.append(chip);
+    }
+    if (state.selected.length === 0) {
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = "Showing all pages — tick up to " + MAX_SELECT + " pages below to compare.";
+      box.append(hint);
+    }
+  }
+
+  const svg = document.getElementById("chart");
+  const chartBox = document.getElementById("chart-box");
+  const tooltip = document.getElementById("tooltip");
+  const NS = "http://www.w3.org/2000/svg";
+  let chartGeom = null;
+
+  function niceTicks(max) {
+    const raw = max / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+    const step = [1, 2, 2.5, 5, 10].map((s) => s * mag).find((s) => s >= raw) ?? mag * 10;
+    const top = Math.ceil(max / step) * step;
+    const ticks = [];
+    for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v);
+    return { top, ticks };
+  }
+
+  function el(name, attrs) {
+    const node = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    return node;
+  }
+
+  function chartSeries(from) {
+    const mt = METRICS[state.metric];
+    if (state.selected.length === 0) {
+      return [{ name: "All pages", color: mt.color, values: slice(null, from, DAYS)[state.metric] }];
+    }
+    return state.selected.map((i) => ({
+      name: PAGES[i].url,
+      color: slotColor(i),
+      values: slice([i], from, DAYS)[state.metric],
+    }));
+  }
+
+  function renderChart(list, from) {
+    const mt = METRICS[state.metric];
+    const W = svg.clientWidth || 900;
+    const H = 260;
+    const pad = { l: 46, r: 16, t: 12, b: 26 };
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+    svg.innerHTML = "";
+
+    const max = Math.max(1e-9, ...list.flatMap((s) => s.values));
+    const { top, ticks } = niceTicks(max * 1.05);
+    const iw = W - pad.l - pad.r;
+    const ih = H - pad.t - pad.b;
+    const n = list[0].values.length;
+    const x = (i) => pad.l + (i / (n - 1)) * iw;
+    const y = (v) => {
+      const f = v / top;
+      return mt.invert ? pad.t + f * ih : pad.t + (1 - f) * ih;
+    };
+
+    for (const tv of ticks) {
+      const ty = y(tv);
+      svg.append(el("line", { x1: pad.l, x2: W - pad.r, y1: ty, y2: ty, stroke: "var(--line)", "stroke-width": 1 }));
+      const label = el("text", { x: pad.l - 8, y: ty + 4, "text-anchor": "end" });
+      label.textContent = state.metric === "ctr" ? (tv * 100).toFixed(1) + "%" : compact(tv);
+      svg.append(label);
+    }
+    svg.append(el("line", { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, stroke: "var(--line-strong)", "stroke-width": 1 }));
+
+    const tickEvery = Math.max(1, Math.round(n / 6));
+    for (let i = 0; i < n; i += tickEvery) {
+      const label = el("text", { x: x(i), y: H - 8, "text-anchor": "middle" });
+      label.textContent = dayLabel(from + i);
+      svg.append(label);
+    }
+
+    for (const s of list) {
+      let dLine = "";
+      for (let i = 0; i < n; i++) {
+        dLine += (i === 0 ? "M" : "L") + x(i).toFixed(1) + " " + y(s.values[i]).toFixed(1);
+      }
+      if (list.length === 1) {
+        const base = mt.invert ? pad.t : H - pad.b;
+        const dArea = dLine + "L" + x(n - 1).toFixed(1) + " " + base + "L" + x(0).toFixed(1) + " " + base + "Z";
+        svg.append(el("path", { d: dArea, fill: s.color, opacity: 0.1 }));
+      }
+      svg.append(el("path", { d: dLine, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      svg.append(el("circle", { cx: x(n - 1), cy: y(s.values[n - 1]), r: 5.5, fill: "var(--surface)" }));
+      svg.append(el("circle", { cx: x(n - 1), cy: y(s.values[n - 1]), r: 4, fill: s.color }));
+    }
+    if (list.length === 1) {
+      const last = list[0].values[n - 1];
+      const endLabel = el("text", { x: x(n - 1) - 8, y: y(last) - 10, "text-anchor": "end", "font-weight": 600, fill: "var(--ink)" });
+      endLabel.textContent = mt.fmt(last);
+      svg.append(endLabel);
+    }
+
+    const cross = el("line", { x1: 0, x2: 0, y1: pad.t, y2: H - pad.b, stroke: "var(--line-strong)", "stroke-width": 1, visibility: "hidden" });
+    svg.append(cross);
+    const dots = list.map((s) => {
+      const dot = el("circle", { r: 5, fill: s.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
+      svg.append(dot);
+      return dot;
+    });
+    chartGeom = { list, from, n, x, y, pad, W, cross, dots, mt };
+  }
+
+  function onMove(clientX) {
+    if (!chartGeom) return;
+    const { list, from, n, x, y, pad, W, cross, dots, mt } = chartGeom;
+    const rect = svg.getBoundingClientRect();
+    const px = ((clientX - rect.left) / rect.width) * W;
+    if (px < pad.l - 6 || px > W - pad.r + 6) return hideTooltip();
+    const i = Math.max(0, Math.min(n - 1, Math.round(((px - pad.l) / (W - pad.l - pad.r)) * (n - 1))));
+    const cx = x(i);
+    cross.setAttribute("x1", cx);
+    cross.setAttribute("x2", cx);
+    cross.setAttribute("visibility", "visible");
+    list.forEach((s, k) => {
+      dots[k].setAttribute("cx", cx);
+      dots[k].setAttribute("cy", y(s.values[i]));
+      dots[k].setAttribute("visibility", "visible");
+    });
+
+    document.getElementById("tt-date").textContent = dayLabel(from + i);
+    const rows = document.getElementById("tt-rows");
+    rows.innerHTML = "";
+    for (const s of list) {
+      const row = document.createElement("div");
+      row.className = "t-row";
+      const key = document.createElement("span");
+      key.className = "t-key";
+      key.style.setProperty("--series", s.color);
+      const val = document.createElement("span");
+      val.className = "t-val";
+      val.textContent = mt.fmt(s.values[i]);
+      const name = document.createElement("span");
+      name.className = "t-name";
+      name.textContent = s.name;
+      row.append(key, val, name);
+      rows.append(row);
+    }
+    tooltip.style.display = "block";
+    const br = chartBox.getBoundingClientRect();
+    const ttw = tooltip.offsetWidth;
+    let left = ((cx / W) * br.width) + 14;
+    if (left + ttw > br.width - 8) left = ((cx / W) * br.width) - ttw - 14;
+    tooltip.style.left = left + "px";
+    tooltip.style.top = "24px";
+  }
+  function hideTooltip() {
+    tooltip.style.display = "none";
+    if (chartGeom) {
+      chartGeom.cross.setAttribute("visibility", "hidden");
+      for (const d of chartGeom.dots) d.setAttribute("visibility", "hidden");
+    }
+  }
+  svg.addEventListener("pointermove", (e) => onMove(e.clientX));
+  svg.addEventListener("pointerleave", hideTooltip);
+
+  function renderIndex() {
+    const counts = { indexed: 0, notindexed: 0, excluded: 0, unchecked: 0 };
+    for (const ins of inspection) counts[ins.state]++;
+    const total = inspection.length;
+
+    const meter = document.getElementById("idx-meter");
+    meter.innerHTML = "";
+    for (const key of Object.keys(counts)) {
+      if (!counts[key]) continue;
+      const seg = document.createElement("span");
+      seg.className = IDX_META[key].cls;
+      seg.style.width = (counts[key] / total) * 100 + "%";
+      meter.append(seg);
+    }
+
+    const legend = document.getElementById("idx-legend");
+    legend.innerHTML = "";
+    for (const key of Object.keys(counts)) {
+      const item = document.createElement("span");
+      item.className = "lg";
+      const dot = document.createElement("span");
+      dot.className = "sdot " + IDX_META[key].cls;
+      const b = document.createElement("b");
+      b.textContent = counts[key];
+      item.append(dot, b, document.createTextNode(" " + IDX_META[key].label));
+      legend.append(item);
+    }
+  }
+
+  function toggleSelect(i) {
+    const at = state.selected.indexOf(i);
+    if (at >= 0) {
+      state.selected.splice(at, 1);
+      state.slotOf.delete(i);
+    } else {
+      if (state.selected.length >= MAX_SELECT) return false;
+      const used = new Set(state.slotOf.values());
+      let slot = 0;
+      while (used.has(slot)) slot++;
+      state.selected.push(i);
+      state.slotOf.set(i, slot);
+    }
+    render();
+    return true;
+  }
+
+  const pagesBody = document.getElementById("pages-body");
+  function renderPages(from, to) {
+    pagesBody.innerHTML = "";
+    const all = PAGES.map((p, i) => ({ i, url: p.url, t: totals(slice([i], from, to)) }))
+      .filter((r) => r.url.includes(state.search))
+      .sort(compareRows);
+
+    for (const th of document.querySelectorAll("#pages-body")[0].closest("table").querySelectorAll("th.sortable")) {
+      if (!th.dataset.label) th.dataset.label = th.textContent;
+      const active = th.dataset.key === state.sort.key;
+      th.textContent = th.dataset.label + (active ? (state.sort.dir === 1 ? " ▲" : " ▼") : "");
+      if (active) th.setAttribute("aria-sort", state.sort.dir === 1 ? "ascending" : "descending");
+      else th.removeAttribute("aria-sort");
+    }
+
+    const lastPage = Math.max(0, Math.ceil(all.length / PAGE_SIZE) - 1);
+    state.tablePage = Math.min(state.tablePage, lastPage);
+    const start = state.tablePage * PAGE_SIZE;
+    const rows = all.slice(start, start + PAGE_SIZE);
+
+    document.getElementById("pages-count").textContent = all.length === 0
+      ? "No pages match."
+      : (start + 1) + "–" + (start + rows.length) + " of " + all.length + " pages" +
+        (state.selected.length >= MAX_SELECT ? " · selection full (" + MAX_SELECT + ")" : "");
+    document.getElementById("pages-prev").disabled = state.tablePage === 0;
+    document.getElementById("pages-next").disabled = state.tablePage >= lastPage;
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      const isSel = state.selected.includes(r.i);
+      if (isSel) {
+        tr.className = "sel";
+        tr.style.setProperty("--row-color", slotColor(r.i));
+      }
+
+      const chkTd = document.createElement("td");
+      chkTd.className = "chk";
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "rowchk";
+      chk.checked = isSel;
+      chk.setAttribute("aria-label", "Select " + r.url);
+      chk.addEventListener("change", () => {
+        if (!toggleSelect(r.i)) chk.checked = false;
+      });
+      chkTd.append(chk);
+      tr.append(chkTd);
+
+      const pgTd = document.createElement("td");
+      pgTd.className = "pg";
+      pgTd.textContent = r.url;
+      tr.append(pgTd);
+
+      for (const c of [
+        compact(r.t.clicks),
+        compact(r.t.impressions),
+        (r.t.ctr * 100).toFixed(1) + "%",
+        r.t.position.toFixed(1),
+      ]) {
+        const td = document.createElement("td");
+        td.textContent = c;
+        tr.append(td);
+      }
+
+      const idxTd = document.createElement("td");
+      idxTd.className = "idx";
+      const ins = inspection[r.i];
+      const dot = document.createElement("span");
+      dot.className = "sdot " + IDX_META[ins.state].cls;
+      idxTd.title = ins.coverage ?? "Never inspected";
+      idxTd.append(dot, document.createTextNode(
+        ins.state === "indexed" ? "Indexed"
+        : ins.state === "notindexed" ? "Not indexed"
+        : ins.state === "excluded" ? "Excluded" : "—"));
+      if (ins.canonicalMismatch) {
+        const canon = document.createElement("span");
+        canon.className = "canon";
+        canon.textContent = "≠";
+        canon.title = "Google chose a different canonical than the page declares";
+        idxTd.append(canon);
+      }
+      tr.append(idxTd);
+
+      for (const age of [ins.lastCrawlDays, ins.checkedDays]) {
+        const td = document.createElement("td");
+        td.textContent = age === null ? "—" : age === 0 ? "just now" : age + "d ago";
+        tr.append(td);
+      }
+
+      const actTd = document.createElement("td");
+      actTd.className = "act";
+      const resync = document.createElement("button");
+      resync.className = "resync";
+      resync.textContent = "↻";
+      resync.title = "Re-inspect this URL now";
+      resync.setAttribute("aria-label", "Re-inspect " + r.url + " now");
+      resync.addEventListener("click", () => {
+        resync.disabled = true;
+        resync.classList.add("busy");
+        setTimeout(() => {
+          if (ins.state === "unchecked") {
+            ins.state = "indexed";
+            ins.coverage = COVERAGE.indexed;
+            ins.lastCrawlDays = 1;
+          }
+          ins.checkedDays = 0;
+          renderIndex();
+          renderPages(from, to);
+        }, 800);
+      });
+      actTd.append(resync);
+      tr.append(actTd);
+
+      pagesBody.append(tr);
+    }
+  }
+
+  const queriesBody = document.getElementById("queries-body");
+  function renderQueries(from, to) {
+    queriesBody.innerHTML = "";
+    const all = QUERIES
+      .filter((q) => state.selected.length === 0 || state.selected.includes(q.p))
+      .map((q) => {
+        const t = totals(slice([q.p], from, to));
+        const share = 0.25 + (q.q.length % 5) * 0.1;
+        return {
+          q: q.q,
+          page: PAGES[q.p].url,
+          clicks: Math.round(t.clicks * share),
+          impressions: Math.round(t.impressions * share),
+          pos: t.position,
+        };
+      })
+      .sort((a, b) => b.clicks - a.clicks);
+
+    const lastPage = Math.max(0, Math.ceil(all.length / QUERY_PAGE_SIZE) - 1);
+    state.queryPage = Math.min(state.queryPage, lastPage);
+    const start = state.queryPage * QUERY_PAGE_SIZE;
+    const rows = all.slice(start, start + QUERY_PAGE_SIZE);
+
+    const scope = state.selected.length === 0 ? "all pages" : state.selected.length + " selected page(s)";
+    document.getElementById("queries-count").textContent = all.length === 0
+      ? "No queries for this selection."
+      : (start + 1) + "–" + (start + rows.length) + " of " + all.length + " · " + scope;
+    document.getElementById("queries-prev").disabled = state.queryPage === 0;
+    document.getElementById("queries-next").disabled = state.queryPage >= lastPage;
+
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      const qTd = document.createElement("td");
+      qTd.textContent = r.q;
+      const pTd = document.createElement("td");
+      pTd.className = "sub";
+      pTd.textContent = r.page;
+      tr.append(qTd, pTd);
+      for (const c of [compact(r.clicks), compact(r.impressions), r.pos.toFixed(1)]) {
+        const td = document.createElement("td");
+        td.textContent = c;
+        tr.append(td);
+      }
+      queriesBody.append(tr);
+    }
+  }
+
+  document.getElementById("range-seg").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    state.range = Number(b.dataset.range);
+    render();
+  });
+  for (const th of document.querySelectorAll("th.sortable")) {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      if (state.sort.key === key) {
+        state.sort.dir = -state.sort.dir;
+      } else {
+        state.sort = { key, dir: ASC_FIRST.has(key) ? 1 : -1 };
+      }
+      state.tablePage = 0;
+      renderPages(DAYS - state.range, DAYS);
+    });
+  }
+  document.getElementById("page-search").addEventListener("input", (e) => {
+    state.search = e.target.value.trim();
+    state.tablePage = 0;
+    renderPages(DAYS - state.range, DAYS);
+  });
+  document.getElementById("pages-prev").addEventListener("click", () => {
+    state.tablePage = Math.max(0, state.tablePage - 1);
+    renderPages(DAYS - state.range, DAYS);
+  });
+  document.getElementById("pages-next").addEventListener("click", () => {
+    state.tablePage += 1;
+    renderPages(DAYS - state.range, DAYS);
+  });
+  document.getElementById("queries-prev").addEventListener("click", () => {
+    state.queryPage = Math.max(0, state.queryPage - 1);
+    renderQueries(DAYS - state.range, DAYS);
+  });
+  document.getElementById("queries-next").addEventListener("click", () => {
+    state.queryPage += 1;
+    renderQueries(DAYS - state.range, DAYS);
+  });
+
+  function render() {
+    const from = DAYS - state.range;
+    const prevFrom = Math.max(0, from - state.range);
+    const cur = totals(slice(scopeIdxs(), from, DAYS));
+    const prev = totals(slice(scopeIdxs(), prevFrom, from));
+
+    for (const b of document.querySelectorAll("#range-seg button")) {
+      b.setAttribute("aria-pressed", String(Number(b.dataset.range) === state.range));
+    }
+
+    renderChips();
+    renderTiles(cur, prev);
+
+    const mt = METRICS[state.metric];
+    document.getElementById("chart-metric").textContent = mt.name;
+    document.getElementById("chart-scope").textContent =
+      state.selected.length === 0 ? "all pages"
+      : state.selected.length === 1 ? PAGES[state.selected[0]].url
+      : state.selected.length + " pages compared";
+    document.getElementById("chart-hint").textContent = mt.invert ? "per day · lower is better" : "per day";
+    renderChart(chartSeries(from), from);
+
+    renderIndex();
+    renderPages(from, DAYS);
+    renderQueries(from, DAYS);
+  }
+
+  window.addEventListener("resize", () => {
+    renderChart(chartSeries(DAYS - state.range), DAYS - state.range);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

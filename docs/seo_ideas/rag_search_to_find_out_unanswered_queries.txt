@@ -1,0 +1,7 @@
+9. Map fan-out queries against the pages you already have
+
+Chris Long wrote a script that checks whether your site answers the questions an AI assistant is really asking.
+
+Ask an assistant something and it rarely searches for the thing you typed. It breaks your question into several narrower ones and goes looking for those instead. The script pulls out those narrower questions, scores each one against the pages you already have, and writes the results to a spreadsheet.
+
+What you end up with is a list of the questions your site cannot answer. That is a more useful thing to hold than a keyword list, because an assistant assembles its answer from whoever covers the parts of a subject, and a page that covers four of the six questions behind a topic simply gets used less often than one that covers all six.

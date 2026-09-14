@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structure — fix-queue design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --good-wash: rgba(21, 128, 61, 0.08);
+    --warn: #d97706;
+    --warn-wash: rgba(217, 119, 6, 0.09);
+    --bad: #dc2626;
+    --bad-wash: rgba(220, 38, 38, 0.07);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1088px; margin: 0 auto; padding: 32px 24px 64px; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+  header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  header.page h1 { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; }
+  header.page .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 640px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: transparent;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .btn.good { color: var(--good); border-color: rgba(21,128,61,0.4); }
+  .btn.good:hover { background: var(--good-wash); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+
+  .pipeline { display: flex; align-items: stretch; gap: 0; margin-bottom: 20px; overflow: hidden; }
+  .stage { flex: 1; padding: 14px 18px; position: relative; }
+  .stage + .stage { border-left: 1px solid var(--line); }
+  .stage .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); display: flex; align-items: center; gap: 6px; }
+  .stage .v { font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; margin-top: 4px; }
+  .stage .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stage .arr { position: absolute; right: -7px; top: 50%; transform: translateY(-50%); color: var(--line-strong); font-size: 15px; z-index: 1; background: var(--surface); }
+  .stage.dim .v, .stage.dim .k { color: var(--muted); }
+
+  .cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+
+  .groups { padding: 6px; position: sticky; top: 16px; }
+  .group {
+    all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer;
+    border-radius: 11px; padding: 10px 12px;
+  }
+  .group:hover { background: var(--wash); }
+  .group[aria-pressed="true"] { background: var(--accent-wash); }
+  .group .t { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 500; }
+  .group[aria-pressed="true"] .t { color: var(--accent); }
+  .group .t .n { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 600; font-size: 12.5px; }
+  .group .s { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .group .sev { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 0; }
+  .sev.high { background: var(--bad); }
+  .sev.med { background: var(--warn); }
+  .sev.low { background: var(--muted); }
+  .sev.write { background: var(--accent); }
+  .groups .split { margin: 8px 12px; border-top: 1px solid var(--line); }
+  .groups .cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 12px 4px; }
+
+  .detail { padding: 0; overflow: hidden; }
+  .detail-head { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
+  .detail-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 500; }
+  .detail-head .why { margin-top: 6px; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; max-width: 620px; }
+  .detail-head .why b { color: var(--ink); }
+  .detail-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--wash); flex-wrap: wrap; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .seg button { all: unset; cursor: pointer; padding: 5px 11px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); font-weight: 500; }
+  .seg button + button { border-left: 1px solid var(--line); }
+
+  .item { padding: 13px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-start; cursor: pointer; }
+  .item:last-child { border-bottom: 0; }
+  .item:hover { background: var(--wash); }
+  .item:hover .head .pg { color: var(--accent); }
+  .item .body { flex: 1; min-width: 0; }
+  .item .head { font-size: 14px; }
+  .item .head .pg { font-weight: 600; cursor: pointer; }
+  .item .head .pg:hover { color: var(--accent); }
+  .item .head .arrow { color: var(--muted); margin: 0 4px; }
+  .item .anchor { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+  .item .anchor b { color: var(--ink); font-weight: 500; }
+  .item .judge { font-size: 12.5px; color: var(--ink-2); margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--accent); line-height: 1.45; }
+  .item .judge .ai { color: var(--accent); font-weight: 500; }
+  .item .judge.rej { border-left-color: var(--line-strong); color: var(--muted); }
+  .item .meta { font-size: 11.5px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .item .act { flex: none; display: flex; gap: 6px; padding-top: 2px; }
+  .item.done { opacity: 0.55; }
+  .badge {
+    display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+    font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.good { color: var(--good); background: var(--good-wash); border-color: rgba(21,128,61,0.25); }
+  .badge.warn { color: var(--warn); background: var(--warn-wash); border-color: rgba(217,119,6,0.25); }
+  .badge.plain { color: var(--ink-2); background: var(--wash); border-color: var(--line); }
+  .badge.bad { color: var(--bad); background: var(--bad-wash); border-color: rgba(220,38,38,0.25); }
+
+  .foot { padding: 10px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
+  .scrim { position: fixed; inset: 0; background: rgba(31,45,61,0.25); z-index: 9; display: none; }
+  .scrim.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; z-index: 10;
+    background: var(--surface); border-left: 1px solid var(--line-strong);
+    box-shadow: -12px 0 40px rgba(31,45,61,0.12); transform: translateX(102%);
+    transition: transform 0.22s ease; overflow-y: auto;
+  }
+  .drawer.open { transform: none; }
+  .dw-head { padding: 20px 20px 14px; border-bottom: 1px solid var(--line); }
+  .dw-head .close { all: unset; cursor: pointer; float: right; width: 26px; height: 26px; border-radius: 7px; text-align: center; line-height: 26px; color: var(--ink-2); }
+  .dw-head .close:hover { background: var(--wash); color: var(--ink); }
+  .dw-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 500; padding-right: 32px; }
+  .dw-head .url { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; word-break: break-all; }
+  .dw-sec { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .dw-sec h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 500; margin-bottom: 10px; }
+  .score-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .score-row .lbl { width: 100px; color: var(--ink-2); flex: none; }
+  .score-row .track { flex: 1; height: 7px; border-radius: 4px; background: var(--wash); overflow: hidden; }
+  .score-row .track i { display: block; height: 100%; border-radius: 4px; }
+  .score-row .n { width: 38px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
+  .dw-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 13px; }
+  .dw-kv .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .dw-kv .v { margin-top: 2px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .dw-verdict { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .dw-verdict b { color: var(--ink); }
+
+  @media (max-width: 900px) {
+    .cols { grid-template-columns: 1fr; }
+    .groups { position: static; display: grid; grid-template-columns: 1fr 1fr; }
+    .pipeline { flex-wrap: wrap; }
+    .stage { min-width: 45%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">‹ Site</div>
+  <header class="page">
+    <div>
+      <h1>Structure</h1>
+      <p class="sub">The audit turns your link graph into a to-do list. Algorithms find the gaps, the agent throws out the bad ideas, you approve what ships. Last audit 2 hours ago · PageRank seeded by 90 days of traffic.</p>
+    </div>
+    <div class="actions">
+      <button class="btn">Run audit</button>
+      <button class="btn primary">✦ Ask</button>
+    </div>
+  </header>
+
+  <div class="card pipeline">
+    <div class="stage dim">
+      <p class="k">Algorithm proposed</p>
+      <p class="v">108</p>
+      <p class="d">from clusters, PageRank &amp; similarity</p>
+      <span class="arr">›</span>
+    </div>
+    <div class="stage">
+      <p class="k"><span style="color:var(--accent)">✦</span> Agent kept</p>
+      <p class="v">37</p>
+      <p class="d">71 rejected with reasons</p>
+      <span class="arr">›</span>
+    </div>
+    <div class="stage">
+      <p class="k">You accepted</p>
+      <p class="v">12</p>
+      <p class="d">25 waiting on you</p>
+      <span class="arr">›</span>
+    </div>
+    <div class="stage">
+      <p class="k">Shipped</p>
+      <p class="v">5</p>
+      <p class="d">in 2 pull requests</p>
+    </div>
+  </div>
+
+  <div class="cols">
+    <nav class="card groups" id="groups" aria-label="Issue groups"></nav>
+    <section class="card detail" id="detail"></section>
+  </div>
+
+  <p class="note">Rejected suggestions never disappear — every one keeps the agent's reason, so the same bad idea doesn't come back next audit. Numbers and scores live one click away on any page name.</p>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Page detail"></aside>
+
+<script>
+(() => {
+  const PAGES = {
+    "/pricing": { title: "Pricing", kind: "pricing", link: 34, hub: 12, auth: 41, inlinks: 2, outlinks: 6, sessions: 1130, index: "Indexed", cluster: null, verdict: "<b>A money page running on fumes.</b> 2 inlinks against a site median of 4, yet 1,130 sessions land here in 90 days. Every fix pointing at this page is high-leverage." },
+    "/features/link-audit": { title: "Link audit", kind: "product", link: 8, hub: 4, auth: 9, inlinks: 0, outlinks: 7, sessions: 290, index: "Not indexed", cluster: null, verdict: "<b>Nothing on the site links here.</b> In the sitemap, earning 290 sessions, passing authority nowhere — and Google won't index it. The fixes below give it a home." },
+    "/features/site-audit": { title: "Site audit", kind: "product", link: 22, hub: 18, auth: 30, inlinks: 1, outlinks: 9, sessions: 640, index: "Indexed", cluster: null, verdict: "<b>Starved.</b> One inlink for a product page that 640 readers found through search this quarter." },
+    "/blog/technical-seo-checklist": { title: "The technical SEO checklist", kind: "article", link: 74, hub: 58, auth: 81, inlinks: 17, outlinks: 19, sessions: 2210, index: "Indexed", cluster: "Technical SEO", verdict: "<b>The Technical SEO pillar</b> — your strongest article. Four cluster pages still never link up to it." },
+    "/blog/internal-linking": { title: "Internal linking strategy", kind: "article", link: 18, hub: 9, auth: 20, inlinks: 3, outlinks: 7, sessions: 640, index: "Indexed", cluster: "Internal linking", verdict: "<b>The best page in a pillar-less topic.</b> Its link score (18) sits below the site median — the Internal linking cluster has no page strong enough to anchor it." },
+    "/blog/search-console-guide": { title: "The Search Console guide", kind: "article", link: 66, hub: 49, auth: 72, inlinks: 14, outlinks: 16, sessions: 1870, index: "Indexed", cluster: "Search Console", verdict: "<b>The Search Console pillar.</b> Healthy, but it fans out to only 5 of its 7 spokes." },
+    "/blog/striking-distance": { title: "Striking-distance keywords", kind: "article", link: 11, hub: 4, auth: 13, inlinks: 2, outlinks: 4, sessions: 350, index: "Indexed", cluster: "Search Console", verdict: "Ranks just outside the top ten for its head query with only 2 inlinks — cheap to push." },
+    "/blog/local-citations": { title: "Local citations", kind: "article", link: 9, hub: 3, auth: 11, inlinks: 1, outlinks: 2, sessions: 130, index: "Indexed", cluster: "Local SEO", verdict: "<b>Filed in the wrong neighborhood.</b> Its topic is Local SEO but its only links come from the docs section." },
+    "/blog/local-landing-pages": { title: "Local landing pages", kind: "article", link: 8, hub: 3, auth: 10, inlinks: 1, outlinks: 3, sessions: 170, index: "Indexed", cluster: "Local SEO", verdict: "<b>Filed in the wrong neighborhood.</b> Reached only through docs pages, not its own topic." },
+    "/blog/core-web-vitals": { title: "Core Web Vitals, explained", kind: "article", link: 41, hub: 22, auth: 44, inlinks: 7, outlinks: 8, sessions: 830, index: "Indexed", cluster: "Technical SEO", verdict: "A healthy Technical SEO page, slightly above its topic's median." },
+    "/blog/page-speed": { title: "Page speed that matters", kind: "article", link: 33, hub: 18, auth: 39, inlinks: 5, outlinks: 7, sessions: 560, index: "Indexed", cluster: "Technical SEO", verdict: "Healthy, but 2 of its 3 inbound anchors are “click here” — the links tell Google nothing." },
+    "/blog/javascript-seo": { title: "JavaScript SEO for app sites", kind: "article", link: 10, hub: 4, auth: 12, inlinks: 1, outlinks: 5, sessions: 240, index: "Not indexed", cluster: "Technical SEO", verdict: "A Technical SEO spoke that never links to its pillar — and Google hasn't indexed it." },
+    "/blog/seo-migrations": { title: "Surviving an SEO migration", kind: "article", link: 0, hub: 0, auth: 1, inlinks: 0, outlinks: 2, sessions: 40, index: "Not indexed", cluster: null, verdict: "<b>Orphan.</b> In the sitemap, invisible to the crawl." },
+    "/blog/domain-authority": { title: "Domain authority myths", kind: "article", link: 0, hub: 0, auth: 1, inlinks: 0, outlinks: 3, sessions: 85, index: "Not indexed", cluster: null, verdict: "<b>Orphan</b> with real search demand — 85 sessions found it anyway." },
+    "/blog/content-quality": { title: "Content quality signals", kind: "article", link: 37, hub: 14, auth: 42, inlinks: 6, outlinks: 5, sessions: 780, index: "Indexed", cluster: "Content strategy", verdict: "<b>The Content strategy pillar</b> — but no page in this topic, it included, fans out to the rest. The topic reads as 9 strays." },
+    "/": { title: "Meelu — SEO for founders", kind: "home", link: 100, hub: 96, auth: 88, inlinks: 61, outlinks: 24, sessions: 4820, index: "Indexed", cluster: null, verdict: "Your strongest page. Where it chooses to link is the single biggest lever on the rest of the site." },
+    "/blog": { title: "Blog index", kind: "listing", link: 71, hub: 89, auth: 60, inlinks: 38, outlinks: 52, sessions: 320, index: "Indexed", cluster: null, verdict: "Heavily linked navigation. Its anchors are the problem — “read more” repeated forty times tells Google nothing." },
+    "/blog/robots-txt": { title: "robots.txt in practice", kind: "article", link: 18, hub: 8, auth: 21, inlinks: 3, outlinks: 5, sessions: 190, index: "Indexed", cluster: "Technical SEO", verdict: "A healthy Technical SEO page — links its pillar and gets linked back." },
+    "/blog/crawl-errors": { title: "Crawl errors that count", kind: "article", link: 5, hub: 2, auth: 7, inlinks: 1, outlinks: 2, sessions: 90, index: "Indexed", cluster: "Technical SEO", verdict: "A Technical SEO spoke that never links up to its pillar — the topic leaks what this page earns." },
+    "/blog/redirect-chains": { title: "Hunting redirect chains", kind: "article", link: 12, hub: 5, auth: 14, inlinks: 2, outlinks: 4, sessions: 120, index: "Indexed", cluster: "Technical SEO", verdict: "A Technical SEO spoke that never links up to its pillar; the confirmed fix adds one contextual link." },
+    "/blog/queries-vs-pages": { title: "Queries vs pages", kind: "article", link: 13, hub: 5, auth: 15, inlinks: 2, outlinks: 3, sessions: 180, index: "Indexed", cluster: "Search Console", verdict: "Links its pillar, but the pillar never links back — readers of the guide can't discover it." },
+    "/blog/local-reviews": { title: "Reviews and rankings", kind: "article", link: 6, hub: 2, auth: 8, inlinks: 1, outlinks: 2, sessions: 90, index: "Indexed", cluster: "Local SEO", verdict: "A small but healthy Local SEO page." },
+    "/blog/featured-snippets": { title: "Winning featured snippets", kind: "article", link: 10, hub: 4, auth: 12, inlinks: 2, outlinks: 2, sessions: 240, index: "Indexed", cluster: "Content strategy", verdict: "A Content strategy page in a topic with no hub — nothing fans out to it or its siblings." },
+    "/blog/anchor-text": { title: "Anchor text that works", kind: "article", link: 14, hub: 6, auth: 16, inlinks: 2, outlinks: 5, sessions: 380, index: "Indexed", cluster: "Internal linking", verdict: "Solid page in a pillar-less topic — a merge candidate in the drafted brief." },
+    "/blog/orphan-pages": { title: "Finding orphan pages", kind: "article", link: 11, hub: 4, auth: 13, inlinks: 2, outlinks: 4, sessions: 290, index: "Indexed", cluster: "Internal linking", verdict: "Reached mostly through “read more” links — the links exist but waste their context." },
+    "/blog/hreflang-setup": { title: "hreflang without loops", kind: "article", link: 0, hub: 0, auth: 1, inlinks: 0, outlinks: 3, sessions: 30, index: "Not indexed", cluster: null, verdict: "<b>Orphan.</b> The site has no international pages — the agent recommends deleting rather than linking it." },
+    "/blog/image-seo": { title: "Image SEO basics", kind: "article", link: 0, hub: 0, auth: 1, inlinks: 0, outlinks: 2, sessions: 55, index: "Not indexed", cluster: null, verdict: "<b>Orphan.</b> A confirmed fix links it from the Core Web Vitals post's image-weight section." },
+    "/features/keyword-tracking": { title: "Keyword tracking", kind: "product", link: 19, hub: 15, auth: 26, inlinks: 1, outlinks: 8, sessions: 410, index: "Indexed", cluster: null, verdict: "<b>Starved.</b> One inlink for a product page with 410 search visits this quarter — no confirmed fix yet." },
+    "/features/reports": { title: "Weekly reports", kind: "product", link: 21, hub: 9, auth: 24, inlinks: 2, outlinks: 6, sessions: 180, index: "Indexed", cluster: null, verdict: "<b>Starved.</b> No article naturally mentions reports, so no honest link was found — a nav or footer link is the practical fix." },
+    "/blog/log-file-analysis": { title: "Reading your log files", kind: "article", link: 6, hub: 2, auth: 8, inlinks: 1, outlinks: 3, sessions: 70, index: "Not indexed", cluster: "Technical SEO", verdict: "A Technical SEO spoke aimed at agencies, not this site's founder audience — the agent rejected linking it to the pillar for that reason." },
+    "/blog/local-seo-guide": { title: "Local SEO guide", kind: "article", link: 26, hub: 11, auth: 29, inlinks: 5, outlinks: 6, sessions: 510, index: "Indexed", cluster: "Local SEO", verdict: "<b>Pillar of Local SEO.</b> Healthy itself, but two of its topic's pages are reachable only from the docs section — the confirmed fixes route them through this page instead." },
+  };
+
+  const GROUPS = [
+    {
+      id: "links", sev: "med", title: "Missing links between related pages", n: 23,
+      sub: "confirmed insertions, safe to batch",
+      why: "Pages whose content overlaps heavily (0.75+ similarity) but that never link to each other. The algorithm found 87 such pairs; the agent opened the pages and kept the 23 a reader would thank you for. <b>These are text edits only — nothing moves or gets deleted.</b>",
+      actionable: true,
+      items: [
+        { from: "/blog/technical-seo-checklist", to: "/features/site-audit", anchor: "run a full site audit", note: "the checklist's closing section already tells readers to audit — the product link belongs there", score: "0.94 · sim 0.89", state: "confirmed" },
+        { from: "/blog/internal-linking", to: "/features/link-audit", anchor: "audit your internal links", note: "highest-traffic page on the exact topic of an orphaned product page", score: "0.91 · sim 0.87", state: "confirmed" },
+        { from: "/blog/striking-distance", to: "/pricing", anchor: "what Meelu costs", note: "commercial intent is explicit in this post's final paragraph", score: "0.83 · sim 0.79", state: "confirmed" },
+        { from: "/blog/core-web-vitals", to: "/blog/page-speed", anchor: "page speed that matters", note: "adjacent topics, readers cross between them in analytics", score: "0.87 · sim 0.91", state: "confirmed" },
+        { from: "/", to: "/blog/technical-seo-checklist", anchor: "the technical SEO checklist", note: "your strongest article deserves a link from your strongest page", score: "0.96 · sim 0.77", state: "accepted" },
+        { from: "/blog/robots-txt", to: "/blog/crawl-errors", anchor: null, note: "similar words, different jobs — one is setup, one is diagnosis; a link would strand readers mid-task", score: "0.71 · sim 0.82", state: "rejected" },
+        { from: "/blog/local-reviews", to: "/blog/featured-snippets", anchor: null, note: "the similarity is vocabulary, not topic — both quote the same study", score: "0.64 · sim 0.78", state: "rejected" },
+      ],
+    },
+    {
+      id: "orphans", sev: "high", title: "Pages nothing links to", n: 12,
+      sub: "10 of them not indexed",
+      why: "These sit in your sitemap but no internal link reaches them, so authority never flows in — and for 10 of the 12, Google has declined to index them. <b>Each one either deserves links from the pages below, or deserves deleting.</b> The agent picked the best source for each from its nearest semantic neighbours.",
+      actionable: true,
+      items: [
+        { from: "/blog/internal-linking", to: "/blog/domain-authority", anchor: "domain authority is not a ranking factor", note: "orphan earns 85 sessions on its own — one link from the topic's best page fixes both problems", score: "0.88", state: "confirmed" },
+        { from: "/blog/technical-seo-checklist", to: "/blog/seo-migrations", anchor: "migrating without losing rankings", note: "the checklist's redirects section is the natural doorway", score: "0.85", state: "confirmed" },
+        { from: "/blog/technical-seo-checklist", to: "/blog/hreflang-setup", anchor: null, note: "the site has no international pages — recommend deleting this orphan, not linking it", score: "0.62", state: "rejected" },
+        { from: "/blog/core-web-vitals", to: "/blog/image-seo", anchor: "image weight and LCP", note: "orphan's best inbound topic; anchor names the shared concept", score: "0.81", state: "confirmed" },
+      ],
+    },
+    {
+      id: "starved", sev: "high", title: "Money pages starved of links", n: 5,
+      sub: "pricing + 4 feature pages",
+      why: "Commercial pages sitting below the site median of 4 inlinks. Readers arrive from search (2,650 sessions across the five) but your own site barely points at them. <b>The confirmed insertions from the other groups already target all five</b> — this view tracks whether the gap actually closes.",
+      actionable: false,
+      items: [
+        { page: "/pricing", stat: "2 inlinks · 1,130 sessions", note: "3 confirmed fixes point here", state: "confirmed" },
+        { page: "/features/link-audit", stat: "0 inlinks · 290 sessions · orphan", note: "2 confirmed fixes point here", state: "confirmed" },
+        { page: "/features/site-audit", stat: "1 inlink · 640 sessions", note: "1 confirmed fix points here", state: "confirmed" },
+        { page: "/features/keyword-tracking", stat: "1 inlink · 410 sessions", note: "no confirmed fix yet — ask Meelu to look for one", state: "none" },
+        { page: "/features/reports", stat: "2 inlinks · 180 sessions", note: "no good source found — consider a nav or footer link", state: "none" },
+      ],
+    },
+    {
+      id: "pillar", sev: "med", title: "Spokes that skip their pillar", n: 9,
+      sub: "Technical SEO ×4 · Search Console ×2 …",
+      why: "Cluster pages that never link up to the strongest page in their own topic. Hub-and-spoke is how a topic concentrates authority; a spoke that skips its pillar leaks it. <b>Each fix is one contextual link from spoke to pillar.</b>",
+      actionable: true,
+      items: [
+        { from: "/blog/javascript-seo", to: "/blog/technical-seo-checklist", anchor: "the full technical checklist", note: "post already says “check the basics first” — that phrase should carry the link", score: "pillar 74", state: "confirmed" },
+        { from: "/blog/redirect-chains", to: "/blog/technical-seo-checklist", anchor: "part of the technical checklist", note: "natural fit in the intro's framing sentence", score: "pillar 74", state: "confirmed" },
+        { from: "/blog/log-file-analysis", to: "/blog/technical-seo-checklist", anchor: null, note: "this post is aimed at agencies, not the checklist's founder audience — linking would mislead both", score: "pillar 74", state: "rejected" },
+        { from: "/blog/queries-vs-pages", to: "/blog/search-console-guide", anchor: "the Search Console guide", note: "spoke never mentions the guide; the opening definition is the spot", score: "pillar 66", state: "confirmed" },
+      ],
+    },
+    {
+      id: "silo", sev: "low", title: "Pages in the wrong section", n: 4,
+      sub: "topic says Local SEO, links say docs",
+      why: "Their topic (by content) and their link neighborhood (by graph) disagree — readers and crawlers reach these pages through the wrong context. <b>Fixing usually means moving the links, not the page:</b> link them from their real topic and unlink the accidental section.",
+      actionable: true,
+      items: [
+        { from: "/blog/local-seo-guide", to: "/blog/local-citations", anchor: "building local citations", note: "its only inlink today is from /docs — the topic pillar should be its doorway", score: "", state: "confirmed" },
+        { from: "/blog/local-seo-guide", to: "/blog/local-landing-pages", anchor: "local landing pages that rank", note: "same pattern — docs links it, its own topic doesn't", score: "", state: "confirmed" },
+      ],
+    },
+    {
+      id: "write", sev: "write", title: "Topics that need writing, not linking", n: 2,
+      sub: "briefs for the Pages desk",
+      why: "Two structural gaps no link insertion can fix. <b>Content strategy</b> (9 pages) has no hub — no page fans out to even half the topic. <b>Internal linking</b> (6 pages) has no pillar — its best page scores 18 against a site median of 14, nowhere near pillar strength. Both want a new or upgraded page.",
+      actionable: false,
+      items: [
+        { page: "/blog/content-quality", stat: "best coverage 2 of 9 needed 4", note: "brief: expand this into a true hub, or write “The content strategy playbook” that links all 9", state: "brief" },
+        { page: "/blog/internal-linking", stat: "best score 18 · median 14", note: "brief: merge the 3 overlapping intro posts into one pillar and redirect", state: "brief" },
+      ],
+    },
+    {
+      id: "anchors", sev: "low", title: "Links that say nothing", n: 7,
+      sub: "“click here”, “read more”",
+      why: "Pages reached mostly through generic anchors. The link exists but wastes its one sentence of context. <b>Fix is a wording change on the source page</b> — the agent drafted a descriptive anchor for each.",
+      actionable: true,
+      items: [
+        { from: "/blog/core-web-vitals", to: "/blog/page-speed", anchor: "page speed benchmarks for founders", note: "replaces “click here” — names what the reader gets", score: "", state: "confirmed" },
+        { from: "/blog", to: "/blog/orphan-pages", anchor: "find your orphan pages", note: "replaces “read more”", score: "", state: "confirmed" },
+      ],
+    },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  let active = "links";
+  let view = "confirmed";
+
+  const STATE_BADGE = {
+    confirmed: '<span class="badge good">agent confirmed</span>',
+    accepted: '<span class="badge good">accepted</span>',
+    rejected: '<span class="badge plain">agent rejected</span>',
+    brief: '<span class="badge plain">brief</span>',
+  };
+
+  function renderGroups() {
+    const fixable = GROUPS.filter((g) => g.id !== "write");
+    const writing = GROUPS.filter((g) => g.id === "write");
+    const row = (g) => `
+      <button class="group" data-g="${g.id}" aria-pressed="${g.id === active}">
+        <p class="t"><span><span class="sev ${g.sev}"></span>${g.title}</span><span class="n">${g.n}</span></p>
+        <p class="s">${g.sub}</p>
+      </button>`;
+    $("groups").innerHTML =
+      '<p class="cap">Fix with links</p>' + fixable.map(row).join("") +
+      '<div class="split"></div><p class="cap">Fix with content</p>' + writing.map(row).join("");
+    for (const b of $("groups").querySelectorAll(".group")) {
+      b.addEventListener("click", () => { active = b.dataset.g; view = "confirmed"; renderGroups(); renderDetail(); });
+    }
+  }
+
+  function itemRow(g, it, i) {
+    if (it.page) {
+      return `<div class="item" data-page="${it.page}">
+        <div class="body">
+          <p class="head"><span class="pg" data-url="${it.page}">${it.page}</span></p>
+          <p class="anchor">${it.stat}</p>
+          <p class="judge ${it.state === "rejected" ? "rej" : ""}"><span class="ai">✦</span> ${it.note}</p>
+        </div>
+        <div class="act">${STATE_BADGE[it.state] ?? ""}</div>
+      </div>`;
+    }
+    const rejected = it.state === "rejected";
+    const act = it.state === "confirmed"
+      ? `<button class="btn small good" data-acc="${i}">Accept</button><button class="btn small" data-rej="${i}">Reject</button>`
+      : STATE_BADGE[it.state] ?? "";
+    return `<div class="item ${it.state === "accepted" ? "done" : ""}" data-i="${i}" data-page="${it.from}">
+      <div class="body">
+        <p class="head"><span class="pg" data-url="${it.from}">${it.from}</span><span class="arrow">→</span><span class="pg" data-url="${it.to}">${it.to}</span></p>
+        ${it.anchor ? `<p class="anchor">anchor: <b>“${it.anchor}”</b></p>` : ""}
+        <p class="judge ${rejected ? "rej" : ""}"><span class="ai">✦</span> ${it.note}</p>
+        ${it.score ? `<p class="meta">${it.score}</p>` : ""}
+      </div>
+      <div class="act">${act}</div>
+    </div>`;
+  }
+
+  function renderDetail() {
+    const g = GROUPS.find((x) => x.id === active);
+    const counts = { confirmed: 0, rejected: 0 };
+    for (const it of g.items) {
+      if (it.state === "rejected") counts.rejected++;
+      else counts.confirmed++;
+    }
+    const shown = g.actionable
+      ? g.items.filter((it) => view === "confirmed" ? (it.state === "confirmed" || it.state === "accepted") : it.state === view)
+      : g.items;
+    const tools = g.actionable ? `
+      <div class="detail-tools">
+        <span class="seg" role="group" aria-label="Verdict filter">
+          <button data-v="confirmed" aria-pressed="${view === "confirmed"}">Confirmed · ${counts.confirmed}</button>
+          <button data-v="rejected" aria-pressed="${view === "rejected"}">Rejected by agent · ${counts.rejected}</button>
+        </span>
+        ${view === "confirmed" && counts.confirmed > 0 ? '<button class="btn small good" id="acc-all">Accept all shown</button>' : ""}
+      </div>` : "";
+    $("detail").innerHTML = `
+      <div class="detail-head">
+        <h2>${g.title}</h2>
+        <p class="why">${g.why}</p>
+      </div>
+      ${tools}
+      <div id="items">${shown.map((it) => itemRow(g, it, g.items.indexOf(it))).join("") || '<div class="item"><div class="body"><p class="anchor">Nothing in this view.</p></div></div>'}</div>
+      <div class="foot">${g.actionable ? "Accepting queues a text-edit brief; nothing changes on your site until it ships in a pull request you approve." : "Informational — resolved by the fixes and briefs in the other groups."}</div>`;
+    for (const b of $("detail").querySelectorAll("[data-v]")) {
+      b.addEventListener("click", () => { view = b.dataset.v; renderDetail(); });
+    }
+    for (const b of $("detail").querySelectorAll("[data-acc]")) {
+      b.addEventListener("click", () => {
+        g.items[Number(b.dataset.acc)].state = "accepted";
+        renderDetail();
+      });
+    }
+    for (const b of $("detail").querySelectorAll("[data-rej]")) {
+      b.addEventListener("click", () => {
+        g.items[Number(b.dataset.rej)].state = "rejected";
+        renderDetail();
+      });
+    }
+    const accAll = $("detail").querySelector("#acc-all");
+    if (accAll) accAll.addEventListener("click", () => {
+      for (const it of g.items) if (it.state === "confirmed") it.state = "accepted";
+      renderDetail();
+    });
+    for (const el of $("detail").querySelectorAll(".pg")) {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openDrawer(el.dataset.url);
+      });
+    }
+    for (const row of $("detail").querySelectorAll(".item[data-page]")) {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("button")) return;
+        openDrawer(row.dataset.page);
+      });
+    }
+  }
+
+  function openDrawer(url) {
+    const p = PAGES[url];
+    if (!p) return;
+    const bar = (label, v, color) => `
+      <div class="score-row">
+        <span class="lbl">${label}</span>
+        <span class="track"><i style="width:${v}%;background:${color}"></i></span>
+        <span class="n">${v}</span>
+      </div>`;
+    $("drawer").innerHTML = `
+      <div class="dw-head">
+        <button class="close" id="dw-close" aria-label="Close">×</button>
+        <h2>${p.title}</h2>
+        <p class="url">${url}</p>
+      </div>
+      <div class="dw-sec"><p class="dw-verdict">${p.verdict}</p></div>
+      <div class="dw-sec">
+        <h3>Scores — relative to this site</h3>
+        ${bar("Link score", p.link, "var(--accent)")}
+        ${bar("Hub", p.hub, "#1baf7a")}
+        ${bar("Authority", p.auth, "#d97706")}
+      </div>
+      <div class="dw-sec">
+        <h3>Graph position</h3>
+        <div class="dw-kv">
+          <div><p class="k">Inlinks</p><p class="v">${p.inlinks}</p></div>
+          <div><p class="k">Outlinks</p><p class="v">${p.outlinks}</p></div>
+          <div><p class="k">Topic</p><p class="v">${p.cluster ?? "—"}</p></div>
+          <div><p class="k">Index</p><p class="v">${p.index}</p></div>
+          <div><p class="k">Sessions / 90d</p><p class="v">${p.sessions.toLocaleString("en-US")}</p></div>
+          <div><p class="k">Kind</p><p class="v">${p.kind}</p></div>
+        </div>
+      </div>`;
+    $("drawer").classList.add("open");
+    $("scrim").classList.add("open");
+    $("dw-close").addEventListener("click", closeDrawer);
+  }
+
+  function closeDrawer() {
+    $("drawer").classList.remove("open");
+    $("scrim").classList.remove("open");
+  }
+  $("scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  renderGroups();
+  renderDetail();
+})();
+</script>
+</body>
+</html>

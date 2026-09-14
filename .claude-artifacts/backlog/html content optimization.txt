@@ -1,0 +1,5 @@
+2. LLM-Optimized Output
+This is the real win: Firecrawl's markdown output uses 93% fewer LLM input tokens than raw HTML. An 80,000-token raw HTML page becomes ~5,600 tokens. At scale, this compounds massively. Your crawler outputs HTML, and when you feed that to Claude/GPT for analysis, you're paying 14x more per page. 
+Espressio AI 
+
+We need to do something similar in our crawler to save the content in text format for llm to analyse.. it does not need to see whole html and java script

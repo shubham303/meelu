@@ -1,0 +1,13 @@
+.venv
+.ruff_cache
+.pytest_cache
+__pycache__
+*.pyc
+*.egg-info
+tests
+.env
+.env.*
+docker-compose.yml
+Dockerfile
+.dockerignore
+CLAUDE.md

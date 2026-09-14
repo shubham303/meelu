@@ -1,0 +1,39 @@
+# VPS overlay: puts Caddy in front of the dashboard for automatic HTTPS.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Requires in .env:
+#   MEELU_DOMAIN=meelu.example.com   (A record already pointing here)
+#   POSTGRES_PASSWORD=<long random string>
+#
+# Caddy fronts the dashboard only. The api container is not published: the
+# dashboard proxies /api to it inside the compose network, so the backend has
+# no public port of its own.
+#
+# Caddy provisions and renews the Let's Encrypt certificate on its own; ports
+# 80 and 443 must be open and free on the host.
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: meelu-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      MEELU_DOMAIN: ${MEELU_DOMAIN:?set MEELU_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - dashboard
+    networks:
+      - meelu
+
+volumes:
+  # Holds the issued certificates — keep it, or you'll re-request on every
+  # redeploy and hit Let's Encrypt rate limits.
+  caddy_data:
+  caddy_config:

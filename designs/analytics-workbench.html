@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics — workbench design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --good-wash: rgba(21, 128, 61, 0.08);
+    --warn: #d97706;
+    --warn-wash: rgba(217, 119, 6, 0.09);
+    --bad: #dc2626;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1088px; margin: 0 auto; padding: 32px 24px 64px; }
+  .crumb { font-size: 13px; color: var(--ink-2); margin-bottom: 12px; cursor: pointer; }
+  .crumb:hover { color: var(--ink); }
+  header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  header.page h1 { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; }
+  header.page .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 660px; }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: transparent;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px;
+    font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.good { color: var(--good); background: var(--good-wash); border-color: rgba(21,128,61,0.25); }
+  .badge.warn { color: var(--warn); background: var(--warn-wash); border-color: rgba(217,119,6,0.25); }
+  .badge.plain { color: var(--ink-2); background: var(--wash); border-color: var(--line); }
+
+  .start { padding: 22px; margin-bottom: 16px; display: grid; grid-template-columns: 1fr 300px; gap: 22px; align-items: center; }
+  .start .ask input {
+    width: 100%; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+    color: var(--ink); padding: 13px 15px; font: inherit; font-size: 14.5px;
+  }
+  .start .ask input:focus { border-color: var(--accent); outline: none; }
+  .start h2 { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 500; margin-bottom: 10px; }
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+  .qchip { all: unset; cursor: pointer; border: 1px solid var(--line-strong); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--ink-2); background: var(--surface); }
+  .qchip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .dz {
+    border: 2px dashed var(--line-strong); border-radius: 14px; padding: 22px 16px; text-align: center;
+    color: var(--ink-2); font-size: 13px; cursor: pointer;
+  }
+  .dz:hover { border-color: var(--accent); background: var(--accent-wash); }
+  .dz b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 3px; }
+  .dz .or { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+
+  .panel { padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .panel-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .panel-head .hint { font-size: 11px; color: var(--muted); }
+  .row-item { display: flex; align-items: center; gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13.5px; }
+  .row-item:last-child { border-bottom: 0; }
+  .row-item:hover { background: var(--wash); }
+  .row-item .t { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-item:hover .t { color: var(--accent); }
+  .row-item .m { color: var(--muted); font-size: 12px; flex: none; }
+  .repgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 16px 18px; }
+  .rep { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; background: var(--surface); }
+  .rep:hover { border-color: var(--accent); }
+  .rep .spark { height: 34px; margin-bottom: 8px; }
+  .rep .t { font-size: 13px; font-weight: 500; }
+  .rep:hover .t { color: var(--accent); }
+  .rep .m { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .sess-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .side { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .side .card { padding: 0; overflow: hidden; }
+  .side .cap { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 15px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .file { display: flex; align-items: center; gap: 9px; padding: 8px 15px; border-top: 1px solid var(--line); font-size: 13px; }
+  .file:hover { background: var(--wash); }
+  .file .n { font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .file .n:hover { color: var(--accent); }
+  .file .r { color: var(--muted); font-size: 11.5px; flex: none; }
+  .file .ai { color: var(--accent); font-size: 11px; flex: none; }
+  .file.add { color: var(--ink-2); cursor: pointer; border-top-style: dashed; }
+  .file.add:hover { color: var(--accent); }
+  .side .tip { padding: 9px 15px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+  .repl { display: block; padding: 8px 15px; border-top: 1px solid var(--line); font-size: 13px; font-weight: 500; cursor: pointer; }
+  .repl:hover { background: var(--wash); color: var(--accent); }
+  .repl .m { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+  .side .empty { padding: 10px 15px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+
+  .chat { padding: 0; overflow: hidden; }
+  .sess-head { padding: 15px 20px 12px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .sess-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 500; }
+  .sess-head .m { font-size: 12px; color: var(--muted); }
+  .thread { padding: 6px 20px 4px; }
+  .msg { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .msg:last-child { border-bottom: 0; }
+  .msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+  .msg .who .ai { color: var(--accent); }
+  .msg.you .txt { font-size: 14px; font-weight: 500; }
+  .msg .txt { font-size: 13.5px; line-height: 1.55; color: var(--ink); max-width: 620px; }
+  .msg .txt b { font-weight: 600; }
+  .chartcard { margin: 12px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); max-width: 540px; overflow: hidden; }
+  .chartcard .ch { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 14px 2px; font-size: 12.5px; font-weight: 500; }
+  .chartcard .ch span { color: var(--muted); font-weight: 400; font-size: 11px; }
+  .chartcard svg { display: block; }
+  .chartcard svg text { font: 10px 'Geist', ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+  .trust { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .actions { margin-top: 10px; }
+  .declined { border-left: 3px solid var(--warn); background: var(--warn-wash); border-radius: 0 10px 10px 0; padding: 10px 14px; max-width: 540px; }
+  .declined .why { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+  .composer { padding: 14px 20px 16px; border-top: 1px solid var(--line); }
+  .composer .row { display: flex; gap: 8px; }
+  .composer input {
+    flex: 1; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface);
+    color: var(--ink); padding: 10px 13px; font: inherit; font-size: 13.5px;
+  }
+  .composer input:focus { border-color: var(--accent); outline: none; }
+  .composer .hint { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+  .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
+  @media (max-width: 880px) {
+    .start { grid-template-columns: 1fr; }
+    .repgrid { grid-template-columns: 1fr; }
+    .sess-grid { grid-template-columns: 1fr; }
+    .side { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb" id="crumb">Meelu</div>
+  <header class="page">
+    <div>
+      <h1>Analytics</h1>
+      <p class="sub" id="sub">Ask questions of your data. A session holds a set of files and one conversation about them; reports are the answers you chose to keep. Everything runs on your device — raw files never leave it.</p>
+    </div>
+    <button class="btn primary" id="new-btn">+ New session</button>
+  </header>
+
+  <div id="home">
+    <section class="card start">
+      <div class="ask">
+        <h2>Start a new analysis</h2>
+        <input type="text" placeholder="Ask a question — attach a file, or let Meelu fetch the data…">
+        <div class="chips">
+          <button class="qchip">Pull my site's page data and find thin content</button>
+          <button class="qchip">What drives repeat purchases?</button>
+          <button class="qchip">Forecast next month from this spreadsheet</button>
+        </div>
+      </div>
+      <div class="dz">
+        <b>Drop a CSV here</b>
+        starting with a file creates the session for you
+        <p class="or">Meelu can also pull data it already reaches — site pages, traffic, search results</p>
+      </div>
+    </section>
+
+    <section class="card panel">
+      <div class="panel-head">
+        <h2>Sessions</h2>
+        <span class="hint">one body of files, one conversation — open to carry on</span>
+      </div>
+      <div id="sess-list"></div>
+    </section>
+
+    <section class="card panel">
+      <div class="panel-head">
+        <h2>Report library</h2>
+        <span class="hint">saved answers — these outlive their sessions</span>
+      </div>
+      <div class="repgrid" id="rep-grid"></div>
+    </section>
+  </div>
+
+  <div id="session" style="display:none">
+    <div class="sess-grid">
+      <div class="side">
+        <div class="card">
+          <p class="cap">Files in this session <button class="btn small" style="letter-spacing:0;text-transform:none">+ Add</button></p>
+          <div id="file-list"></div>
+          <p class="tip">✦ No file handy? Ask Meelu to pull the data — “grab my site's page list” drops a fresh file in here.</p>
+        </div>
+        <div class="card">
+          <p class="cap">Reports from this session</p>
+          <div id="side-reports"></div>
+        </div>
+      </div>
+      <section class="card chat">
+        <div class="sess-head">
+          <h2 id="sess-title"></h2>
+          <span class="m" id="sess-meta"></span>
+        </div>
+        <div class="thread" id="thread"></div>
+        <div class="composer">
+          <div class="row">
+            <input type="text" id="ask" placeholder="Ask about these files…">
+            <button class="btn primary" id="send">Ask</button>
+          </div>
+          <p class="hint">Answers say how sure the analysis is — and refuse honestly when the data can't support one. Save what's worth keeping; the conversation itself isn't stored yet.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <p class="note" id="foot-note">Reports are kept in the database and openable anytime; a deleted session's reports stay in the library.</p>
+</div>
+
+<script>
+(() => {
+  const SESSIONS = [
+    { id: "s1", title: "Q3 shop orders", meta: "3 files · 12,694 rows · 2 d ago",
+      files: [
+        { name: "orders.csv", rows: "12,480", by: "you" },
+        { name: "products.csv", rows: "214", by: "you" },
+        { name: "site-pages.csv", rows: "62", by: "meelu" },
+      ],
+      reports: [{ title: "Repeat purchase drivers", when: "2 d ago" }],
+      thread: [
+        { who: "you", text: "Which products drive repeat purchases?" },
+        { who: "meelu", trust: "high", trustNote: "joined orders to products on product_id · 0 unmatched rows",
+          text: "<p><b>Grinders and filter paper drive repeat buying.</b> First-order grinder buyers return within 90 days at <b>2.6×</b> the store average; filter-paper buyers reorder on a ~6-week cycle. Espresso machines are the biggest first orders but the least likely to lead to a second.</p>",
+          chart: "bar", chartTitle: "Repeat rate by first-order category",
+          savable: "Repeat purchase drivers", saved: true },
+        { who: "you", text: "Forecast next month's revenue." },
+        { who: "meelu", trust: "moderate", trustNote: "13 weeks of history is short for seasonality — treat the range seriously",
+          text: "<p>Projected October revenue: <b>$21,400 ± $2,900</b>, +4% month over month — driven almost entirely by beans reorders; hardware is flat.</p>",
+          chart: "line", chartTitle: "Weekly revenue, actual + forecast",
+          savable: "October revenue forecast", saved: false },
+        { who: "you", text: "Which ad campaign caused the September spike?" },
+        { who: "meelu", declined: true, text: "<b>Your files can't answer this.</b>",
+          why: "orders.csv has no campaign or source column. Export campaign data from your ad platform, drop it here, and I can join it on order date and try again." },
+      ] },
+    { id: "s2", title: "Newsletter subscribers", meta: "1 file · 3,822 rows · yesterday",
+      files: [{ name: "subscribers.csv", rows: "3,822", by: "you" }],
+      reports: [],
+      thread: [
+        { who: "you", text: "How fast is the list growing and where do sign-ups come from?" },
+        { who: "meelu", trust: "high", trustNote: "clean dates, one source column, no gaps",
+          text: "<p>The list grows <b>+9% per month</b>. Two thirds of sign-ups come from the brewing-guide pages; the checkout opt-in adds fewer but the <b>highest-open-rate</b> readers.</p>",
+          chart: "line", chartTitle: "Sign-ups per week",
+          savable: "Subscriber growth summary", saved: false },
+      ] },
+    { id: "s3", title: "Supplier price lists", meta: "2 files · 640 rows · last week", files: [
+        { name: "supplier-a.csv", rows: "312", by: "you" },
+        { name: "supplier-b.csv", rows: "328", by: "you" },
+      ], reports: [{ title: "Cheapest supplier per SKU", when: "6 d ago" }], thread: [
+        { who: "you", text: "Who is cheaper per SKU once shipping is included?" },
+        { who: "meelu", trust: "high", trustNote: "matched 296 of 312 SKUs by code; 16 unmatched listed in the report",
+          text: "<p>Supplier B wins on <b>71% of matched SKUs</b> once shipping is folded in — the full per-SKU table is in the saved report.</p>",
+          savable: "Cheapest supplier per SKU", saved: true },
+      ] },
+  ];
+
+  const LIBRARY = [
+    { title: "Repeat purchase drivers", sess: "Q3 shop orders", when: "2 d ago", spark: "bar" },
+    { title: "Cheapest supplier per SKU", sess: "Supplier price lists", when: "6 d ago", spark: "table" },
+    { title: "August traffic deep-dive", sess: "(session deleted)", when: "3 w ago", spark: "line" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  let current = null;
+
+  function spark(kind) {
+    if (kind === "bar") return `<svg class="spark" width="100%" viewBox="0 0 120 34">${[26,20,14,9,5].map((v,i)=>`<rect x="${i*24}" y="${34-v-2}" width="16" height="${v}" rx="2" fill="var(--accent)" opacity="${0.85-i*0.14}"/>`).join("")}</svg>`;
+    if (kind === "line") return `<svg class="spark" width="100%" viewBox="0 0 120 34"><path d="M2,28 L22,24 L42,26 L62,18 L82,14 L102,10 L118,6" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+    return `<svg class="spark" width="100%" viewBox="0 0 120 34">${[0,1,2].map(i=>`<rect x="2" y="${3+i*11}" width="116" height="7" rx="2" fill="var(--wash)" stroke="var(--line)"/>`).join("")}</svg>`;
+  }
+
+  function barChart() {
+    const bars = [["Grinders",46],["Filter paper",41],["Beans",28],["Kettles",19],["Espresso mach.",9]];
+    const W=510,L=110,max=46;
+    return `<svg width="100%" viewBox="0 0 ${W} 148">${bars.map(([l,v],i)=>{
+      const y=12+i*26, w=((W-L-56)*v)/max;
+      return `<text x="${L-8}" y="${y+11}" text-anchor="end">${l}</text>
+        <rect x="${L}" y="${y}" width="${w}" height="15" rx="4" fill="var(--accent)" opacity="${0.9-i*0.13}"/>
+        <text x="${L+w+7}" y="${y+11}" style="fill:var(--ink-2);font-weight:600">${v}%</text>`;}).join("")}</svg>`;
+  }
+
+  function lineChart() {
+    const W=510,H=132,pts=[22,25,24,28,27,31,30,33,36,35,39,41],fc=[41,43,45,47];
+    const x=(i)=>14+(i*(W-28))/15, y=(v)=>H-20-((v-15)*(H-40))/35;
+    const p=pts.map((v,i)=>`${i?"L":"M"}${x(i)},${y(v)}`).join(" ");
+    const f=fc.map((v,i)=>`${i?"L":"M"}${x(11+i)},${y(v)}`).join(" ");
+    return `<svg width="100%" viewBox="0 0 ${W} ${H}">
+      <line x1="14" y1="${H-20}" x2="${W-14}" y2="${H-20}" stroke="var(--line)"/>
+      <path d="${p}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <path d="${f}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 4"/>
+      <text x="14" y="${H-7}">Jul</text><text x="${W/2}" y="${H-7}">Aug</text><text x="${W-64}" y="${H-7}">Oct (fc)</text></svg>`;
+  }
+
+  function renderHome() {
+    $("home").style.display = "";
+    $("session").style.display = "none";
+    $("foot-note").textContent = "Reports are kept in the database and openable anytime; a deleted session's reports stay in the library.";
+    $("sess-list").innerHTML = SESSIONS.map((s) => `
+      <div class="row-item" data-s="${s.id}">
+        <span class="t">${s.title}</span>
+        ${s.reports.length ? `<span class="badge good">${s.reports.length} report${s.reports.length===1?"":"s"}</span>` : ""}
+        <span class="m">${s.meta}</span>
+      </div>`).join("");
+    for (const r of $("sess-list").querySelectorAll("[data-s]")) {
+      r.addEventListener("click", () => openSession(r.dataset.s));
+    }
+    $("rep-grid").innerHTML = LIBRARY.map((r) => `
+      <div class="rep">
+        ${spark(r.spark)}
+        <p class="t">${r.title}</p>
+        <p class="m">${r.sess} · ${r.when}</p>
+      </div>`).join("");
+  }
+
+  function msgHtml(m, i) {
+    if (m.who === "you") return `<div class="msg you"><p class="who">You</p><p class="txt">${m.text}</p></div>`;
+    if (m.declined) return `<div class="msg">
+      <p class="who"><span class="ai">✦</span> Meelu</p>
+      <div class="declined"><p class="txt">${m.text}</p><p class="why">${m.why}</p></div>
+      <div class="trust"><span class="badge warn">declined — data can't support it</span></div></div>`;
+    const chart = m.chart ? `<div class="chartcard"><div class="ch">${m.chartTitle}<span></span></div>${m.chart === "bar" ? barChart() : lineChart()}</div>` : "";
+    return `<div class="msg">
+      <p class="who"><span class="ai">✦</span> Meelu</p>
+      <div class="txt">${m.text}</div>${chart}
+      <div class="trust"><span class="badge ${m.trust === "high" ? "good" : "warn"}">${m.trust} confidence</span><span>${m.trustNote ?? ""}</span></div>
+      ${m.savable ? `<div class="actions">${m.saved
+        ? `<span class="badge plain">saved — “${m.savable}”</span>`
+        : `<button class="btn small" data-save="${i}">Save as report</button>`}</div>` : ""}
+    </div>`;
+  }
+
+  function openSession(id) {
+    current = SESSIONS.find((s) => s.id === id);
+    $("home").style.display = "none";
+    $("session").style.display = "";
+    $("foot-note").textContent = "The conversation isn't stored yet — save anything worth returning to as a report.";
+    $("sess-title").textContent = current.title;
+    $("sess-meta").textContent = current.meta;
+    $("file-list").innerHTML = current.files.map((f) => `
+      <div class="file">
+        ${f.by === "meelu" ? `<span class="ai" title="Meelu pulled this from your site data">✦</span>` : ""}
+        <span class="n" title="preview">${f.name}</span>
+        <span class="r">${f.rows} rows</span>
+      </div>`).join("") + `<div class="file add">+ drop or choose a file</div>`;
+    $("side-reports").innerHTML = current.reports.length
+      ? current.reports.map((r) => `<span class="repl">📊 ${r.title}<span class="m">${r.when}</span></span>`).join("")
+      : `<p class="empty">Nothing saved yet — good answers offer a save button.</p>`;
+    $("thread").innerHTML = current.thread.map(msgHtml).join("");
+    for (const b of $("thread").querySelectorAll("[data-save]")) {
+      b.addEventListener("click", () => {
+        const m = current.thread[Number(b.dataset.save)];
+        m.saved = true;
+        current.reports.push({ title: m.savable, when: "just now" });
+        LIBRARY.unshift({ title: m.savable, sess: current.title, when: "just now", spark: m.chart ?? "table" });
+        openSession(current.id);
+      });
+    }
+  }
+
+  const send = () => {
+    const v = $("ask").value.trim();
+    if (!v || !current) return;
+    current.thread.push({ who: "you", text: v });
+    current.thread.push({ who: "meelu", trust: "moderate", trustNote: "mock answer — the real one runs the analytics tools over this session's files",
+      text: "<p>(The real answer lands here, with charts and tables when they help, and a save button when it's worth keeping.)</p>" });
+    openSession(current.id);
+    $("ask").value = "";
+  };
+  $("send").addEventListener("click", send);
+  $("ask").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+  $("crumb").addEventListener("click", renderHome);
+  $("new-btn").addEventListener("click", renderHome);
+  renderHome();
+})();
+</script>
+</body>
+</html>

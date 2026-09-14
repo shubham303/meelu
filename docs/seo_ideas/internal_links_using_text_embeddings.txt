@@ -1,0 +1,17 @@
+5. Build an internal linking engine in a week, knowing nothing about embeddings
+
+This one is mine. I built a tool that suggests internal links for any article on this blog, and I started by asking ChatGPT's Deep Research to teach me the maths behind it, because I had never worked with any of it before.
+
+It reads every article on the blog and turns each one into a long string of numbers that stands for what the article is about (known as vector embeddings). Give it a URL and it compares that page against all the others, then hands back the 20 closest matches. It looks for pages about the same subject rather than pages that happen to share a keyword, and those are usually different lists.
+
+Internal links matter for SEO for three reasons. They help Google find your pages, since a page nothing links to is a page Google may never discover. They pass authority around your site, so linking to a page from several strong ones is how you decide which of your pages deserves to rank. And the words you link with tell Google what the target page is about. As John Mueller put it, internal linking is "one of the biggest things you can do on a website to guide Google and visitors to the pages that you think are important."
+
+None of that is difficult. It is just that doing it properly means holding several hundred articles in your head at once, so it never happens on the day you publish. That is the part this hands off.
+
+Let a script write the internal link into the page for you
+
+John Iwuozor wrote a Python script that finds a good internal link and then writes it into the page for you.
+
+Point it at an article and it reads your other pages to work out which one covers the closest subject. Then it goes through the article paragraph by paragraph looking for a phrase that would make sensible anchor text, picks the best one, and drops the link into the HTML itself.
+
+Finding the right page to link to is only half of the job. The other half is opening the article, reading it back, choosing a sentence that can carry the link without sounding forced, and editing the page. That second half is why internal linking backlogs never shrink, and it is the half this takes off you.

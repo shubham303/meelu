@@ -1,0 +1,9 @@
+Free keyword research from a single page
+
+Given a page, figure out what it is trying to sell or convey. From that intent, form the queries a buyer or reader would actually type. Run those queries as real web searches and look at what came back: the pages that rank are the pages the search engine believes answer the query.
+
+Analyse those ranking pages. Extract the keywords and phrases they lean on — the terms they repeat, the questions they answer, the angles they take. Then check our own page against that list: which of those terms and questions does it already cover, and which is it missing?
+
+The keywords that survive this comparison go into the keyword table, tied to the page they came from. No paid keyword tool involved — the search results themselves are the data source.
+
+This is a workflow, not a tool. The chain (read page → infer intent → form queries → search → fetch and analyse results → diff against our page → save keywords) is one recipe among endlessly many; tomorrow's variant starts from a competitor's page, or from a query instead of a page, or diffs against a whole section. Workflows like this belong in the workflow section, composed from the small tools the agent already has (read a page, web search, fetch a URL, save keywords) — not baked into the desk as a single monolithic "research keywords" tool.

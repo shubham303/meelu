@@ -1,0 +1,126 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1360,
+      "h": 1150,
+      "title": "Site — desk home",
+      "page": "page-site"
+    },
+    {
+      "file": "SiteSearch.dc.html",
+      "x": 1440,
+      "y": 0,
+      "w": 1360,
+      "h": 1100,
+      "title": "Site — Search performance",
+      "page": "page-site"
+    },
+    {
+      "file": "SiteStructure.dc.html",
+      "x": 2880,
+      "y": 0,
+      "w": 1360,
+      "h": 1180,
+      "title": "Site — Structure",
+      "page": "page-site"
+    },
+    {
+      "file": "SeoDesk.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1360,
+      "h": 1080,
+      "title": "SEO — desk home",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoKeywords.dc.html",
+      "x": 1440,
+      "y": 0,
+      "w": 1360,
+      "h": 1080,
+      "title": "SEO — Keywords",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoIntentMap.dc.html",
+      "x": 2880,
+      "y": 0,
+      "w": 1360,
+      "h": 1020,
+      "title": "SEO — Intent map",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoOpportunities.dc.html",
+      "x": 0,
+      "y": 1240,
+      "w": 1360,
+      "h": 1040,
+      "title": "SEO — Opportunities",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoFindings.dc.html",
+      "x": 1440,
+      "y": 1240,
+      "w": 1360,
+      "h": 1060,
+      "title": "SEO — Findings",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoPlan.dc.html",
+      "x": 2880,
+      "y": 1240,
+      "w": 1360,
+      "h": 1180,
+      "title": "SEO — Plan",
+      "page": "page-seo"
+    },
+    {
+      "file": "SeoResults.dc.html",
+      "x": 0,
+      "y": 2480,
+      "w": 1360,
+      "h": 1000,
+      "title": "SEO — Results",
+      "page": "page-seo"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "site-note",
+      "x": 0,
+      "y": -170,
+      "w": 460,
+      "text": "Chapters 1-3 fold into the Site desk.\nRuns + budgets (Ch1) live on the desk home; Search performance is the query truth layer (Ch2); Structure is links + indexation (Ch3).\nAll deterministic - identical on web and app.",
+      "page": "page-site"
+    },
+    {
+      "id": "seo-note",
+      "x": 0,
+      "y": -170,
+      "w": 460,
+      "text": "The SEO desk is chapters 4-13.\nKeywords (Ch4) -> Intent map (Ch5+6) -> Opportunities (Ch7) -> Findings (Ch8, guardrails Ch9) -> Plan (Ch10, app-only: needs the local agent) -> Results (Ch13).\nEverything except Plan works without the harness.",
+      "page": "page-seo"
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-seo"
+  },
+  "pages": [
+    {
+      "id": "page-site",
+      "name": "Site desk"
+    },
+    {
+      "id": "page-seo",
+      "name": "SEO desk"
+    }
+  ]
+}

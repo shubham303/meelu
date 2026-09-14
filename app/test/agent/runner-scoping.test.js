@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { register } from "node:module";
+import os from "node:os";
+import path from "node:path";
+import { after, before, test } from "node:test";
+import { CATALOG, meeluTools, startLlm, startMcp, startScopeApi, systemText } from "./fakes.mjs";
+
+register("./electron-loader.mjs", import.meta.url);
+
+let scopeApi;
+let mcp;
+let llm;
+let runner;
+let cwd;
+
+before(async () => {
+  [scopeApi, mcp, llm] = await Promise.all([startScopeApi(), startMcp(), startLlm()]);
+  process.env.MEELU_BASE_URL = scopeApi.url;
+  process.env.MEELU_AGENT_MCP_URL = mcp.url;
+  process.env.MEELU_API_KEY = "emcp_test_key";
+  process.env.MEELU_LLM_BASE_URL = llm.url;
+  process.env.MEELU_LLM_API_KEY = "test";
+  process.env.MEELU_LLM_MODEL = "claude-haiku-4-5-20251001";
+  cwd = fs.mkdtempSync(path.join(os.tmpdir(), "meelu-runner-test-"));
+  runner = await import("../../src/main/agent/runner.js");
+});
+
+after(() => {
+  runner?.closeAgentSessions();
+  scopeApi?.close();
+  mcp?.close();
+  llm?.close();
+});
+
+async function turn(message, sessionId) {
+  const events = [];
+  let sid = sessionId;
+  await runner.runAgentTurn(
+    { action: "ask-pages", siteId: "site_test", message, sessionId, form: {} },
+    (event, data) => {
+      events.push([event, data]);
+      if (event === "session") sid = data.sessionId;
+    },
+    { cwd, abortController: new AbortController(), askPermission: async () => "allow" },
+  );
+  const done = events.find(([e]) => e === "done")?.[1];
+  return { sessionId: sid, done, events };
+}
+
+const PAGES_TOOLS = ["delete_note", "find_plans", "get_plan", "run_sql", "save_note", "search_page", "update_note"];
+const CONTENT_TOOLS = [...PAGES_TOOLS, "content_create_piece", "content_free_slots", "content_update_piece"].sort();
+
+test("one task does one MCP handshake across three turns, and hides the other desks' tools", async () => {
+  llm.script.push({ text: "one" }, { text: "two" }, { text: "three" });
+  const first = await turn("turn one");
+  assert.equal(first.done.ok, true, first.done.error);
+  assert.ok(first.sessionId);
+  const second = await turn("turn two", first.sessionId);
+  const third = await turn("turn three", first.sessionId);
+  assert.equal(second.done.ok, true);
+  assert.equal(third.done.ok, true);
+
+  assert.equal(llm.requests.length, 3);
+  assert.equal(mcp.counts["tools/list"], 2, "one catalog read by the app plus one CLI handshake");
+  assert.equal(mcp.counts.initialize, 2, "one catalog read by the app plus one CLI handshake");
+
+  for (const req of llm.requests) {
+    assert.deepEqual(meeluTools(req), PAGES_TOOLS);
+    assert.ok(!req.tools.some((t) => t.name === "mcp__meelu__cluster"), "analytics engine hidden on pages");
+    assert.ok(req.tools.some((t) => t.name === "mcp__desks__add_desk"), "add_desk offered");
+  }
+  assert.equal(scopeApi.calls.length, 1, "scope fetched once per task, not per turn");
+});
+
+test("the system prompt sent to the model is the scope prompt plus the runner blocks", async () => {
+  const req = llm.requests[0];
+  const sys = systemText(req);
+  assert.ok(sys.includes("PAGES DESK PROMPT. Answer about the site's pages."));
+  assert.ok(sys.includes("## The database"));
+  assert.ok(sys.includes("## You can read the open web"));
+  assert.ok(sys.includes("## Delegating bulk reads"));
+  assert.ok(sys.includes("## The website this task is about"));
+  assert.ok(sys.includes("site_id = 'site_test'"));
+  assert.ok(sys.includes("## What this task may write"));
+  assert.ok(sys.includes("`save_note`"));
+  assert.ok(sys.includes("## Other desks (load on demand)"));
+  assert.ok(sys.includes("- content: content desk"));
+  assert.ok(sys.includes("- analytics: analytics desk"));
+  assert.ok(!sys.includes("- pages:"), "the loaded desk is not offered again");
+  for (const hidden of CATALOG.filter((t) => t.desk && t.desk !== "pages")) {
+    assert.ok(!sys.includes(hidden.name), `${hidden.name} leaked into the prompt`);
+  }
+  const text = sys.split("\n").filter((l) => l.trim()).join("\n");
+  assert.equal(sys, systemText(llm.requests[2]), "prompt is stable across turns of one task");
+  assert.ok(text.length > 0);
+});
+
+test("add_desk unhides the desk's tools on the next model call without a new handshake", async () => {
+  const before = { ...mcp.counts };
+  llm.script.push({ tool: "mcp__desks__add_desk", input: { desk: "content" } }, { text: "after add" });
+  const start = llm.requests.length;
+  const res = await turn("write a page");
+  assert.equal(res.done.ok, true, res.done.error);
+  const [beforeAdd, afterAdd] = llm.requests.slice(start);
+  assert.deepEqual(meeluTools(beforeAdd), PAGES_TOOLS);
+  assert.deepEqual(meeluTools(afterAdd), CONTENT_TOOLS);
+  assert.ok(!afterAdd.tools.some((t) => t.name === "mcp__meelu__cluster"), "analytics still hidden");
+
+  const last = afterAdd.messages.at(-1).content;
+  const result = last.find((b) => b.type === "tool_result");
+  const resultText = typeof result.content === "string" ? result.content : result.content.map((c) => c.text).join("");
+  assert.ok(resultText.includes("BRIEF FOR CONTENT"), "the desk brief comes back as the tool result");
+
+  assert.equal(mcp.counts["tools/list"] - before["tools/list"], 1, "new task: one CLI handshake, catalog cached");
+  assert.equal(scopeApi.calls.at(-1).desks, "content", "scope refetched with the added desk");
+  assert.equal(scopeApi.calls.length, 3);
+});

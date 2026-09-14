@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analytics — studio design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --good-wash: rgba(21, 128, 61, 0.08);
+    --warn: #d97706;
+    --warn-wash: rgba(217, 119, 6, 0.09);
+    --bad: #dc2626;
+    --num: #2563eb;
+    --date: #1baf7a;
+    --cash: #d97706;
+    --text: #8fa0b3;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 13.5px; padding: 7px 13px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: var(--surface);
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
+  .btn.ghost:hover { color: var(--ink); background: var(--wash); }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px;
+    font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.good { color: var(--good); background: var(--good-wash); border-color: rgba(21,128,61,0.25); }
+  .badge.warn { color: var(--warn); background: var(--warn-wash); border-color: rgba(217,119,6,0.25); }
+  .badge.plain { color: var(--ink-2); background: var(--wash); border-color: var(--line); }
+
+  .topbar {
+    height: 52px; display: flex; align-items: center; gap: 14px; padding: 0 18px;
+    border-bottom: 1px solid var(--line); background: var(--surface);
+  }
+  .topbar .back { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+  .topbar .back:hover { color: var(--ink); }
+  .topbar h1 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .topbar .meta { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+  .screen { height: calc(100% - 52px); }
+
+  .landing { overflow-y: auto; height: 100%; padding: 28px 24px 64px; }
+  .landing .inner { max-width: 1040px; margin: 0 auto; }
+  .landing h2 { font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; }
+  .landing .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 640px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+  .ncard {
+    border: 2px dashed var(--line-strong); border-radius: 16px; padding: 22px 20px;
+    cursor: pointer; color: var(--ink-2); display: flex; flex-direction: column; justify-content: center; min-height: 168px;
+  }
+  .ncard:hover { border-color: var(--accent); background: var(--accent-wash); }
+  .ncard b { font-family: 'Fraunces', Georgia, serif; font-size: 16px; color: var(--ink); font-weight: 500; }
+  .ncard p { font-size: 12.5px; margin-top: 6px; line-height: 1.5; }
+  .scard {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 18px; cursor: pointer; min-height: 168px; display: flex; flex-direction: column;
+  }
+  .scard:hover { border-color: var(--accent); }
+  .scard h3 { font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 500; }
+  .scard:hover h3 { color: var(--accent); }
+  .scard .files { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .scard .f { font-size: 11px; color: var(--ink-2); background: var(--wash); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; }
+  .scard .finding { margin-top: auto; padding-top: 12px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+  .scard .finding b { color: var(--ink); font-weight: 600; }
+  .scard .meta { margin-top: 8px; font-size: 11.5px; color: var(--muted); }
+
+  .studio { display: grid; grid-template-columns: 292px minmax(0, 1fr) 268px; height: 100%; }
+  .panel { overflow-y: auto; }
+  .panel.data { border-right: 1px solid var(--line); background: var(--surface); padding: 14px; }
+  .panel.board { border-left: 1px solid var(--line); background: var(--surface); padding: 14px; }
+  .cap { display: flex; align-items: center; justify-content: space-between; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 4px 2px 10px; }
+
+  .whatgot {
+    border: 1px solid rgba(37,99,235,0.3); background: var(--accent-wash); border-radius: 12px;
+    padding: 11px 13px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin-bottom: 12px;
+  }
+  .whatgot .ai { color: var(--accent); font-weight: 600; }
+  .whatgot b { color: var(--ink); }
+
+  .tcard { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; background: var(--surface); }
+  .tcard .thead { display: flex; align-items: center; gap: 8px; padding: 9px 11px; cursor: pointer; }
+  .tcard .thead:hover .tn { color: var(--accent); }
+  .tcard input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; flex: none; }
+  .tcard .tn { font-size: 13px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tcard .tr { font-size: 11px; color: var(--muted); flex: none; }
+  .tcard .ai { color: var(--accent); font-size: 11px; flex: none; }
+  .tcard .cols { padding: 0 11px 9px 33px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+  .col { font-size: 11px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 3px; }
+  .col .g { font-weight: 700; font-size: 10px; width: 13px; height: 13px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+  .g.num { background: var(--num); } .g.date { background: var(--date); } .g.cash { background: var(--cash); } .g.text { background: var(--text); }
+  .tcard .flag { padding: 0 11px 9px 33px; font-size: 11px; color: var(--warn); }
+  .joinline { display: flex; align-items: center; gap: 7px; margin: -3px 0 10px 20px; font-size: 11px; color: var(--good); }
+  .joinline .wire { flex: none; width: 14px; height: 14px; border-left: 1.5px solid var(--good); border-bottom: 1.5px solid var(--good); border-radius: 0 0 0 7px; margin-top: -12px; }
+  .adddata { width: 100%; justify-content: center; border-style: dashed; margin-top: 2px; }
+  .fetchhint { margin-top: 10px; font-size: 11.5px; color: var(--muted); line-height: 1.5; padding: 0 3px; }
+  .fetchhint .ai { color: var(--accent); }
+
+  .chatcol { display: flex; flex-direction: column; min-width: 0; }
+  .thread { flex: 1; overflow-y: auto; padding: 10px 26px; }
+  .msg { padding: 15px 0; border-bottom: 1px solid var(--line); max-width: 680px; }
+  .msg:last-child { border-bottom: 0; }
+  .msg.you .txt { font-size: 14.5px; font-weight: 500; }
+  .msg .who { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+  .msg .who .ai { color: var(--accent); }
+  .msg .txt { font-size: 13.5px; line-height: 1.55; }
+  .msg .txt b { font-weight: 600; }
+  .headline { font-family: 'Fraunces', Georgia, serif; font-size: 16.5px; font-weight: 500; margin-bottom: 6px; }
+  .chartcard { margin: 12px 0 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  .chartcard .ch { display: flex; align-items: center; justify-content: space-between; padding: 9px 13px 1px; font-size: 12.5px; font-weight: 500; }
+  .chartcard svg { display: block; }
+  .chartcard svg text { font: 10px 'Geist', ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+  .work {
+    margin-top: 10px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none;
+  }
+  .work:hover { color: var(--ink-2); }
+  .work .arr { display: inline-block; transition: transform 0.15s; }
+  .work.open .arr { transform: rotate(90deg); }
+  .workbody {
+    display: none; margin-top: 7px; border-left: 2px solid var(--line-strong); padding: 2px 0 2px 11px;
+    font-size: 12px; color: var(--ink-2); line-height: 1.6;
+  }
+  .work.open + .workbody { display: block; }
+  .workbody b { color: var(--ink); font-weight: 500; }
+  .declined { border-left: 3px solid var(--warn); background: var(--warn-wash); border-radius: 0 10px 10px 0; padding: 11px 14px; }
+  .declined .why { font-size: 12.5px; color: var(--ink-2); margin-top: 5px; line-height: 1.5; }
+  .mactions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+
+  .composer { border-top: 1px solid var(--line); background: var(--surface); padding: 12px 26px 14px; }
+  .composer .row { display: flex; gap: 8px; max-width: 680px; }
+  .composer input {
+    flex: 1; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface);
+    color: var(--ink); padding: 10px 13px; font: inherit; font-size: 13.5px;
+  }
+  .composer input:focus { border-color: var(--accent); outline: none; }
+  .scope { max-width: 680px; margin-top: 7px; font-size: 11.5px; color: var(--muted); }
+  .scope b { color: var(--ink-2); font-weight: 500; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; max-width: 680px; margin-top: 9px; }
+  .qchip { all: unset; cursor: pointer; border: 1px solid var(--line-strong); border-radius: 999px; padding: 4px 11px; font-size: 12px; color: var(--ink-2); background: var(--surface); }
+  .qchip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .qchip .why { color: var(--muted); }
+
+  .pin { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 9px; overflow: hidden; background: var(--surface); }
+  .pin .pt { font-size: 11.5px; font-weight: 500; padding: 7px 10px 0; }
+  .pin svg { display: block; }
+  .pin .pm { font-size: 10.5px; color: var(--muted); padding: 0 10px 7px; }
+  .board .empty { font-size: 12px; color: var(--muted); line-height: 1.55; padding: 2px 3px 10px; }
+  .repl { display: block; border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; margin-bottom: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer; background: var(--surface); }
+  .repl:hover { border-color: var(--accent); color: var(--accent); }
+  .repl .m { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+  .compile { width: 100%; justify-content: center; margin-top: 4px; }
+
+  .scrim { position: fixed; inset: 0; background: rgba(31,45,61,0.3); z-index: 9; display: none; }
+  .scrim.open { display: block; }
+  .modal {
+    position: fixed; top: 7vh; left: 50%; transform: translateX(-50%); width: 680px; max-width: 94vw;
+    max-height: 84vh; overflow-y: auto; z-index: 10; background: var(--surface);
+    border: 1px solid var(--line-strong); border-radius: 16px; box-shadow: 0 24px 60px rgba(31,45,61,0.2); display: none;
+  }
+  .modal.open { display: block; }
+  .modal .mh { display: flex; align-items: baseline; gap: 10px; padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+  .modal .mh h2 { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 500; }
+  .modal .mh .m { font-size: 12px; color: var(--muted); }
+  .modal .mh .x { all: unset; cursor: pointer; margin-left: auto; width: 26px; height: 26px; border-radius: 7px; text-align: center; line-height: 26px; color: var(--ink-2); }
+  .modal .mh .x:hover { background: var(--wash); }
+  .modal table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .modal th { text-align: left; font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--wash); }
+  .modal td { padding: 7px 12px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .modal td:first-child { color: var(--ink); font-weight: 500; }
+  .modal .sec { padding: 12px 20px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+
+  @media (max-width: 980px) {
+    .studio { grid-template-columns: 1fr; }
+    .panel.data, .panel.board { border: 0; border-bottom: 1px solid var(--line); }
+    body { overflow: auto; }
+    .studio { height: auto; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar" id="topbar">
+  <span class="back" id="back" style="display:none">‹ All analyses</span>
+  <h1 id="tb-title">Analytics</h1>
+  <span class="meta" id="tb-meta">runs on this device · raw files never leave it</span>
+</div>
+
+<div class="screen">
+  <div class="landing" id="landing">
+    <div class="inner">
+      <h2>What do you want to know?</h2>
+      <p class="sub">Each analysis is a set of files and everything you've learned from them. Drop a file to start one — or just ask, and Meelu fetches the data it can already reach.</p>
+      <div class="grid" id="cards"></div>
+    </div>
+  </div>
+
+  <div class="studio" id="studio" style="display:none">
+    <aside class="panel data" id="data-panel" aria-label="Data"></aside>
+    <section class="chatcol">
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <div class="row">
+          <input type="text" id="ask" placeholder="Ask about this data…">
+          <button class="btn primary" id="send">Ask</button>
+        </div>
+        <p class="scope" id="scope"></p>
+        <div class="chips" id="chips"></div>
+      </div>
+    </section>
+    <aside class="panel board" id="board-panel" aria-label="Board"></aside>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="modal" id="modal"></div>
+
+<script>
+(() => {
+  const G = { num: "#", date: "◷", cash: "$", text: "Aa" };
+
+  const SESSION = {
+    title: "Q3 shop orders",
+    meta: "3 tables · 12,756 rows · on this device",
+    whatgot: `<span class="ai">✦</span> <b>12,480 orders over 14 weeks</b>, joining cleanly to your 214 products. Order dates, revenue and customer emails are all usable — so trends, forecasts and repeat-purchase questions are on the table. <b>site-pages.csv</b> adds page data Meelu fetched from your site.`,
+    tables: [
+      { id: "orders", name: "orders.csv", rows: "12,480 × 9", by: "you", checked: true,
+        cols: [["date", "order_date"], ["cash", "total"], ["num", "qty"], ["text", "email"], ["num", "product_id"]],
+        flag: "2% of rows missing email",
+        join: "product_id → products.csv" },
+      { id: "products", name: "products.csv", rows: "214 × 6", by: "you", checked: true,
+        cols: [["num", "id"], ["text", "name"], ["text", "category"], ["cash", "price"]] },
+      { id: "pages", name: "site-pages.csv", rows: "62 × 12", by: "meelu", checked: false,
+        cols: [["text", "url"], ["text", "title"], ["num", "inlinks"], ["num", "word_count"]] },
+    ],
+    thread: [
+      { who: "you", text: "Which products drive repeat purchases?" },
+      { who: "meelu",
+        headline: "Grinders and filter paper drive repeat buying.",
+        text: "First-order grinder buyers come back within 90 days at <b>2.6×</b> the store average, and filter-paper buyers reorder on a steady ~6-week cycle. Espresso machines are your biggest first orders — and your worst repeat ones.",
+        chart: "bar", chartTitle: "Repeat rate by first-order category",
+        work: "Joined <b>orders × products</b> on product_id (0 unmatched rows) · grouped customers by first-order category · repeat = any second order within 90 days · <b>high confidence</b>, no caveats.",
+        trust: "high", savable: "Repeat purchase drivers", saved: true, pinned: true },
+      { who: "you", text: "Forecast next month's revenue." },
+      { who: "meelu",
+        headline: "October projects to $21,400 ± $2,900.",
+        text: "The trend is <b>+4% month over month</b>, carried almost entirely by beans reorders. Hardware revenue is flat — growth is your consumables engine.",
+        chart: "line", chartTitle: "Weekly revenue, actual + forecast",
+        work: "Used <b>orders</b> only · weekly resample of order_date × total · seasonal-naive forecast chosen automatically · <b>moderate confidence</b> — 13 weeks of history is short, and holiday effects are unknown.",
+        trust: "moderate", savable: "October revenue forecast", saved: false, pinned: false },
+      { who: "you", text: "Which ad campaign caused the September spike?" },
+      { who: "meelu", declined: true,
+        headline: "Your data can't answer this.",
+        why: "None of the three tables has a campaign or traffic-source column, so nothing here can tie orders to ads. Export campaign data from your ad platform and drop it in — I'll join it on order date and try again. An honest no beats a made-up number." },
+    ],
+    pins: [{ title: "Repeat rate by category", kind: "bar", from: "asked 2 d ago" }],
+    reports: [{ title: "Repeat purchase drivers", when: "2 d ago" }],
+    chips: [
+      ["Which products are bought together?", "you have baskets"],
+      ["Do weekend orders differ from weekdays?", "you have dates"],
+      ["Which customers are about to churn?", "you have repeat buyers"],
+      ["Compare September to August", ""],
+    ],
+  };
+
+  const LANDING = [
+    { title: "Q3 shop orders", files: ["orders.csv", "products.csv", "✦ site-pages.csv"],
+      finding: "<b>Grinders drive 2.6× repeat purchases</b> — espresso machines almost none.", meta: "2 questions · 1 report · 2 d ago", open: true },
+    { title: "Newsletter subscribers", files: ["subscribers.csv"],
+      finding: "List grows <b>+9%/month</b>; brewing guides bring two thirds of sign-ups.", meta: "1 question · yesterday" },
+    { title: "Supplier price lists", files: ["supplier-a.csv", "supplier-b.csv"],
+      finding: "<b>Supplier B wins 71% of SKUs</b> with shipping folded in.", meta: "1 report · last week" },
+  ];
+
+  const $ = (id) => document.getElementById(id);
+
+  function barChart(w = 560, h = 150) {
+    const bars = [["Grinders", 46], ["Filter paper", 41], ["Beans", 28], ["Kettles", 19], ["Espresso mach.", 9]];
+    const L = 110;
+    return `<svg width="100%" viewBox="0 0 ${w} ${h}">${bars.map(([l, v], i) => {
+      const y = 12 + i * ((h - 24) / 5), bh = (h - 24) / 5 - 11, bw = ((w - L - 56) * v) / 46;
+      return `<text x="${L - 8}" y="${y + bh - 1}" text-anchor="end">${l}</text>
+        <rect x="${L}" y="${y}" width="${bw}" height="${bh}" rx="4" fill="var(--accent)" opacity="${0.9 - i * 0.13}"/>
+        <text x="${L + bw + 7}" y="${y + bh - 1}" style="fill:var(--ink-2);font-weight:600">${v}%</text>`;
+    }).join("")}</svg>`;
+  }
+
+  function lineChart(w = 560, h = 150) {
+    const pts = [22, 25, 24, 28, 27, 31, 30, 33, 36, 35, 39, 41], fc = [41, 43, 45, 47];
+    const x = (i) => 16 + (i * (w - 32)) / 15, y = (v) => h - 22 - ((v - 15) * (h - 44)) / 35;
+    const p = pts.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ");
+    const f = fc.map((v, i) => `${i ? "L" : "M"}${x(11 + i)},${y(v)}`).join(" ");
+    const band = `M${x(11)},${y(41)} ${fc.map((v, i) => `L${x(11 + i)},${y(v + 4)}`).join(" ")} ${fc.slice().reverse().map((v, i) => `L${x(14 - i)},${y(v - 4)}`).join(" ")} Z`;
+    return `<svg width="100%" viewBox="0 0 ${w} ${h}">
+      <line x1="16" y1="${h - 22}" x2="${w - 16}" y2="${h - 22}" stroke="var(--line)"/>
+      <path d="${band}" fill="var(--accent-wash)"/>
+      <path d="${p}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+      <path d="${f}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 4"/>
+      <text x="16" y="${h - 8}">Jul</text><text x="${w / 2}" y="${h - 8}">Aug</text><text x="${w - 62}" y="${h - 8}">Oct (fc)</text>
+    </svg>`;
+  }
+
+  function renderLanding() {
+    $("landing").style.display = "";
+    $("studio").style.display = "none";
+    $("back").style.display = "none";
+    $("tb-title").textContent = "Analytics";
+    $("tb-meta").textContent = "runs on this device · raw files never leave it";
+    $("cards").innerHTML = `
+      <div class="ncard" id="new">
+        <b>＋ New analysis</b>
+        <p>Drop a CSV here, or start with a question — “pull my site's pages and find thin content” fetches the file for you.</p>
+      </div>` +
+      LANDING.map((s, i) => `
+        <div class="scard" data-i="${i}">
+          <h3>${s.title}</h3>
+          <div class="files">${s.files.map((f) => `<span class="f">${f}</span>`).join("")}</div>
+          <p class="finding">${s.finding}</p>
+          <p class="meta">${s.meta}</p>
+        </div>`).join("");
+    for (const c of $("cards").querySelectorAll(".scard")) {
+      c.addEventListener("click", () => openStudio());
+    }
+    $("new").addEventListener("click", openStudio);
+  }
+
+  function renderData() {
+    $("data-panel").innerHTML = `
+      <p class="cap">Data</p>
+      <div class="whatgot">${SESSION.whatgot}</div>
+      ${SESSION.tables.map((t) => `
+        <div class="tcard">
+          <div class="thead" data-t="${t.id}">
+            <input type="checkbox" ${t.checked ? "checked" : ""} data-c="${t.id}" aria-label="Include ${t.name}">
+            ${t.by === "meelu" ? '<span class="ai" title="Meelu fetched this from your site">✦</span>' : ""}
+            <span class="tn">${t.name}</span>
+            <span class="tr">${t.rows}</span>
+          </div>
+          <div class="cols">${t.cols.map(([g, n]) => `<span class="col"><span class="g ${g}">${G[g]}</span>${n}</span>`).join("")}<span class="col" style="color:var(--muted)">…</span></div>
+          ${t.flag ? `<p class="flag">⚠ ${t.flag}</p>` : ""}
+        </div>
+        ${t.join ? `<div class="joinline"><span class="wire"></span>joins ${t.join}</div>` : ""}`).join("")}
+      <button class="btn adddata">＋ Add data — drop a file or choose</button>
+      <p class="fetchhint"><span class="ai">✦</span> Or ask Meelu to fetch what it can already reach: your site's pages, traffic, search results, keyword lists.</p>`;
+    for (const cb of $("data-panel").querySelectorAll("[data-c]")) {
+      cb.addEventListener("click", (e) => e.stopPropagation());
+      cb.addEventListener("change", () => {
+        const t = SESSION.tables.find((x) => x.id === cb.dataset.c);
+        t.checked = cb.checked;
+        renderScope();
+      });
+    }
+    for (const th of $("data-panel").querySelectorAll(".thead")) {
+      th.addEventListener("click", (e) => {
+        if (e.target.closest("input")) return;
+        openProfile(th.dataset.t);
+      });
+    }
+  }
+
+  function renderScope() {
+    const on = SESSION.tables.filter((t) => t.checked);
+    $("scope").innerHTML = on.length === SESSION.tables.length
+      ? `Answering from <b>all ${on.length} tables</b> — untick tables on the left to narrow a question.`
+      : `Answering from <b>${on.map((t) => t.name).join(" + ") || "no tables — tick at least one"}</b>.`;
+  }
+
+  function msgHtml(m, i) {
+    if (m.who === "you") return `<div class="msg you"><p class="who">You</p><p class="txt">${m.text}</p></div>`;
+    if (m.declined) return `<div class="msg">
+      <p class="who"><span class="ai">✦</span> Meelu</p>
+      <div class="declined">
+        <p class="headline" style="margin:0">${m.headline}</p>
+        <p class="why">${m.why}</p>
+      </div>
+    </div>`;
+    const chart = m.chart ? `<div class="chartcard"><div class="ch">${m.chartTitle}
+        ${m.pinned ? '<span class="badge plain">pinned</span>' : `<button class="btn small ghost" data-pin="${i}">⌖ Pin to board</button>`}
+      </div>${m.chart === "bar" ? barChart() : lineChart()}</div>` : "";
+    return `<div class="msg">
+      <p class="who"><span class="ai">✦</span> Meelu</p>
+      <p class="headline">${m.headline}</p>
+      <p class="txt">${m.text}</p>
+      ${chart}
+      <p class="work" data-w="${i}"><span class="arr">›</span> How this was computed · <span style="color:${m.trust === "high" ? "var(--good)" : "var(--warn)"}">${m.trust} confidence</span></p>
+      <div class="workbody">${m.work}</div>
+      <div class="mactions">${m.savable ? (m.saved
+        ? `<span class="badge plain">saved — “${m.savable}”</span>`
+        : `<button class="btn small" data-save="${i}">Save as report</button>`) : ""}</div>
+    </div>`;
+  }
+
+  function renderThread() {
+    $("thread").innerHTML = SESSION.thread.map(msgHtml).join("");
+    for (const w of $("thread").querySelectorAll(".work")) {
+      w.addEventListener("click", () => w.classList.toggle("open"));
+    }
+    for (const b of $("thread").querySelectorAll("[data-save]")) {
+      b.addEventListener("click", () => {
+        const m = SESSION.thread[Number(b.dataset.save)];
+        m.saved = true;
+        SESSION.reports.unshift({ title: m.savable, when: "just now" });
+        renderThread(); renderBoard();
+      });
+    }
+    for (const b of $("thread").querySelectorAll("[data-pin]")) {
+      b.addEventListener("click", () => {
+        const m = SESSION.thread[Number(b.dataset.pin)];
+        m.pinned = true;
+        SESSION.pins.push({ title: m.chartTitle, kind: m.chart, from: "just now" });
+        renderThread(); renderBoard();
+      });
+    }
+    $("thread").scrollTop = $("thread").scrollHeight;
+  }
+
+  function renderBoard() {
+    $("board-panel").innerHTML = `
+      <p class="cap">Board</p>
+      ${SESSION.pins.length ? SESSION.pins.map((p) => `
+        <div class="pin">
+          <p class="pt">${p.title}</p>
+          ${p.kind === "bar" ? barChart(240, 78) : lineChart(240, 78)}
+          <p class="pm">${p.from}</p>
+        </div>`).join("") : '<p class="empty">Pin charts here as you go — the board is your scratch wall for one analysis.</p>'}
+      <button class="btn small compile" id="compile">✦ Compile board into a report</button>
+      <p class="cap" style="margin-top:18px">Reports</p>
+      ${SESSION.reports.length ? SESSION.reports.map((r) => `
+        <span class="repl">📊 ${r.title}<span class="m">${r.when} · kept forever, even if this analysis is deleted</span></span>`).join("")
+        : '<p class="empty">Saved answers land here and in your library.</p>'}`;
+    $("compile").addEventListener("click", () => {
+      SESSION.reports.unshift({ title: "Q3 review — compiled from board", when: "just now" });
+      renderBoard();
+    });
+  }
+
+  function renderChips() {
+    $("chips").innerHTML = SESSION.chips.map(([q, why]) => `
+      <button class="qchip">${q}${why ? ` <span class="why">· ${why}</span>` : ""}</button>`).join("");
+    for (const c of $("chips").querySelectorAll(".qchip")) {
+      c.addEventListener("click", () => { $("ask").value = c.textContent.split("·")[0].trim(); $("ask").focus(); });
+    }
+  }
+
+  function openStudio() {
+    $("landing").style.display = "none";
+    $("studio").style.display = "";
+    $("back").style.display = "";
+    $("tb-title").textContent = SESSION.title;
+    $("tb-meta").textContent = SESSION.meta;
+    renderData(); renderScope(); renderThread(); renderBoard(); renderChips();
+  }
+
+  function openProfile(id) {
+    const t = SESSION.tables.find((x) => x.id === id);
+    const COLS = {
+      orders: [["order_date", "date", "0%", "Jun 3 – Sep 28"], ["total", "money", "0%", "$4 – $612 · median $31"], ["qty", "number", "0%", "1 – 14"], ["email", "text", "2%", "9,411 unique"], ["product_id", "number", "0%", "joins products.id"], ["discount_code", "text", "81%", "mostly empty"]],
+      products: [["id", "number", "0%", "214 unique"], ["name", "text", "0%", ""], ["category", "text", "0%", "6 values"], ["price", "money", "0%", "$6 – $749"]],
+      pages: [["url", "text", "0%", "62 unique"], ["title", "text", "3%", ""], ["inlinks", "number", "0%", "0 – 61"], ["word_count", "number", "0%", "150 – 4,800"]],
+    };
+    $("modal").innerHTML = `
+      <div class="mh">
+        <h2>${t.name}</h2><span class="m">${t.rows}${t.by === "meelu" ? " · fetched by Meelu" : " · uploaded by you"}</span>
+        <button class="x" id="mx">×</button>
+      </div>
+      <p class="sec">Columns</p>
+      <table><thead><tr><th>Column</th><th>Type</th><th>Missing</th><th>What's in it</th></tr></thead>
+      <tbody>${(COLS[id] ?? []).map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>
+      <p class="sec">First rows</p>
+      <table><tbody>
+        <tr><td>ord_88121</td><td>Sep 26</td><td>$42.00</td><td>burr grinder mini</td></tr>
+        <tr><td>ord_88120</td><td>Sep 26</td><td>$19.50</td><td>filter paper ×100</td></tr>
+        <tr><td>ord_88119</td><td>Sep 25</td><td>$27.00</td><td>ethiopia beans 500g</td></tr>
+      </tbody></table>
+      <p class="sec" style="padding-bottom:16px">This profile was computed the moment the file landed — no question needed.</p>`;
+    $("modal").classList.add("open");
+    $("scrim").classList.add("open");
+    $("mx").addEventListener("click", closeModal);
+  }
+  function closeModal() {
+    $("modal").classList.remove("open");
+    $("scrim").classList.remove("open");
+  }
+  $("scrim").addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  const send = () => {
+    const v = $("ask").value.trim();
+    if (!v) return;
+    SESSION.thread.push({ who: "you", text: v });
+    SESSION.thread.push({ who: "meelu", headline: "(Mock answer)",
+      text: "The real page runs the analytics tools over the ticked tables and answers here — headline first, chart when it helps, always with the computation and confidence underneath.",
+      work: "This is where the tables used, the method chosen and the caveats would be listed.", trust: "moderate" });
+    $("ask").value = "";
+    renderThread();
+  };
+  $("send").addEventListener("click", send);
+  $("ask").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+  $("back").addEventListener("click", renderLanding);
+
+  renderLanding();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structure — console design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --good-wash: rgba(21, 128, 61, 0.08);
+    --warn: #d97706;
+    --warn-wash: rgba(217, 119, 6, 0.09);
+    --bad: #dc2626;
+    --c0: #2563eb;
+    --c1: #eb6834;
+    --c2: #1baf7a;
+    --c3: #d97706;
+    --c4: #d55181;
+    --c-noise: #b3ab94;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1088px; margin: 0 auto; padding: 32px 24px 64px; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+  header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  header.page h1 { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; }
+  header.page .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 660px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: transparent;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .btn.good { color: var(--good); border-color: rgba(21,128,61,0.4); }
+  .btn.good:hover { background: var(--good-wash); }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    all: unset; cursor: pointer; display: block; box-sizing: border-box;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 18px 14px;
+  }
+  .tile:hover { background: var(--wash); }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tile[aria-pressed="true"] { border-color: var(--tile-color); box-shadow: inset 0 3px 0 var(--tile-color); }
+  .tile .k { font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 7px; }
+  .tile .k .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--tile-color); }
+  .tile .v { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; margin-top: 6px; }
+  .tile .d { font-size: 12px; margin-top: 4px; color: var(--muted); }
+  .tile .d.up { color: var(--good); }
+  .tile .d.down { color: var(--bad); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+  .chart-card { padding: 20px; margin-bottom: 16px; }
+  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .chart-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .chart-head .hint { font-size: 11px; color: var(--muted); }
+  .chart-sub { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+  .chart-box { position: relative; }
+  svg text { font: 11px 'Geist', ui-sans-serif, system-ui, sans-serif; fill: var(--muted); }
+  svg text.quad { font-size: 11px; font-weight: 500; fill: var(--line-strong); text-transform: uppercase; letter-spacing: 0.06em; }
+  .dot { cursor: pointer; }
+  .dot:hover { stroke: var(--ink); stroke-width: 1.5; }
+  .tooltip {
+    position: absolute; pointer-events: none; display: none; z-index: 3;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(31, 45, 61, 0.10); padding: 8px 10px; min-width: 170px; max-width: 320px;
+  }
+  .tooltip .t-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tooltip .t-row { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .cluster-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-top: 10px; }
+  .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .lg b { color: var(--ink); font-weight: 600; }
+  .sdot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+
+  .queue { border-color: rgba(37, 99, 235, 0.4); padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .queue-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
+  .queue-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .queue-head .sub { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+  .fix { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  .fix:last-of-type { border-bottom: 0; }
+  .fix:hover { background: var(--wash); }
+  .fix .path { color: var(--ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  .fix .path:hover { color: var(--accent); }
+  .fix .arrow { color: var(--muted); flex: none; }
+  .fix .route { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 340px; }
+  .fix .why { flex: 1 1 240px; min-width: 0; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fix .why .ai { color: var(--accent); }
+  .fix .act { flex: none; display: flex; gap: 6px; }
+  .fix.done { opacity: 0.55; }
+  .badge {
+    display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+    font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.good { color: var(--good); background: var(--good-wash); border-color: rgba(21,128,61,0.25); }
+  .badge.warn { color: var(--warn); background: var(--warn-wash); border-color: rgba(217,119,6,0.25); }
+  .badge.plain { color: var(--ink-2); background: var(--wash); border-color: var(--line); }
+  .brief { padding: 12px 16px; border-top: 1px solid var(--line); background: var(--accent-wash); display: flex; gap: 12px; align-items: baseline; font-size: 13px; }
+  .brief b { font-weight: 600; }
+  .brief .txt { flex: 1; color: var(--ink-2); }
+  .brief .txt b { color: var(--ink); }
+  .queue .foot { padding: 10px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+
+  .panel { padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .panel-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .panel-head .tools { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .panel-head input {
+    border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink);
+    padding: 5px 10px; font: inherit; font-size: 13px; width: 160px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .seg button { all: unset; cursor: pointer; padding: 5px 11px; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); font-weight: 500; }
+  .seg button + button { border-left: 1px solid var(--line); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child { text-align: left; padding-left: 16px; }
+  td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  td:first-child { text-align: left; padding-left: 16px; color: var(--ink); max-width: 0; width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--wash); }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--accent); }
+  th.sortable[aria-sort] { color: var(--ink); }
+  td.cl { text-align: left; white-space: nowrap; }
+  td.cl .sdot { width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; }
+  .bar { display: inline-block; width: 52px; height: 5px; border-radius: 3px; background: var(--wash); margin-left: 8px; vertical-align: 2px; overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+  td .flag { margin-left: 6px; }
+  .foot { padding: 10px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  .foot.pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .pager .btns { display: inline-flex; gap: 6px; }
+  .pager button {
+    all: unset; cursor: pointer; padding: 4px 10px; border: 1px solid var(--line-strong);
+    border-radius: 8px; font-size: 12px; color: var(--ink-2); background: var(--surface);
+  }
+  .pager button:hover:not(:disabled) { background: var(--wash); color: var(--ink); }
+  .pager button:disabled { opacity: 0.4; cursor: default; }
+  .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+
+  .scrim { position: fixed; inset: 0; background: rgba(31,45,61,0.25); z-index: 9; display: none; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 92vw; z-index: 10;
+    background: var(--surface); border-left: 1px solid var(--line-strong);
+    box-shadow: -12px 0 40px rgba(31,45,61,0.12); transform: translateX(102%);
+    transition: transform 0.22s ease; overflow-y: auto;
+  }
+  .drawer.open { transform: none; }
+  .scrim.open { display: block; }
+  .dw-head { padding: 20px 20px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
+  .dw-head .close { all: unset; cursor: pointer; float: right; width: 26px; height: 26px; border-radius: 7px; text-align: center; line-height: 26px; color: var(--ink-2); }
+  .dw-head .close:hover { background: var(--wash); color: var(--ink); }
+  .dw-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 500; padding-right: 32px; }
+  .dw-head .url { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; word-break: break-all; }
+  .dw-head .badges { margin-top: 9px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .dw-sec { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .dw-sec h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 500; margin-bottom: 10px; }
+  .score-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .score-row .lbl { width: 118px; color: var(--ink-2); flex: none; }
+  .score-row .track { flex: 1; height: 7px; border-radius: 4px; background: var(--wash); overflow: hidden; }
+  .score-row .track i { display: block; height: 100%; border-radius: 4px; }
+  .score-row .n { width: 38px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
+  .dw-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 13px; }
+  .dw-kv .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .dw-kv .v { margin-top: 2px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .anchor-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; }
+  .anchor-row .a { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anchor-row .a.generic { color: var(--warn); }
+  .anchor-row .from { color: var(--muted); font-size: 12px; flex: none; }
+  .dw-fix { padding: 9px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .dw-fix:first-of-type { border-top: 0; padding-top: 0; }
+  .dw-fix .what { color: var(--ink); }
+  .dw-fix .who { color: var(--ink-2); font-size: 12.5px; margin-top: 2px; }
+  .dw-fix .who .ai { color: var(--accent); }
+  .dw-verdict { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .dw-verdict b { color: var(--ink); }
+
+  @media (max-width: 860px) {
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .panel { overflow-x: auto; }
+    .fix { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">‹ Site</div>
+  <header class="page">
+    <div>
+      <h1>Structure</h1>
+      <p class="sub">How authority flows through your internal links. Computed from the crawl, PageRank seeded by 90 days of measured traffic, every suggestion reviewed by the agent before it reaches you. Last audit 2 hours ago.</p>
+    </div>
+    <div class="actions">
+      <button class="btn">Run audit</button>
+      <button class="btn primary">✦ Ask</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card chart-card">
+    <div class="chart-head">
+      <h2>Authority vs demand</h2>
+      <span class="hint">x — internal link score (seeded PageRank) · y — sessions, 90 days</span>
+    </div>
+    <p class="chart-sub">Every crawled page, colored by topic. The top-left corner is where the money is: pages readers already want that your own site barely links to.</p>
+    <div class="chart-box" id="chart-box">
+      <svg id="scatter" width="100%" height="320" role="img" aria-label="Link score vs traffic scatter"></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+    <div class="cluster-legend" id="legend"></div>
+  </section>
+
+  <section class="card queue" id="queue">
+    <div class="queue-head">
+      <div>
+        <h2>Fixes the agent would defend — <span id="fix-count">23</span> link insertions</h2>
+        <p class="sub">The algorithm proposed 108. The agent opened the pages, kept 23 and rejected 71 with reasons — 14 still queued. Text edits only, safe to accept in a batch.</p>
+      </div>
+      <button class="btn good" id="accept-all">Accept all 23</button>
+    </div>
+    <div id="fixes"></div>
+    <div class="brief">
+      <b>✎ 2 briefs</b>
+      <span class="txt">The <b>Content strategy</b> topic has no hub — nothing fans out to its 9 pages. And <b>Internal linking</b> has no pillar strong enough to anchor it. Both need writing, not linking — send them to the Pages desk.</span>
+      <button class="btn small">View briefs</button>
+    </div>
+    <div class="foot">Rejected suggestions stay visible in the audit log with the agent's reasons — nothing is silently dropped.</div>
+  </section>
+
+  <section class="card panel">
+    <div class="panel-head">
+      <h2>Pages</h2>
+      <span class="tools">
+        <span class="seg" id="filter-seg" role="group" aria-label="Page filter">
+          <button data-f="all" aria-pressed="true">All</button>
+          <button data-f="orphan">Orphans</button>
+          <button data-f="starved">Starved</button>
+          <button data-f="thin">Over-linked thin</button>
+        </span>
+        <input type="search" id="page-search" placeholder="Filter pages…" aria-label="Filter pages">
+      </span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th class="sortable" data-key="url">Page</th>
+          <th class="sortable" data-key="link">Link score</th>
+          <th class="sortable" data-key="hub">Hub</th>
+          <th class="sortable" data-key="inlinks">Inlinks</th>
+          <th class="sortable" data-key="sessions">Sessions</th>
+          <th class="cl sortable" data-key="cluster" style="text-align:left">Topic</th>
+          <th class="sortable" data-key="index" style="text-align:left">Index</th>
+        </tr>
+      </thead>
+      <tbody id="pages-body"></tbody>
+    </table>
+    <div class="foot pager">
+      <span id="pages-count"></span>
+      <span class="btns">
+        <button id="pages-prev" aria-label="Previous page">‹ Prev</button>
+        <button id="pages-next" aria-label="Next page">Next ›</button>
+      </span>
+    </div>
+  </section>
+
+  <p class="note">Scores are relative to this site only — a link score of 100 marks your best-linked page, not the web's. Click any page for the full picture. Deeper questions — “which topic loses the most authority?” — belong to Ask, which can walk the whole graph.</p>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Page detail"></aside>
+
+<script>
+(() => {
+  let seed = 7;
+  const rnd = () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+
+  const CLUSTERS = [
+    { id: 0, label: "Technical SEO", color: "var(--c0)", hex: "#2563eb", pillar: "/blog/technical-seo-checklist", health: "4 spokes skip the pillar" },
+    { id: 1, label: "Search Console", color: "var(--c1)", hex: "#eb6834", pillar: "/blog/search-console-guide", health: "pillar misses 2 spokes" },
+    { id: 2, label: "Internal linking", color: "var(--c2)", hex: "#1baf7a", pillar: null, health: "no pillar strong enough" },
+    { id: 3, label: "Content strategy", color: "var(--c3)", hex: "#d97706", pillar: "/blog/content-quality", health: "no hub fans out" },
+    { id: 4, label: "Local SEO", color: "var(--c4)", hex: "#d55181", pillar: "/blog/local-seo-guide", health: "2 pages mis-siloed" },
+  ];
+
+  const P = (url, title, kind, cluster, link, hub, auth, inlinks, outlinks, sessions, index, flags = []) =>
+    ({ url, title, kind, cluster, link, hub, auth, inlinks, outlinks, sessions, index, flags });
+
+  const PAGES = [
+    P("/", "Meelu — SEO for founders", "home", -1, 100, 96, 88, 61, 24, 4820, "indexed"),
+    P("/pricing", "Pricing", "pricing", -1, 34, 12, 41, 2, 6, 1130, "indexed", ["starved"]),
+    P("/features/site-audit", "Site audit", "product", -1, 22, 18, 30, 1, 9, 640, "indexed", ["starved"]),
+    P("/features/keyword-tracking", "Keyword tracking", "product", -1, 19, 15, 26, 1, 8, 410, "indexed", ["starved"]),
+    P("/features/link-audit", "Link audit", "product", -1, 8, 4, 9, 0, 7, 290, "not-indexed", ["orphan", "starved"]),
+    P("/features/reports", "Weekly reports", "product", -1, 21, 9, 24, 2, 6, 180, "indexed", ["starved"]),
+    P("/docs/getting-started", "Getting started", "docs", -1, 48, 52, 55, 11, 14, 890, "indexed"),
+    P("/blog", "Blog index", "listing", -1, 71, 89, 60, 38, 52, 320, "indexed", ["thin"]),
+    P("/tags", "All tags", "listing", -1, 44, 61, 38, 19, 44, 12, "excluded", ["thin"]),
+    P("/signup", "Sign up", "other", -1, 52, 3, 47, 24, 1, 960, "indexed", ["thin"]),
+
+    P("/blog/technical-seo-checklist", "The technical SEO checklist", "article", 0, 74, 58, 81, 17, 19, 2210, "indexed"),
+    P("/blog/core-web-vitals", "Core Web Vitals, explained", "article", 0, 41, 22, 44, 7, 8, 830, "indexed"),
+    P("/blog/page-speed", "Page speed that matters", "article", 0, 33, 18, 39, 5, 7, 560, "indexed", ["weak-anchors"]),
+    P("/blog/canonical-tags", "Canonical tags without tears", "article", 0, 24, 11, 28, 4, 6, 340, "indexed"),
+    P("/blog/robots-txt", "robots.txt in practice", "article", 0, 18, 8, 21, 3, 5, 190, "indexed"),
+    P("/blog/redirect-chains", "Hunting redirect chains", "article", 0, 12, 5, 14, 2, 4, 120, "indexed", ["missing-pillar"]),
+    P("/blog/javascript-seo", "JavaScript SEO for app sites", "article", 0, 10, 4, 12, 1, 5, 240, "not-indexed", ["missing-pillar"]),
+    P("/blog/log-file-analysis", "Reading your log files", "article", 0, 6, 2, 8, 1, 3, 70, "not-indexed", ["missing-pillar", "weak-anchors"]),
+    P("/blog/crawl-errors", "Crawl errors that count", "article", 0, 5, 2, 7, 1, 2, 90, "indexed", ["missing-pillar"]),
+    P("/blog/mobile-first-indexing", "Mobile-first indexing", "article", 0, 9, 3, 11, 2, 3, 110, "indexed"),
+    P("/blog/schema-markup", "Schema markup starter", "article", 0, 15, 6, 17, 3, 4, 400, "indexed"),
+
+    P("/blog/search-console-guide", "The Search Console guide", "article", 1, 66, 49, 72, 14, 16, 1870, "indexed"),
+    P("/blog/index-coverage", "Index coverage states", "article", 1, 28, 13, 31, 5, 6, 520, "indexed"),
+    P("/blog/url-inspection", "URL inspection, properly", "article", 1, 22, 10, 25, 4, 5, 310, "indexed"),
+    P("/blog/gsc-api", "Pulling the GSC API", "article", 1, 16, 7, 18, 3, 4, 260, "indexed"),
+    P("/blog/queries-vs-pages", "Queries vs pages", "article", 1, 13, 5, 15, 2, 3, 180, "indexed", ["pillar-gap"]),
+    P("/blog/striking-distance", "Striking-distance keywords", "article", 1, 11, 4, 13, 2, 4, 350, "indexed", ["pillar-gap"]),
+    P("/blog/search-console-alerts", "Alerts worth setting", "article", 1, 8, 3, 10, 1, 3, 90, "indexed"),
+
+    P("/blog/internal-linking", "Internal linking strategy", "article", 2, 18, 9, 20, 3, 7, 640, "indexed"),
+    P("/blog/anchor-text", "Anchor text that works", "article", 2, 14, 6, 16, 2, 5, 380, "indexed"),
+    P("/blog/orphan-pages", "Finding orphan pages", "article", 2, 11, 4, 13, 2, 4, 290, "indexed", ["weak-anchors"]),
+    P("/blog/topic-clusters", "Topic clusters, minus the fluff", "article", 2, 13, 5, 15, 2, 5, 470, "indexed"),
+    P("/blog/pillar-pages", "What makes a pillar page", "article", 2, 9, 3, 11, 1, 4, 210, "indexed"),
+    P("/blog/pagerank-for-sites", "PageRank on your own site", "article", 2, 7, 2, 9, 1, 3, 160, "not-indexed"),
+
+    P("/blog/content-quality", "Content quality signals", "article", 3, 37, 14, 42, 6, 5, 780, "indexed"),
+    P("/blog/content-refresh", "Refreshing old posts", "article", 3, 16, 6, 18, 3, 4, 330, "indexed"),
+    P("/blog/search-intent", "Matching search intent", "article", 3, 14, 5, 16, 3, 3, 420, "indexed"),
+    P("/blog/long-tail-keywords", "Long-tail keywords", "article", 3, 12, 4, 14, 2, 3, 280, "indexed"),
+    P("/blog/featured-snippets", "Winning featured snippets", "article", 3, 10, 4, 12, 2, 2, 240, "indexed", ["weak-anchors"]),
+    P("/blog/zero-click-searches", "Zero-click searches", "article", 3, 8, 3, 10, 1, 2, 150, "indexed"),
+    P("/blog/ai-search-visibility", "Visibility in AI search", "article", 3, 15, 5, 17, 3, 3, 690, "indexed"),
+    P("/blog/seo-reporting", "SEO reports founders read", "article", 3, 7, 2, 9, 1, 2, 110, "not-indexed"),
+    P("/blog/content-pruning", "Pruning content safely", "article", 3, 5, 2, 6, 1, 2, 60, "not-indexed"),
+
+    P("/blog/local-seo-guide", "Local SEO guide", "article", 4, 26, 11, 29, 5, 6, 510, "indexed"),
+    P("/blog/google-business-profile", "Google Business Profile", "article", 4, 13, 5, 15, 2, 3, 270, "indexed"),
+    P("/blog/local-citations", "Local citations", "article", 4, 9, 3, 11, 1, 2, 130, "indexed", ["mis-siloed"]),
+    P("/blog/local-landing-pages", "Local landing pages", "article", 4, 8, 3, 10, 1, 3, 170, "indexed", ["mis-siloed"]),
+    P("/blog/local-reviews", "Reviews and rankings", "article", 4, 6, 2, 8, 1, 2, 90, "indexed"),
+
+    P("/blog/seo-migrations", "Surviving an SEO migration", "article", -1, 0, 0, 1, 0, 2, 40, "not-indexed", ["orphan"]),
+    P("/blog/hreflang-setup", "hreflang without loops", "article", -1, 0, 0, 1, 0, 3, 30, "not-indexed", ["orphan"]),
+    P("/blog/faceted-navigation", "Faceted navigation traps", "article", -1, 0, 0, 1, 0, 2, 25, "not-indexed", ["orphan"]),
+    P("/blog/image-seo", "Image SEO basics", "article", -1, 0, 0, 1, 0, 2, 55, "not-indexed", ["orphan"]),
+    P("/blog/pagination-seo", "Pagination and SEO", "article", -1, 0, 0, 1, 0, 2, 20, "excluded", ["orphan"]),
+    P("/blog/domain-authority", "Domain authority myths", "article", -1, 0, 0, 1, 0, 3, 85, "not-indexed", ["orphan"]),
+    P("/blog/serp-features", "A field guide to SERP features", "article", -1, 0, 0, 1, 0, 2, 65, "not-indexed", ["orphan"]),
+    P("/blog/index-bloat", "Index bloat", "article", -1, 0, 0, 1, 0, 2, 15, "excluded", ["orphan"]),
+    P("/blog/seo-audits", "Running your own SEO audit", "article", -1, 0, 0, 1, 0, 4, 130, "not-indexed", ["orphan"]),
+    P("/blog/noindex-tags", "noindex, carefully", "article", -1, 0, 0, 1, 0, 2, 10, "excluded", ["orphan"]),
+    P("/about", "About Meelu", "other", -1, 30, 8, 27, 8, 5, 210, "indexed"),
+    P("/contact", "Contact", "contact", -1, 26, 4, 22, 9, 2, 140, "indexed"),
+  ];
+
+  const FIXES = [
+    { from: "/blog/technical-seo-checklist", to: "/features/site-audit", anchor: "run a full site audit", note: "the checklist's closing section already tells readers to audit — the product link belongs there" },
+    { from: "/blog/internal-linking", to: "/features/link-audit", anchor: "audit your internal links", note: "highest-traffic page on the exact topic of an orphaned product page" },
+    { from: "/blog/striking-distance", to: "/pricing", anchor: "what Meelu costs", note: "commercial intent is explicit in this post's final paragraph" },
+    { from: "/blog/search-console-guide", to: "/blog/striking-distance", anchor: "striking-distance keywords", note: "guide names the concept but never links its own deep-dive" },
+    { from: "/blog/core-web-vitals", to: "/blog/page-speed", anchor: "page speed that matters", note: "adjacent topics, 0.91 similarity, readers cross between them in analytics" },
+    { from: "/blog/topic-clusters", to: "/blog/pillar-pages", anchor: "what makes a pillar page", note: "the cluster post defines pillars in two sentences — the full page says it better" },
+    { from: "/blog/content-quality", to: "/blog/content-refresh", anchor: "refresh the post instead", note: "quality post recommends refreshing; the how-to exists and is unlinked" },
+    { from: "/", to: "/blog/technical-seo-checklist", anchor: "the technical SEO checklist", note: "your strongest article deserves a link from your strongest page" },
+  ];
+
+  const INDEX_META = {
+    "indexed": { label: "Indexed", color: "#15803d" },
+    "not-indexed": { label: "Not indexed", color: "#d97706" },
+    "excluded": { label: "Excluded", color: "#ec835a" },
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const clusterOf = (p) => CLUSTERS.find((c) => c.id === p.cluster) ?? null;
+  const colorOf = (p) => clusterOf(p)?.hex ?? "#b3ab94";
+
+  const TILES = [
+    { key: "orphan", name: "Orphans", color: "#dc2626", value: 12, d: "▼ 3 since last audit", cls: "up", hint: "" },
+    { key: "starved", name: "Starved money pages", color: "#d97706", value: 5, d: "below the median of 4 inlinks", cls: "" },
+    { key: "all", name: "Topics found", color: "#2563eb", value: "5", d: "51 of 62 pages clustered", cls: "" },
+    { key: "fixes", name: "Confirmed fixes", color: "#15803d", value: 23, d: "of 108 proposed · 71 rejected", cls: "" },
+  ];
+
+  let filter = "all";
+  let sort = { key: "link", dir: "desc" };
+  let search = "";
+  let offset = 0;
+  const PAGE_SIZE = 15;
+
+  function renderTiles() {
+    $("tiles").innerHTML = TILES.map((t) => `
+      <button class="tile" style="--tile-color:${t.color}" data-f="${t.key}"
+        aria-pressed="${filter === t.key || (t.key === "fixes" && false)}">
+        <p class="k"><span class="swatch"></span>${t.name}</p>
+        <p class="v">${t.value}</p>
+        <p class="d ${t.cls}">${t.d}</p>
+      </button>`).join("");
+    for (const b of $("tiles").querySelectorAll(".tile")) {
+      b.addEventListener("click", () => {
+        const f = b.dataset.f;
+        if (f === "fixes") { $("queue").scrollIntoView({ behavior: "smooth" }); return; }
+        setFilter(f === filter ? "all" : f);
+      });
+    }
+  }
+
+  function setFilter(f) {
+    filter = f;
+    offset = 0;
+    for (const b of $("filter-seg").querySelectorAll("button")) {
+      b.setAttribute("aria-pressed", String(b.dataset.f === f));
+    }
+    renderTiles();
+    renderTable();
+  }
+
+  function matches(p) {
+    if (filter === "orphan" && !p.flags.includes("orphan")) return false;
+    if (filter === "starved" && !p.flags.includes("starved")) return false;
+    if (filter === "thin" && !p.flags.includes("thin")) return false;
+    if (search && !(p.url + " " + p.title).toLowerCase().includes(search)) return false;
+    return true;
+  }
+
+  function sortVal(p) {
+    if (sort.key === "url") return p.url;
+    if (sort.key === "cluster") return clusterOf(p)?.label ?? "zz";
+    if (sort.key === "index") return p.index;
+    return p[sort.key];
+  }
+
+  function renderTable() {
+    const rows = PAGES.filter(matches).sort((a, b) => {
+      const va = sortVal(a), vb = sortVal(b);
+      const cmp = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    const page = rows.slice(offset, offset + PAGE_SIZE);
+    $("pages-body").innerHTML = page.map((p, i) => {
+      const c = clusterOf(p);
+      const idx = INDEX_META[p.index];
+      const flags = [];
+      if (p.flags.includes("orphan")) flags.push('<span class="badge warn flag">orphan</span>');
+      if (p.flags.includes("starved")) flags.push('<span class="badge warn flag">starved</span>');
+      return `<tr data-url="${p.url}">
+        <td title="${p.title} — ${p.url}">${p.url}${flags.join("")}</td>
+        <td>${p.link}<span class="bar"><i style="width:${p.link}%"></i></span></td>
+        <td>${p.hub}</td>
+        <td>${p.inlinks}</td>
+        <td>${p.sessions.toLocaleString("en-US")}</td>
+        <td class="cl">${c ? `<span class="sdot" style="background:${c.hex}"></span>${c.label}` : '<span class="sdot" style="background:#b3ab94"></span><span style="color:var(--muted)">unclustered</span>'}</td>
+        <td class="cl"><span class="sdot" style="background:${idx.color};border-radius:3px"></span><span>${idx.label}</span></td>
+      </tr>`;
+    }).join("");
+    for (const tr of $("pages-body").querySelectorAll("tr")) {
+      tr.addEventListener("click", () => openDrawer(tr.dataset.url));
+    }
+    $("pages-count").textContent = rows.length === 0
+      ? "Nothing matches."
+      : `${offset + 1}–${offset + page.length} of ${rows.length} pages`;
+    $("pages-prev").disabled = offset === 0;
+    $("pages-next").disabled = offset + page.length >= rows.length;
+    for (const th of document.querySelectorAll("th.sortable")) {
+      if (th.dataset.key === sort.key) th.setAttribute("aria-sort", sort.dir === "asc" ? "ascending" : "descending");
+      else th.removeAttribute("aria-sort");
+      th.textContent = th.textContent.replace(/ [▲▼]$/, "") + (th.dataset.key === sort.key ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
+    }
+  }
+
+  function renderScatter() {
+    const svg = $("scatter");
+    const W = svg.clientWidth || 1040;
+    const H = 320;
+    const M = { l: 46, r: 16, t: 14, b: 30 };
+    const maxS = 5000;
+    const x = (v) => M.l + (v / 100) * (W - M.l - M.r);
+    const y = (v) => H - M.b - (Math.log1p(v) / Math.log1p(maxS)) * (H - M.t - M.b);
+    const medX = x(14);
+    const medY = y(220);
+    let out = "";
+    out += `<rect x="${M.l}" y="${M.t}" width="${medX - M.l}" height="${medY - M.t}" fill="rgba(220,38,38,0.045)"/>`;
+    out += `<text class="quad" x="${M.l + 8}" y="${M.t + 16}">earning, but starved</text>`;
+    out += `<text class="quad" x="${W - M.r - 8}" y="${M.t + 16}" text-anchor="end">well supported</text>`;
+    out += `<text class="quad" x="${M.l + 8}" y="${H - M.b - 8}">invisible</text>`;
+    out += `<text class="quad" x="${W - M.r - 8}" y="${H - M.b - 8}" text-anchor="end">over-supplied</text>`;
+    out += `<line x1="${medX}" y1="${M.t}" x2="${medX}" y2="${H - M.b}" stroke="var(--line-strong)" stroke-dasharray="3 4"/>`;
+    out += `<line x1="${M.l}" y1="${medY}" x2="${W - M.r}" y2="${medY}" stroke="var(--line-strong)" stroke-dasharray="3 4"/>`;
+    out += `<line x1="${M.l}" y1="${H - M.b}" x2="${W - M.r}" y2="${H - M.b}" stroke="var(--line)"/>`;
+    for (const v of [0, 25, 50, 75, 100]) out += `<text x="${x(v)}" y="${H - M.b + 16}" text-anchor="middle">${v}</text>`;
+    for (const v of [0, 50, 500, 5000]) out += `<text x="${M.l - 8}" y="${y(v) + 4}" text-anchor="end">${v >= 1000 ? v / 1000 + "K" : v}</text>`;
+    for (const p of PAGES) {
+      const jx = (rnd() - 0.5) * 6, jy = (rnd() - 0.5) * 6;
+      const r = p.kind === "home" ? 7 : p.flags.includes("orphan") || p.flags.includes("starved") ? 5.5 : 4;
+      out += `<circle class="dot" data-url="${p.url}" cx="${x(p.link) + jx}" cy="${y(p.sessions) + jy}" r="${r}" fill="${colorOf(p)}" fill-opacity="0.8"/>`;
+    }
+    svg.innerHTML = out;
+    const tip = $("tooltip");
+    for (const dot of svg.querySelectorAll(".dot")) {
+      const p = PAGES.find((q) => q.url === dot.dataset.url);
+      dot.addEventListener("mousemove", (e) => {
+        const box = $("chart-box").getBoundingClientRect();
+        tip.style.display = "block";
+        tip.style.left = Math.min(e.clientX - box.left + 14, box.width - 190) + "px";
+        tip.style.top = (e.clientY - box.top - 10) + "px";
+        tip.innerHTML = `<div class="t-name">${p.url}</div>
+          <div class="t-row">link score ${p.link} · ${p.inlinks} inlinks</div>
+          <div class="t-row">${p.sessions.toLocaleString("en-US")} sessions / 90d</div>
+          <div class="t-row">${clusterOf(p)?.label ?? "unclustered"}</div>`;
+      });
+      dot.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+      dot.addEventListener("click", () => openDrawer(p.url));
+    }
+    $("legend").innerHTML = CLUSTERS.map((c) => {
+      const n = PAGES.filter((p) => p.cluster === c.id).length;
+      return `<span class="lg"><span class="sdot" style="background:${c.hex}"></span>${c.label} <b>${n}</b></span>`;
+    }).join("") + `<span class="lg"><span class="sdot" style="background:#b3ab94"></span>unclustered <b>${PAGES.filter((p) => p.cluster === -1).length}</b></span>`;
+  }
+
+  function renderFixes() {
+    $("fixes").innerHTML = FIXES.map((f, i) => `
+      <div class="fix" data-i="${i}">
+        <span class="route">
+          <span class="path" data-url="${f.from}">${f.from}</span>
+          <span class="arrow">→</span>
+          <span class="path" data-url="${f.to}">${f.to}</span>
+        </span>
+        <span class="why"><span class="ai">✦</span> “${f.anchor}” — ${f.note}</span>
+        <span class="act">
+          <button class="btn small good" data-accept="${i}">Accept</button>
+          <button class="btn small" data-reject="${i}">Reject</button>
+        </span>
+      </div>`).join("") +
+      `<div class="fix" style="justify-content:center;color:var(--muted);font-size:12.5px;cursor:pointer">Show 15 more…</div>`;
+    for (const el of $("fixes").querySelectorAll("[data-accept]")) {
+      el.addEventListener("click", () => {
+        const row = el.closest(".fix");
+        row.classList.add("done");
+        row.querySelector(".act").innerHTML = '<span class="badge good">accepted</span>';
+      });
+    }
+    for (const el of $("fixes").querySelectorAll("[data-reject]")) {
+      el.addEventListener("click", () => {
+        const row = el.closest(".fix");
+        row.classList.add("done");
+        row.querySelector(".act").innerHTML = '<span class="badge plain">rejected</span>';
+      });
+    }
+    for (const el of $("fixes").querySelectorAll(".path")) {
+      el.addEventListener("click", () => openDrawer(el.dataset.url));
+    }
+    $("accept-all").addEventListener("click", () => {
+      for (const row of $("fixes").querySelectorAll(".fix[data-i]")) {
+        row.classList.add("done");
+        row.querySelector(".act").innerHTML = '<span class="badge good">accepted</span>';
+      }
+      $("accept-all").outerHTML = '<span class="badge good">all 23 accepted</span>';
+    });
+  }
+
+  const ANCHORS = {
+    "/blog/page-speed": [["click here", "/blog/core-web-vitals", true], ["read more", "/blog", true], ["page speed that matters", "/blog/technical-seo-checklist", false]],
+    "default": [["the technical SEO checklist", "/", false], ["full checklist", "/blog", false], ["technical seo", "/blog/core-web-vitals", false]],
+  };
+
+  function verdictFor(p) {
+    const c = clusterOf(p);
+    if (p.flags.includes("orphan")) return `<b>Nothing on the site links here.</b> It sits in the sitemap, gets ${p.sessions} sessions from search, and passes none of that authority anywhere — and Google marks it ${INDEX_META[p.index].label.toLowerCase()}. The two confirmed fixes below give it a home.`;
+    if (p.flags.includes("starved")) return `<b>A money page running on fumes.</b> ${p.inlinks} inlink${p.inlinks === 1 ? "" : "s"} against a site median of 4, yet ${p.sessions.toLocaleString("en-US")} sessions land here in 90 days. Every confirmed fix pointing at this page is high-leverage.`;
+    if (p.flags.includes("thin")) return `<b>Heavily linked, little to say.</b> ${p.inlinks} pages link here but there is almost no content — authority pools on this page and stops. Consider fewer sitewide links to it.`;
+    if (p.flags.includes("mis-siloed")) return `<b>Filed in the wrong neighborhood.</b> Its topic is ${c.label}, but its links come from another section — readers and crawlers reach it through the wrong context.`;
+    if (c && c.pillar === p.url) return `<b>This is the ${c.label} pillar</b> — the strongest page in its topic. ${c.health}.`;
+    return `A healthy ${c ? c.label : ""} page. Link score ${p.link}, ${p.inlinks} inlinks — near the median for its topic.`;
+  }
+
+  function openDrawer(url) {
+    const p = PAGES.find((q) => q.url === url);
+    if (!p) return;
+    const c = clusterOf(p);
+    const idx = INDEX_META[p.index];
+    const anchors = ANCHORS[p.url] ?? ANCHORS.default;
+    const fixes = FIXES.filter((f) => f.from === p.url || f.to === p.url);
+    const bar = (label, v, color) => `
+      <div class="score-row">
+        <span class="lbl">${label}</span>
+        <span class="track"><i style="width:${v}%;background:${color}"></i></span>
+        <span class="n">${v}</span>
+      </div>`;
+    $("drawer").innerHTML = `
+      <div class="dw-head">
+        <button class="close" id="dw-close" aria-label="Close">×</button>
+        <h2>${p.title}</h2>
+        <p class="url">${p.url}</p>
+        <div class="badges">
+          <span class="badge plain">${p.kind}</span>
+          <span class="badge ${p.index === "indexed" ? "good" : "warn"}">${idx.label}</span>
+          ${c ? `<span class="badge plain"><span class="sdot" style="background:${c.hex};width:8px;height:8px;margin-right:5px"></span>${c.label}</span>` : ""}
+          ${p.flags.includes("orphan") ? '<span class="badge warn">orphan</span>' : ""}
+          ${p.flags.includes("starved") ? '<span class="badge warn">starved</span>' : ""}
+        </div>
+      </div>
+      <div class="dw-sec"><p class="dw-verdict">${verdictFor(p)}</p></div>
+      <div class="dw-sec">
+        <h3>Scores — relative to this site</h3>
+        ${bar("Link score", p.link, "var(--accent)")}
+        ${bar("· unseeded", Math.max(1, Math.round(p.link * 0.8)), "var(--line-strong)")}
+        ${bar("Hub", p.hub, "#1baf7a")}
+        ${bar("Authority", p.auth, "#d97706")}
+        <p style="font-size:12px;color:var(--muted);margin-top:6px">Link score is PageRank seeded by real traffic; the grey bar shows it unseeded. Hub — how well it sends readers on. Authority — how much the site vouches for it.</p>
+      </div>
+      <div class="dw-sec">
+        <h3>Graph position</h3>
+        <div class="dw-kv">
+          <div><p class="k">Inlinks</p><p class="v">${p.inlinks}</p></div>
+          <div><p class="k">Outlinks</p><p class="v">${p.outlinks}</p></div>
+          <div><p class="k">Topic cluster</p><p class="v">${c ? c.label : "—"}</p></div>
+          <div><p class="k">Link community</p><p class="v">${c ? (p.flags.includes("mis-siloed") ? "≠ its topic" : "matches topic") : "—"}</p></div>
+          <div><p class="k">Sessions / 90d</p><p class="v">${p.sessions.toLocaleString("en-US")}</p></div>
+          <div><p class="k">Pillar of topic</p><p class="v">${c && c.pillar === p.url ? "yes" : "no"}</p></div>
+        </div>
+      </div>
+      <div class="dw-sec">
+        <h3>How pages link here</h3>
+        ${p.inlinks === 0 ? '<p style="font-size:13px;color:var(--ink-2)">No internal links reach this page.</p>' : anchors.map(([a, from, generic]) => `
+          <div class="anchor-row">
+            <span class="a ${generic ? "generic" : ""}">“${a}”${generic ? " ⚠" : ""}</span>
+            <span class="from">from ${from}</span>
+          </div>`).join("")}
+      </div>
+      <div class="dw-sec">
+        <h3>Open fixes touching this page — ${fixes.length}</h3>
+        ${fixes.length === 0 ? '<p style="font-size:13px;color:var(--ink-2)">None — the agent found nothing worth changing here.</p>' : fixes.map((f) => `
+          <div class="dw-fix">
+            <p class="what">${f.from === p.url ? `Link out to <b>${f.to}</b>` : `Get a link from <b>${f.from}</b>`} — “${f.anchor}”</p>
+            <p class="who"><span class="ai">✦</span> ${f.note}</p>
+          </div>`).join("")}
+      </div>`;
+    $("drawer").classList.add("open");
+    $("scrim").classList.add("open");
+    $("dw-close").addEventListener("click", closeDrawer);
+  }
+
+  function closeDrawer() {
+    $("drawer").classList.remove("open");
+    $("scrim").classList.remove("open");
+  }
+  $("scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  for (const b of $("filter-seg").querySelectorAll("button")) {
+    b.addEventListener("click", () => setFilter(b.dataset.f));
+  }
+  $("page-search").addEventListener("input", (e) => {
+    search = e.target.value.trim().toLowerCase();
+    offset = 0;
+    renderTable();
+  });
+  for (const th of document.querySelectorAll("th.sortable")) {
+    th.addEventListener("click", () => {
+      const key = th.dataset.key;
+      sort = sort.key === key
+        ? { key, dir: sort.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "url" || key === "cluster" || key === "index" ? "asc" : "desc" };
+      offset = 0;
+      renderTable();
+    });
+  }
+  $("pages-prev").addEventListener("click", () => { offset = Math.max(0, offset - PAGE_SIZE); renderTable(); });
+  $("pages-next").addEventListener("click", () => { offset += PAGE_SIZE; renderTable(); });
+
+  renderTiles();
+  renderScatter();
+  renderFixes();
+  renderTable();
+  window.addEventListener("resize", renderScatter);
+})();
+</script>
+</body>
+</html>

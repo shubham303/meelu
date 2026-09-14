@@ -1,0 +1,60 @@
+name: meelu-api
+
+services:
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: meelu-api-migrate:latest
+    container_name: meelu-api-migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?set DOCKER_DATABASE_URL in api/.env}
+    networks:
+      - meelu
+
+  api:
+    build:
+      context: .
+      target: api
+    image: meelu-api:latest
+    container_name: meelu-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?set DOCKER_DATABASE_URL in api/.env}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8100}:8000"
+    networks:
+      - meelu
+
+  embed-worker:
+    build:
+      context: .
+      target: embed-worker
+    image: meelu-api-embed-worker:latest
+    container_name: meelu-api-embed-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?set DOCKER_DATABASE_URL in api/.env}
+      MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
+      MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
+      MEELU_EMBED_INTERVAL_MS: ${MEELU_EMBED_INTERVAL_MS:-}
+    volumes:
+      - embed-models:/app/.cache/models
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - meelu
+
+networks:
+  meelu:
+    external: true
+    name: meelu
+
+volumes:
+  embed-models:

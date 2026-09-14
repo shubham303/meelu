@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+/*
+ * Meelu theme: light, paper + blue, tuned for long reading sessions.
+ * Warm cream ground (slight yellow tint reads easier than blue-white),
+ * warm-white panels, slate ink (never pure black), one restrained blue
+ * accent. All components consume ONLY these tokens — retheme here,
+ * nowhere else.
+ */
+@theme {
+  --color-bg: #f8f5eb;
+  --color-panel: #fffdf7;
+  --color-panel2: #f1ede0;
+  --color-edge: #e6e1d1;
+  --color-edge2: #d0c9b4;
+  --color-ink: #1f2d3d;
+  --color-sub: #5b6b7f;
+  --color-faint: #8fa0b3;
+  --color-accent: #2563eb;
+  --color-accent-hi: #1d4ed8;
+  --color-accent-soft: #2563eb14;
+  --color-good: #15803d;
+  --color-warn: #b45309;
+  --color-bad: #dc2626;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-fraunces), Georgia, serif;
+
+  --animate-crawl-sweep: crawl-sweep 1.5s ease-in-out infinite;
+
+  @keyframes crawl-sweep {
+    0% {
+      transform: translateX(-110%);
+    }
+    100% {
+      transform: translateX(410%);
+    }
+  }
+
+  /*
+   * Aliases for the shadcn names, pointed at the tokens above.
+   *
+   * Several screens were written against `text-muted-foreground`,
+   * `bg-background`, `bg-muted` and friends. Tailwind v4 generates a utility
+   * only for a token that exists, so every one of those classes was silently
+   * doing NOTHING: muted captions rendered at full ink weight, and panels had
+   * no ground of their own. It looked like sloppy design and was actually a
+   * missing variable.
+   *
+   * They are aliases rather than a rename because the alternative was ~200
+   * edits across ten files to say the same thing. New code should still use
+   * the house names; these exist so the old code is not quietly wrong.
+   */
+  --color-background: #f8f5eb;
+  --color-foreground: #1f2d3d;
+  --color-card: #fffdf7;
+  --color-muted: #f1ede0;
+  --color-muted-foreground: #5b6b7f;
+  --color-border: #e6e1d1;
+  --color-input: #d0c9b4;
+}
+
+html {
+  color-scheme: light;
+}
+
+/*
+ * Tailwind v4 defaults a bare `border` to `currentColor` — which on a page of
+ * dark ink draws every unqualified box in near-black. That is the other half
+ * of why those screens read as heavy: `rounded-lg border p-3` was a slate
+ * rectangle rather than the hairline it was written to be. Default to the edge
+ * token; anything that names its own border colour still wins.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-edge);
+  }
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+/* Subtle texture for landing panels (dark dots on light ground) */
+.grain {
+  background-image: radial-gradient(#1f2d3d0a 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Thin scrollbars that match the theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge2) transparent;
+}
+
+.piece-doc {
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--color-ink);
+}
+.piece-doc > * + * {
+  margin-top: 1.1em;
+}
+.piece-doc h2,
+.piece-doc h3,
+.piece-doc h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  line-height: 1.3;
+  margin-top: 1.8em;
+}
+.piece-doc h2 {
+  font-size: 24px;
+}
+.piece-doc h3 {
+  font-size: 20px;
+}
+.piece-doc h4 {
+  font-size: 17px;
+}
+.piece-doc ul,
+.piece-doc ol {
+  padding-left: 1.4em;
+}
+.piece-doc ul {
+  list-style: disc;
+}
+.piece-doc ol {
+  list-style: decimal;
+}
+.piece-doc li + li {
+  margin-top: 0.35em;
+}
+.piece-doc blockquote {
+  border-left: 2px solid var(--color-edge2);
+  padding-left: 1em;
+  color: var(--color-sub);
+}
+.piece-doc a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.piece-doc code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--color-panel2);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+.piece-doc pre {
+  background: var(--color-panel2);
+  border: 1px solid var(--color-edge);
+  border-radius: 10px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+}
+.piece-doc pre code {
+  background: transparent;
+  padding: 0;
+}
+.piece-doc img {
+  max-width: 100%;
+  border-radius: 10px;
+}
+.piece-doc img.ProseMirror-selectednode {
+  outline: 2px solid var(--color-accent);
+}
+.piece-doc hr {
+  border: 0;
+  border-top: 1px solid var(--color-edge);
+}
+.piece-doc p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.issue-mark {
+  background: #b453092b;
+  border-radius: 2px;
+}
+.issue-mark-active {
+  background: #2563eb2b;
+  box-shadow: 0 2px 0 var(--color-accent);
+}

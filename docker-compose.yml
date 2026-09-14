@@ -1,0 +1,200 @@
+# Meelu — local and VPS deployment.
+#
+#   cp .env.example .env      # then fill in POSTGRES_PASSWORD
+#   docker compose up -d --build
+#   open http://localhost:3000
+#
+# For a VPS with a domain and HTTPS, add the Caddy override:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Data lives in Postgres, in the `pgdata` volume — it survives restarts,
+# rebuilds and `docker compose down`. Only `down -v` destroys it.
+#
+# Still `craftmate` after the rename, and deliberately so: the project name is
+# what namespaces the volume, so existing data lives in `craftmate_pgdata`.
+# Renaming this makes compose reach for an empty `meelu_pgdata` and the app
+# comes up looking wiped. Same reason the Postgres role and database below are
+# untouched — see DOCKER.md for the migration if you want them renamed too.
+name: craftmate
+
+services:
+  postgres:
+    # ParadeDB rather than stock postgres, for two extensions the SEO knowledge
+    # layer needs: `vector` (an embedding per passage) and `pg_search` (BM25
+    # keyword ranking). Both halves of the hybrid search live in the database.
+    #
+    # Pinned to a **pg17** tag deliberately. ParadeDB's `latest` is built on
+    # Postgres 18, and Postgres refuses to start against a data directory
+    # written by a different major version — moving to it means a dump and
+    # restore, not an image swap.
+    image: paradedb/paradedb:0.25.2-pg17
+    container_name: meelu-postgres
+    restart: unless-stopped
+    # pg_search has to be preloaded — `CREATE EXTENSION pg_search` refuses
+    # otherwise. Set here rather than in postgresql.conf because the data
+    # directory predates this image and its config has no such line; passing it
+    # as a flag means the volume needs no editing.
+    command: ["postgres", "-c", "shared_preload_libraries=pg_search"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-craftmate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env — see .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-craftmate}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Published on loopback so a GUI client (TablePlus, DBeaver, psql) can
+    # reach it without a second compose file. 5434 rather than 5432 because a
+    # Postgres installed on the host usually holds 5432 — and 5433 here.
+    # Loopback-only: never bind this to 0.0.0.0 on a VPS. For a psql prompt
+    # without leaving the network:
+    #   docker compose exec postgres psql -U craftmate craftmate
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5434}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-craftmate} -d ${POSTGRES_DB:-craftmate}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - meelu
+
+  # One-shot: applies pending Alembic migrations and exits. Everything that
+  # reads the database waits for it, so the schema is never behind the code.
+  migrate:
+    build:
+      context: ./api
+      target: migrator
+    image: meelu-migrate:latest
+    container_name: meelu-migrate
+    restart: "no"
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - meelu
+
+  # The backend: owns the schema, serves every /api/v1 route and the session
+  # endpoints under /api/auth. The dashboard proxies to it; the Electron app
+  # calls it directly.
+  api:
+    build:
+      context: ./api
+      target: api
+    image: meelu-api:latest
+    container_name: meelu-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      # Loopback by default. The Electron app on this machine talks to it here;
+      # a browser never does, because the dashboard proxies /api to it in-network.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8100}:8000"
+    networks:
+      - meelu
+
+  # The agent server: the same image as the api, serving MCP over streamable
+  # HTTP at /mcp. Direct SQL under RLS, the analytics algorithms and the desks'
+  # write tools. The Electron app's harness connects here with an API key.
+  agent:
+    build:
+      context: ./api
+      target: agent
+    image: meelu-agent:latest
+    container_name: meelu-agent
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      AGENT_DATA_DIR: /app/agent-data
+    volumes:
+      - agentdata:/app/agent-data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${AGENT_BIND:-127.0.0.1}:${AGENT_PORT:-8484}:8484"
+    networks:
+      - meelu
+
+  dashboard:
+    build:
+      context: ./dashboard
+      args:
+        MEELU_API_URL: ${MEELU_API_URL:-http://api:8000}
+    image: meelu-dashboard:latest
+    container_name: meelu-dashboard
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # The frontend holds no database credentials and no vendor keys — every
+      # /api path it serves is a proxy to the backend, which owns both.
+      MEELU_API_URL: ${MEELU_API_URL:-http://api:8000}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      # Bound to loopback by default: safe on a public VPS, still reachable at
+      # http://localhost:3000 on your machine. Set DASHBOARD_BIND=0.0.0.0 to
+      # expose it directly (only do that behind a firewall or for a quick test).
+      - "${DASHBOARD_BIND:-127.0.0.1}:${DASHBOARD_PORT:-3000}:3000"
+    networks:
+      - meelu
+
+  # Chunks pages and computes passage vectors, as its own process, so a big
+  # backlog can never hold up a dashboard request. It polls: a page whose
+  # `chunked_from_hash` no longer matches its `content_hash` has its chunks
+  # deleted and rebuilt, and any chunk without an embedding gets one. The crawl
+  # writes page text and nothing else, so this is the only thing that makes a
+  # page searchable.
+  # Query embedding (search, synchronous with the request) happens in the api
+  # process instead, so a search waits on nothing this worker is doing.
+  embed-worker:
+    build:
+      context: ./api
+      target: embed-worker
+    image: meelu-embed-worker:latest
+    container_name: meelu-embed-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
+      MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
+      MEELU_EMBED_INTERVAL_MS: ${MEELU_EMBED_INTERVAL_MS:-}
+    volumes:
+      # Own cache, not shared with `dashboard` — that service doesn't mount
+      # one either today, so this just keeps this container's own model
+      # download from being re-fetched by every `docker compose up --build`.
+      - embed-models:/app/.cache/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - meelu
+
+
+networks:
+  meelu:
+    # Fixed name so `docker run --network meelu` from an MCP host config
+    # keeps working regardless of the compose project name.
+    name: meelu
+
+volumes:
+  # The actual data. `docker compose down` keeps it; `down -v` destroys it.
+  pgdata:
+  # Models the agent's analytics tools pickle per workspace.
+  agentdata:
+  # The embed worker's downloaded model, so a rebuild doesn't re-fetch it.
+  embed-models:

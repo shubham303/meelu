@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&family=Fraunces:opsz,wght@9..144,400;9..144,500&display=swap">
+  <style>
+    body { margin: 0; background: #f8f5eb; color: #1f2d3d; font-family: Geist, ui-sans-serif, system-ui, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
+    a { color: #2563eb; text-decoration: none; } a:hover { color: #1d4ed8; }
+    .sb-item { display: flex; align-items: center; gap: 10px; border-radius: 8px; padding: 8px 12px; font-size: 14px; color: #5b6b7f; }
+    .sb-item.on { background: #2563eb14; color: #2563eb; }
+    .sb-label { padding: 8px 12px 6px; font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: #8fa0b3; }
+    .doc { font-family: Geist, ui-sans-serif, system-ui, sans-serif; font-size: 17px; line-height: 1.7; color: #1f2d3d; }
+    .doc h2 { font-family: Fraunces, Georgia, serif; font-weight: 500; font-size: 24px; line-height: 1.3; margin: 32px 0 8px; }
+    .doc p { margin: 0 0 18px; text-wrap: pretty; }
+    .del { color: #dc2626; text-decoration: line-through; background: #dc26260f; border-radius: 3px; padding: 0 2px; }
+    .ins { color: #15803d; background: #15803d14; border-radius: 3px; padding: 0 2px; }
+    .rail-label { font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: #8fa0b3; margin: 0 0 10px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 12px; color: #5b6b7f; }
+    .input { border-radius: 8px; background: #f1ede0; border: 1px solid #d0c9b4; padding: 8px 12px; font-size: 14px; color: #1f2d3d; }
+    .input.placeholder { color: #8fa0b3; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-outline { border: 1px solid #d0c9b4; color: #1f2d3d; }
+    .btn-ghost { color: #5b6b7f; }
+    .btn-sm { font-size: 12px; padding: 6px 10px; }
+    .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: #5b6b7f; }
+    .chip { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid #d0c9b4; padding: 5px 11px; font-size: 12px; color: #5b6b7f; background: #fffdf7; }
+    .issue { display: flex; flex-direction: column; gap: 6px; border-radius: 12px; border: 1px solid #e6e1d1; background: #fffdf7; padding: 12px 14px; }
+    .issue.on { border-color: #2563eb; box-shadow: 0 0 0 3px #2563eb14; }
+    .issue-tool { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: #8fa0b3; }
+    .mark { background: #b453092b; border-radius: 2px; }
+    .mark.on { background: #2563eb2b; box-shadow: 0 2px 0 #2563eb; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; border: 1px solid; padding: 2px 8px; font-size: 11px; font-weight: 500; }
+  </style>
+</helmet>
+<div style="display: flex; width: 1440px; height: 900px; background: #f8f5eb; overflow: hidden;">
+  <aside style="display: flex; flex-direction: column; width: 240px; flex-shrink: 0; border-right: 1px solid #e6e1d1; background: #fffdf780;">
+    <div style="padding: 20px; border-bottom: 1px solid #e6e1d1;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"><path d="M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3z"></path></svg>
+        <span style="font-family: Fraunces, Georgia, serif; font-size: 22px;">Meelu</span>
+      </div>
+      <p style="margin: 4px 0 0; font-size: 11px; color: #8fa0b3;">Your AI coworker</p>
+    </div>
+    <div style="padding: 12px; border-bottom: 1px solid #e6e1d1;">
+      <div style="display: flex; align-items: center; gap: 10px; border-radius: 12px; background: #f1ede0; padding: 12px 14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path></svg>
+        <div style="flex-grow: 1;"><div style="font-size: 14px;">Meelu</div><div style="font-size: 12px; color: #5b6b7f;">meelu.tech</div></div>
+      </div>
+    </div>
+    <nav style="display: flex; flex-direction: column; gap: 2px; padding: 12px; flex-grow: 1;">
+      <div class="sb-label">Website</div>
+      <div class="sb-item">Overview</div>
+      <div class="sb-item">Site</div>
+      <div class="sb-item">SEO</div>
+      <div class="sb-item on">Content</div>
+      <div class="sb-item">Social</div>
+      <div class="sb-item">Outreach</div>
+      <div class="sb-item">Analytics</div>
+      <div class="sb-item">Notes</div>
+      <div class="sb-label" style="margin-top: 16px;">App</div>
+      <div class="sb-item">Inbox</div>
+      <div class="sb-item">Workflows</div>
+      <div class="sb-item">Prompts</div>
+      <div class="sb-item">Settings</div>
+    </nav>
+    <div style="display: flex; flex-direction: column; gap: 2px; padding: 12px; border-top: 1px solid #e6e1d1;">
+      <div class="sb-item">Connections</div>
+      <div class="sb-item">Sign out</div>
+    </div>
+  </aside>
+  <main style="display: flex; flex-direction: column; flex-grow: 1; min-width: 0;">
+    <div style="display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 32px; border-bottom: 1px solid #e6e1d1; background: #fffdf7;">
+      <a href="#" style="display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #5b6b7f;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>Content</a>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 12px; color: #8fa0b3; margin-right: 4px;">Saving…</span>
+        <span class="badge" style="background: #f1ede0; color: #5b6b7f; border-color: #d0c9b4;">Draft</span>
+        <span class="icon-btn" title="Copy markdown"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
+        <button class="btn btn-sm" style="border: 1px solid #d0c9b4; color: #1f2d3d;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>Checks<span style="display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px; font-size: 11px; background: #b4530914; color: #b45309;">3</span></button>
+        <button class="btn btn-sm" style="background: #2563eb14; color: #2563eb; border: 1px solid #2563eb4d;"><span style="color: #2563eb; display: inline-flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg></span>Agent</button>
+      </div>
+    </div>
+    <div style="display: flex; flex-grow: 1; min-height: 0;">
+      <div style="flex-grow: 1; overflow: auto; padding: 0 64px 56px;">
+        <div style="position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; margin: 0 auto; max-width: 680px; padding: 12px 0; background: #f8f5eb;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1f2d3d;"><span style="color: #2563eb; display: inline-flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg></span><span>3 changes proposed</span></div>
+          <div style="display: flex; gap: 8px;"><button class="btn btn-ghost btn-sm">Discard all</button><button class="btn btn-primary btn-sm">Keep all</button></div>
+        </div>
+        <div style="max-width: 680px; margin: 32px auto 0;">
+          <div style="font-family: Fraunces, Georgia, serif; font-size: 40px; line-height: 1.15; font-weight: 400; color: #1f2d3d;">Warehouse jobs in Nashik: what they pay in 2026</div>
+          <div style="display: flex; gap: 12px; margin: 12px 0 36px; font-size: 13px; color: #8fa0b3;"><span>412 words</span><span>·</span><span>2 min read</span><span>·</span><span>edited 3 min ago</span></div>
+          <div class="doc">
+            <p>Most listings for warehouse work in Nashik never mention the number that matters. <span class="del">They say "competitive" and leave it there.</span> <span class="ins">"Competitive", they say, and stop.</span> Here is what the roles actually pay, based on the 140 openings we tracked between January and August.</p>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin: -8px 0 20px; padding: 8px 12px; border-radius: 10px; border: 1px solid #e6e1d1; background: #fffdf7; font-size: 13px;">
+              <span style="color: #5b6b7f;">Tightened the second sentence</span>
+              <div style="display: flex; gap: 6px;"><button class="btn btn-ghost btn-sm">Discard</button><button class="btn btn-outline btn-sm">Keep</button></div>
+            </div>
+            <h2>Picker and packer</h2>
+            <p>Entry-level picking pays ₹13,500 to ₹16,000 a month at the Ambad and Sinnar clusters, with a ₹1,500 attendance bonus common at the larger 3PL sites. Night shifts add 12 to 15 percent.</p>
+            <h2>Forklift operator</h2>
+            <p>A licence moves the range to ₹19,000 to ₹24,000. Reach-truck certification is the single biggest jump we saw <span class="del">— it is scarce enough that two sites were paying above the band to fill it.</span><span class="ins">: two sites were paying above the band just to fill it.</span></p>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin: -8px 0 20px; padding: 8px 12px; border-radius: 10px; border: 1px solid #e6e1d1; background: #fffdf7; font-size: 13px;">
+              <span style="color: #5b6b7f;">Dropped the dash, kept the fact</span>
+              <div style="display: flex; gap: 6px;"><button class="btn btn-ghost btn-sm">Discard</button><button class="btn btn-outline btn-sm">Keep</button></div>
+            </div>
+            <h2>Shift supervisor</h2>
+            <p>Supervisors start around ₹28,000 and top out near ₹38,000 with a WMS background. <span class="mark on" style="background: #2563eb2b; box-shadow: none;">Almost every posting asked for two years on the floor first.</span></p>
+            <div style="display: flex; flex-direction: column; gap: 10px; width: 420px; margin: -6px 0 0 180px; padding: 10px; border-radius: 12px; border: 1px solid #e6e1d1; background: #fffdf7; box-shadow: 0 8px 24px -8px #1f2d3d33;">
+              <div style="display: flex; flex-wrap: wrap; gap: 6px;"><span class="chip">Rephrase</span><span class="chip">Shorter</span><span class="chip">Longer</span><span class="chip">Simpler</span><span class="chip">Formal</span></div>
+              <div style="display: flex; align-items: center; gap: 8px; border-radius: 8px; background: #f1ede0; border: 1px solid #d0c9b4; padding: 7px 10px;"><span style="flex-grow: 1; font-size: 13px; color: #8fa0b3;">or say what to change…</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8fa0b3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside style="display: flex; flex-direction: column; width: 360px; flex-shrink: 0; border-left: 1px solid #e6e1d1; background: #fffdf7;">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #e6e1d1;">
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500;"><span style="color: #2563eb; display: inline-flex;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"></path></svg></span>Agent</div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8fa0b3" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 18px; flex-grow: 1; padding: 20px; overflow: auto; font-size: 14px; line-height: 1.55;">
+          <div style="align-self: flex-end; max-width: 85%; border-radius: 12px; border: 1px solid #2563eb33; background: #2563eb14; padding: 10px 14px;">Draft the piece from the brief. Lead with the pay bands, not the methodology.</div>
+          <div>Drafted it in three sections by role, pay first, method in one sentence up top. <a href="#">Proposed the full draft →</a></div>
+          <div style="align-self: flex-end; max-width: 85%; border-radius: 12px; border: 1px solid #2563eb33; background: #2563eb14; padding: 10px 14px;">Is the opening too soft?</div>
+          <div>A little. The first sentence is fine; the second explains the joke. I'd cut it to the quote and the stop. Two other spots have the same habit. <a href="#">Proposed 3 changes →</a></div>
+          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #8fa0b3;">
+            <span style="display: inline-flex; align-items: center; gap: 8px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 3px; background: #2563eb;"></span>Writing…</span>
+            <button class="btn btn-ghost btn-sm"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>Stop</button>
+          </div>
+        </div>
+        <div style="padding: 12px 16px 16px; border-top: 1px solid #e6e1d1;">
+          <div style="display: flex; flex-direction: column; gap: 8px; border-radius: 12px; background: #fffdf7; border: 1px solid #d0c9b4; padding: 12px 12px 8px;">
+            <div style="min-height: 44px; font-size: 14px; line-height: 1.5; color: #8fa0b3;">Ask, or say what to change…</div>
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 11px; color: #8fa0b3;">⌘↵ to send</span>
+              <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: #2563eb; color: #fff;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

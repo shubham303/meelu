@@ -1,0 +1,51 @@
+# Real config with the auth secret — never commit. .env.example is the template.
+.env
+.env.*
+!.env.example
+
+# ---------- dependencies ----------
+# Every package in the monorepo installs its own: app, dashboard, mcp-server,
+# email-mcp, gsc-mcp, github-mcp.
+# No trailing slash: the report scripts under .claude-artifacts/ share one
+# install via a symlink named node_modules, and a directory-only rule would
+# commit that symlink as a link into an ignored path — broken in a fresh clone.
+node_modules
+
+# ---------- build output ----------
+# tsc output for the MCP servers (mcp-server, email-mcp, gsc-mcp, github-mcp).
+dist/
+# Next.js, in dashboard/.
+.next/
+out/
+# Electron packaging, if app/ is ever built for distribution.
+release/
+*.tsbuildinfo
+
+# ---------- analytics-mcp (Python + uv) ----------
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ---------- local caches and logs ----------
+*.log
+npm-debug.log*
+.turbo/
+coverage/
+
+# ---------- scratch ----------
+.DS_Store
+
+# Dev-only annotation captures (app annotator, Cmd+Shift+A)
+.annotations/
+.claude/
+
+# Timestamped screen captures from dev sessions — scratch, not assets.
+images/
+
+# Pre-migration data dumps taken before a destructive migration.
+.backups/
+
+build/

@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+build
+.git
+.gitignore
+
+# Never bake local secrets into the image — env comes from compose at runtime.
+.env
+.env.*
+
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+.vercel
+coverage
+Dockerfile
+.dockerignore

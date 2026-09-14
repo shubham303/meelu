@@ -1,0 +1,7 @@
+4. Add AI-generated FAQs to old posts for a 32% traffic lift
+
+Steven Macdonald ran a controlled experiment that you can replicate: he took 21 existing posts across 3 sites and used ChatGPT to identify questions a reader would still have after finishing each article, then wrote answers and appended them as an FAQ section.
+
+Traffic across the updated posts rose 32% on average, about 16,000 extra visits and 3,500 additional keyword rankings. The best gained 180%. Every updated post gained something, while his control group declined 4% over the same window. No schema markup changes.
+
+The control group is what makes this credible. Plenty of people report gains after an update without checking what would have happened anyway

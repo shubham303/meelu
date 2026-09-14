@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Structure — topic-map design</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Geist:wght@400..600&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f8f5eb;
+    --surface: #fffdf7;
+    --ink: #1f2d3d;
+    --ink-2: #5b6b7f;
+    --muted: #8fa0b3;
+    --line: #e6e1d1;
+    --line-strong: #d0c9b4;
+    --wash: #f1ede0;
+    --accent: #2563eb;
+    --accent-wash: rgba(37, 99, 235, 0.08);
+    --good: #15803d;
+    --good-wash: rgba(21, 128, 61, 0.08);
+    --warn: #d97706;
+    --warn-wash: rgba(217, 119, 6, 0.09);
+    --bad: #dc2626;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1088px; margin: 0 auto; padding: 32px 24px 64px; }
+  .crumb { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); margin-bottom: 12px; }
+  header.page { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  header.page h1 { font-family: 'Fraunces', Georgia, serif; font-size: 24px; font-weight: 500; }
+  header.page .sub { margin-top: 4px; font-size: 14px; color: var(--ink-2); max-width: 660px; }
+  .actions { display: flex; gap: 8px; }
+  .btn {
+    all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 8px; font-weight: 500; font-size: 14px; padding: 8px 14px;
+    color: var(--ink); border: 1px solid var(--line-strong); background: transparent;
+  }
+  .btn:hover { background: var(--wash); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover { background: #1d4ed8; }
+  .btn.small { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+  .btn.ghost { border-color: transparent; color: var(--ink-2); }
+  .btn.ghost:hover { color: var(--ink); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+
+  .statbar { display: flex; gap: 22px; flex-wrap: wrap; padding: 13px 18px; font-size: 13px; color: var(--ink-2); align-items: baseline; }
+  .statbar b { font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 500; color: var(--ink); margin-right: 6px; }
+  .statbar .warn-n b { color: var(--bad); }
+  .statwrap { margin-bottom: 16px; }
+  .runnotes { padding: 8px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .runnotes b { color: var(--ink-2); font-weight: 500; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .topic {
+    all: unset; box-sizing: border-box; cursor: pointer; display: block;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px;
+    position: relative;
+  }
+  .topic:hover { background: var(--wash); }
+  .topic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .topic[aria-pressed="true"] { border-color: var(--tc); box-shadow: inset 0 3px 0 var(--tc); }
+  .topic h3 { font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .topic h3 .sdot { width: 10px; height: 10px; border-radius: 50%; background: var(--tc); flex: none; }
+  .topic .pillar { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topic .pillar b { color: var(--ink); font-weight: 500; }
+  .topic .row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 10px; }
+  .topic .n { font-size: 12px; color: var(--muted); }
+  .ring { position: relative; width: 44px; height: 44px; flex: none; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .pct { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .topic .flags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; min-height: 20px; }
+  .badge {
+    display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+    font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap;
+  }
+  .badge.good { color: var(--good); background: var(--good-wash); border-color: rgba(21,128,61,0.25); }
+  .badge.warn { color: var(--warn); background: var(--warn-wash); border-color: rgba(217,119,6,0.25); }
+  .badge.bad { color: var(--bad); background: rgba(220,38,38,0.07); border-color: rgba(220,38,38,0.25); }
+  .badge.plain { color: var(--ink-2); background: var(--wash); border-color: var(--line); }
+
+  .i {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 13px; height: 13px; border-radius: 50%; margin-left: 4px;
+    font: italic 600 9px Georgia, serif; text-transform: none; letter-spacing: 0;
+    background: var(--wash); border: 1px solid var(--line-strong); color: var(--ink-2);
+    cursor: help; position: relative; vertical-align: 1px;
+  }
+  .i:hover, .i:focus { background: var(--accent-wash); border-color: var(--accent); color: var(--accent); outline: none; }
+  .i .tip {
+    display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    width: 240px; z-index: 6; background: var(--ink); color: #fbf9f1; border-radius: 9px;
+    padding: 9px 11px; font: 400 12px/1.5 'Geist', ui-sans-serif, system-ui, sans-serif;
+    text-align: left; white-space: normal; text-transform: none; letter-spacing: 0;
+    box-shadow: 0 6px 20px rgba(31, 45, 61, 0.25);
+  }
+  .i:hover .tip, .i:focus .tip { display: block; }
+  .i .tip::before {
+    content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent; border-bottom-color: var(--ink);
+  }
+  .i.tip-left .tip { left: auto; right: -8px; transform: none; }
+  .i.tip-left .tip::before { left: auto; right: 10px; transform: none; }
+  .i.tip-right .tip { left: -8px; transform: none; }
+  .i.tip-right .tip::before { left: 14px; transform: none; }
+
+  .detail { padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .detail-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 500; display: flex; align-items: center; gap: 9px; }
+  .detail-head h2 .sdot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .detail-head .verdict { font-size: 13.5px; color: var(--ink-2); margin-top: 6px; max-width: 660px; line-height: 1.5; }
+  .detail-head .verdict b { color: var(--ink); }
+  .detail-body { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 0; }
+  .spoke-viz { padding: 18px; border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .spoke-viz .cap { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); align-self: flex-start; }
+  .viz-legend { font-size: 11.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; align-self: flex-start; }
+  .viz-legend .lg { display: flex; align-items: center; gap: 6px; }
+  .kseg { display: inline-block; width: 14px; height: 0; border-top: 2px solid var(--good); }
+  .kseg.miss { border-top: 2px dashed var(--bad); }
+  .members { min-width: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: right; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child { text-align: left; padding-left: 18px; }
+  td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+  td:first-child { text-align: left; padding-left: 18px; color: var(--ink); max-width: 0; width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  td:first-child:hover { color: var(--accent); }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--wash); }
+  tr.is-pillar td { background: var(--accent-wash); }
+  tr.is-pillar td:first-child { font-weight: 600; }
+  td.ok { color: var(--good); }
+  td.no { color: var(--bad); font-weight: 600; }
+
+  .fixes { border-top: 1px solid var(--line); }
+  .fixes-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; gap: 10px; flex-wrap: wrap; }
+  .fixes-head h3 { font-size: 13px; font-weight: 600; }
+  .fixes-head h3 .ai { color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .seg button { all: unset; cursor: pointer; padding: 4px 10px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .seg button:hover { background: var(--wash); }
+  .seg button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); font-weight: 500; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .fix { display: flex; align-items: flex-start; gap: 12px; padding: 11px 20px; border-top: 1px solid var(--line); font-size: 13px; cursor: pointer; }
+  .fix:hover { background: var(--wash); }
+  .fix .body { flex: 1; min-width: 0; }
+  .fix .head b { font-weight: 500; }
+  .fix:hover .head b { color: var(--accent); }
+  .fix .arrow { color: var(--muted); margin: 0 4px; }
+  .fix .where { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+  .fix .where b { color: var(--ink); font-weight: 500; }
+  .fix .agent { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--accent); line-height: 1.45; }
+  .fix .agent .ai { color: var(--accent); }
+  .fix.dim { opacity: 0.6; }
+  .fix.dim .agent { border-left-color: var(--line-strong); }
+  .fix .act { flex: none; display: flex; gap: 6px; align-items: center; padding-top: 1px; }
+  .dbox {
+    margin-top: 8px; border: 1px solid rgba(37,99,235,0.3); background: var(--accent-wash);
+    border-radius: 10px; padding: 10px 12px; cursor: default;
+  }
+  .dbox p { font-size: 12px; color: var(--ink-2); }
+  .dbox p.small { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .dbox textarea {
+    width: 100%; margin-top: 8px; resize: none; border: 1px solid var(--line-strong);
+    border-radius: 8px; background: var(--surface); color: var(--ink); padding: 7px 9px;
+    font: 400 12px/1.45 'Geist', ui-sans-serif, system-ui, sans-serif;
+  }
+  .dbox textarea:focus { border-color: var(--accent); outline: none; }
+  .dbox .btns { display: flex; gap: 6px; margin-top: 8px; }
+  .foot { padding: 10px 20px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+
+  .panel { padding: 0; overflow: hidden; margin-bottom: 16px; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .panel-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; }
+  .panel-head .hint { font-size: 11px; color: var(--muted); }
+  .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+  .urlsub { color: var(--muted); font-size: 12px; font-weight: 400; }
+
+  .scrim { position: fixed; inset: 0; background: rgba(31,45,61,0.25); z-index: 9; display: none; }
+  .scrim.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; z-index: 10;
+    background: var(--surface); border-left: 1px solid var(--line-strong);
+    box-shadow: -12px 0 40px rgba(31,45,61,0.12); transform: translateX(102%);
+    transition: transform 0.22s ease; overflow-y: auto;
+  }
+  .drawer.open { transform: none; }
+  .dw-head { padding: 20px 20px 14px; border-bottom: 1px solid var(--line); }
+  .dw-head .close { all: unset; cursor: pointer; float: right; width: 26px; height: 26px; border-radius: 7px; text-align: center; line-height: 26px; color: var(--ink-2); }
+  .dw-head .close:hover { background: var(--wash); color: var(--ink); }
+  .dw-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 18px; font-weight: 500; padding-right: 32px; }
+  .dw-head .url { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; word-break: break-all; }
+  .dw-sec { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .dw-sec h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); font-weight: 500; margin-bottom: 10px; }
+  .score-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+  .score-row .lbl { width: 108px; color: var(--ink-2); flex: none; }
+  .score-row .track { flex: 1; height: 7px; border-radius: 4px; background: var(--wash); overflow: hidden; }
+  .score-row .track i { display: block; height: 100%; border-radius: 4px; }
+  .score-row .n { width: 38px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; flex: none; }
+  .dw-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; font-size: 13px; }
+  .dw-kv .k { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .dw-kv .v { margin-top: 2px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .dw-verdict { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .dw-verdict b { color: var(--ink); }
+  .anchor-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; }
+  .anchor-row .a { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anchor-row .a.generic { color: var(--warn); }
+  .anchor-row .from { color: var(--muted); font-size: 12px; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .detail-body { grid-template-columns: 1fr; }
+    .spoke-viz { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+  @media (max-width: 620px) {
+    .grid { grid-template-columns: 1fr; }
+    .panel { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">‹ Site</div>
+  <header class="page">
+    <div>
+      <h1>Structure</h1>
+      <p class="sub">How well your pages point to each other. Google decides which of your pages matter partly by following your own links — this view groups your content into topics, shows which ones are wired well, and lists fixes the AI agent has already sanity-checked. Hover any <span class="i" data-def="whatis"></span> for a plain-English explanation. Example data: a specialty coffee gear store.</p>
+    </div>
+    <div class="actions">
+      <button class="btn">Run audit</button>
+      <button class="btn primary">✦ Ask</button>
+    </div>
+  </header>
+
+  <div class="card statwrap">
+    <div class="statbar">
+      <span><b>5</b> topics<span class="i" data-def="topic"></span></span>
+      <span><b>38</b> of 62 pages grouped into topics</span>
+      <span class="warn-n"><b>12</b> orphans<span class="i" data-def="orphan"></span></span>
+      <span><b>5</b> starved shop pages<span class="i" data-def="starved"></span></span>
+      <span><b id="n-kept">–</b> fixes kept · <span id="n-down">–</span> turned down · <span id="n-queued">–</span> queued<span class="i" data-def="fixes"></span></span>
+      <span style="margin-left:auto;color:var(--muted);font-size:12px"><span class="badge good" style="margin-right:8px">agent review done</span>audit finished 2 h ago · crawl from 14 h ago</span>
+    </div>
+    <div class="runnotes"><b>Audit notes:</b> importance scores seeded by 90-day landing visits, matched on 47 of 62 pages<span class="i" data-def="linkscore"></span> · all 62 pages were read and grouped — nothing was skipped.</div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="card detail" id="detail"></section>
+
+  <section class="card panel">
+    <div class="panel-head">
+      <h2>Fixes between topics<span class="i" data-def="crosstopic"></span></h2>
+      <span class="hint">links that cross topic lines on purpose — a page vouching for another topic's main page, or one section pointing at a related page elsewhere</span>
+    </div>
+    <div id="cross-list"></div>
+    <div class="foot">Found the same way as topic fixes — pages whose content overlaps — just not filed under one topic. Same rules: kept fixes ship on their own, discarding records your reason for good.</div>
+  </section>
+
+  <section class="card panel">
+    <div class="panel-head">
+      <h2>Key pages</h2>
+      <span class="hint">home, shop and other pages that sit outside every topic on purpose — they're navigation, not articles</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Importance<span class="i" data-def="linkscore"></span></th>
+          <th>Inlinks<span class="i" data-def="inlinks"></span></th>
+          <th>Visits<span class="i" data-def="sessions"></span></th>
+          <th>Revenue<span class="i" data-def="revenue"></span></th>
+          <th style="text-align:left">In Google<span class="i" data-def="index"></span></th>
+          <th style="text-align:left">What to know</th>
+        </tr>
+      </thead>
+      <tbody id="key-body"></tbody>
+    </table>
+    <div class="foot">Shop pages marked <b>starved</b> earn you money but your own site barely links to them — the kept fixes in the topics above are how they get fed.</div>
+  </section>
+
+  <section class="card panel">
+    <div class="panel-head">
+      <h2>Left-over articles</h2>
+      <span class="hint">pages that fit no topic — most are orphans<span class="i tip-left" data-def="orphan"></span>, and adding links can't help a page whose content fits nowhere</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Inlinks<span class="i" data-def="inlinks"></span></th>
+          <th>Visits<span class="i" data-def="sessions"></span></th>
+          <th style="text-align:left">In Google<span class="i" data-def="index"></span></th>
+          <th style="text-align:left">Status</th>
+        </tr>
+      </thead>
+      <tbody id="stray-body"></tbody>
+    </table>
+    <div class="foot">“No link source found” means no related page was worth linking from in this audit — decide by hand whether the page earns new content, a rewrite, or removal; the agent can help if you ask.</div>
+  </section>
+
+  <p class="note">A topic is healthy when it has a strong main page, every supporting page links to it, and it links back to them. The colored rings above grade exactly that, from the issues this audit found. Click any page name for its full picture.</p>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Page detail"></aside>
+
+<script>
+(() => {
+  const TOPICS = [
+    {
+      id: 0, label: "Espresso at home", hex: "#2563eb",
+      pillar: { url: "/blog/espresso-at-home-guide", link: 74, sessions: 2210 },
+      verdict: "This topic has a proper main page (importance 74 — your strongest article) but <b>4 of its 10 supporting pages never link to it</b>, so the attention those pages earn leaks away instead of feeding the topic. The kept fixes below close all four gaps.",
+      flags: ['<span class="badge warn" title="4 supporting pages never link to this topic’s main page.">4 pages skip the main page</span>'],
+      members: [
+        { url: "/blog/espresso-at-home-guide", t: "The espresso at home guide", link: 74, sessions: 2210, toPillar: null, fromPillar: null, pillar: true },
+        { url: "/blog/dialing-in-espresso", t: "Dialing in your espresso", link: 41, sessions: 830, toPillar: true, fromPillar: true },
+        { url: "/blog/milk-frothing-basics", t: "Milk frothing basics", link: 15, sessions: 400, toPillar: true, fromPillar: true },
+        { url: "/blog/espresso-tamping", t: "Tamping, done right", link: 33, sessions: 560, toPillar: true, fromPillar: true },
+        { url: "/blog/portafilter-care", t: "Portafilter care", link: 24, sessions: 340, toPillar: true, fromPillar: true },
+        { url: "/blog/espresso-water-temp", t: "Water temperature for espresso", link: 18, sessions: 190, toPillar: true, fromPillar: false },
+        { url: "/blog/crema-explained", t: "Crema, explained", link: 9, sessions: 110, toPillar: true, fromPillar: false },
+        { url: "/blog/latte-art-for-beginners", t: "Latte art for beginners", link: 10, sessions: 240, toPillar: false, fromPillar: false, note: "not indexed" },
+        { url: "/blog/espresso-shot-timing", t: "Shot timing", link: 12, sessions: 120, toPillar: false, fromPillar: false },
+        { url: "/blog/descaling-your-machine", t: "Descaling your machine", link: 6, sessions: 70, toPillar: false, fromPillar: false, note: "not indexed" },
+        { url: "/blog/espresso-vs-moka-pot", t: "Espresso vs moka pot", link: 5, sessions: 90, toPillar: false, fromPillar: false },
+      ],
+      fixes: [
+        { state: "kept", page: "/blog/latte-art-for-beginners", fromT: "Latte art for beginners", toT: "The espresso at home guide",
+          anchor: "the espresso basics guide", section: "Before you start", context: "get your shots consistent first",
+          agent: "the post already says “get your shots consistent first” — that phrase should carry the link" },
+        { state: "kept", page: "/blog/espresso-shot-timing", fromT: "Shot timing", toT: "The espresso at home guide",
+          anchor: "part of dialing in your machine", section: "What timing tells you", context: "timing is one dial among several",
+          agent: "natural fit in the intro's framing sentence" },
+        { state: "kept", page: "/blog/espresso-vs-moka-pot", fromT: "Espresso vs moka pot", toT: "The espresso at home guide",
+          anchor: "start with the home espresso guide", section: "Which should you buy?", context: "if you go the machine route",
+          agent: "the closing paragraph invites it" },
+        { state: "shipped", page: "/blog/espresso-at-home-guide", fromT: "The espresso at home guide", toT: "Espresso machines (shop)",
+          anchor: "shop home espresso machines", section: "Choosing a machine", context: "a capable machine under $500", pr: "PR #12",
+          agent: "turns your strongest article into the doorway to a starved shop page" },
+        { state: "down", page: "/blog/descaling-your-machine", fromT: "Descaling your machine", toT: "The espresso at home guide",
+          anchor: "the espresso basics guide",
+          agent: "a maintenance checklist, not a beginner's journey — a guide link here would be decoration, and machine care is already covered by the portafilter post" },
+        { state: "down", page: "/blog/crema-explained", fromT: "Crema, explained", toT: "Dialing in your espresso",
+          anchor: "dialing in your shots",
+          agent: "the two posts share vocabulary, not purpose — the crema piece is trivia, dialing-in is a workflow; readers don't cross" },
+        { state: "queued", page: "/blog/espresso-water-temp", fromT: "The espresso at home guide", toT: "Water temperature for espresso",
+          anchor: "getting the water temperature right" },
+      ],
+    },
+    {
+      id: 1, label: "Pour-over brewing", hex: "#eb6834",
+      pillar: { url: "/blog/pour-over-guide", link: 66, sessions: 1870 },
+      verdict: "Nearly healthy. Every supporting page links to the main page; <b>the main page just forgets 2 of its 7 on the way back down</b>, so readers who land on the guide never discover them.",
+      flags: ['<span class="badge warn" title="The main page does not link back to 2 of its supporting pages.">main page misses 2</span>'],
+      members: [
+        { url: "/blog/pour-over-guide", t: "The pour-over guide", link: 66, sessions: 1870, toPillar: null, fromPillar: null, pillar: true },
+        { url: "/blog/v60-recipe", t: "Our V60 recipe", link: 28, sessions: 520, toPillar: true, fromPillar: true },
+        { url: "/blog/chemex-vs-v60", t: "Chemex vs V60", link: 22, sessions: 310, toPillar: true, fromPillar: true },
+        { url: "/blog/water-for-coffee", t: "Water for coffee", link: 16, sessions: 260, toPillar: true, fromPillar: true },
+        { url: "/blog/bloom-phase-explained", t: "The bloom phase, explained", link: 8, sessions: 90, toPillar: true, fromPillar: true },
+        { url: "/blog/grind-size-for-pour-over", t: "Grind size for pour-over", link: 13, sessions: 180, toPillar: true, fromPillar: false },
+        { url: "/blog/gooseneck-kettle-technique", t: "Gooseneck kettle technique", link: 11, sessions: 350, toPillar: true, fromPillar: false },
+      ],
+      fixes: [
+        { state: "kept", page: "/blog/gooseneck-kettle-technique", fromT: "The pour-over guide", toT: "Gooseneck kettle technique",
+          anchor: "pouring with a gooseneck kettle", section: "The pour", context: "a slow, steady spiral",
+          agent: "the guide describes the pour but never links its own deep-dive" },
+        { state: "kept", page: "/blog/grind-size-for-pour-over", fromT: "The pour-over guide", toT: "Grind size for pour-over",
+          anchor: "getting the grind size right", section: "Set-up", context: "medium-fine, like table salt",
+          agent: "one sentence in the set-up section is the natural home" },
+        { state: "down", page: "/blog/gooseneck-kettle-technique", fromT: "Gooseneck kettle technique", toT: "Our V60 recipe",
+          anchor: "our V60 recipe",
+          agent: "already linked from the recipe's gear list — a second link between the same pair adds nothing" },
+      ],
+    },
+    {
+      id: 2, label: "Cold brew & iced", hex: "#1baf7a",
+      pillar: null,
+      bestUrl: "/blog/cold-brew-at-home",
+      verdict: "<b>No main page.</b> The best page here scores 18 against a site-wide middle of 14 — six posts on one subject and none strong enough to anchor it. Adding links can't fix this; <b>merging the three overlapping cold-brew intros into one real guide can.</b> Brief drafted.",
+      flags: ['<span class="badge bad" title="No page in this topic is strong enough to act as its main page.">no main page</span>', '<span class="badge plain" title="The agent wrote instructions for a content fix — adding links alone cannot solve this.">brief drafted</span>'],
+      members: [
+        { url: "/blog/cold-brew-at-home", t: "Cold brew at home", link: 18, sessions: 640, toPillar: null, fromPillar: null, pillar: true, weak: true },
+        { url: "/blog/cold-brew-ratio", t: "The cold brew ratio", link: 14, sessions: 380, toPillar: false, fromPillar: false },
+        { url: "/blog/iced-latte-vs-iced-coffee", t: "Iced latte vs iced coffee", link: 13, sessions: 470, toPillar: true, fromPillar: false },
+        { url: "/blog/cold-brew-concentrate", t: "Cold brew concentrate", link: 11, sessions: 290, toPillar: false, fromPillar: false },
+        { url: "/blog/nitro-cold-brew", t: "Nitro cold brew", link: 9, sessions: 210, toPillar: true, fromPillar: false },
+        { url: "/blog/japanese-iced-coffee", t: "Japanese iced coffee", link: 7, sessions: 160, toPillar: false, fromPillar: false, note: "not indexed" },
+      ],
+      fixes: [
+        { state: "kept", brief: true, page: "/blog/cold-brew-at-home",
+          text: "✎ Brief for the Pages desk: <b>merge Cold brew at home, The cold brew ratio and Cold brew concentrate</b> into one main guide (“Cold brew, start to finish”), redirect the two, relink the rest.",
+          agent: "combined they already earn 1,310 visits — split, none can rank as the head page" },
+        { state: "down", page: "/blog/cold-brew-ratio", fromT: "The cold brew ratio", toT: "Iced latte vs iced coffee",
+          anchor: "iced latte vs iced coffee",
+          agent: "the ratio post is brewing math, the iced-latte post is a menu explainer — readers of one don't want the other" },
+        { state: "queued", page: "/blog/cold-brew-concentrate", fromT: "Cold brew concentrate", toT: "Cold brew at home",
+          anchor: "the cold brew basics" },
+      ],
+    },
+    {
+      id: 3, label: "Beans & roasting", hex: "#d97706", noHub: true,
+      pillar: { url: "/blog/coffee-bean-guide", link: 37, sessions: 780 },
+      verdict: "A main page exists but <b>nothing — it included — links out to even half the topic</b> (best coverage: 2 of the needed 4). Nine pages behave like strangers. The cheap fix is turning the guide into a real hub; the kept fixes below add its missing links.",
+      flags: ['<span class="badge bad" title="No page links out to the rest of this topic, so its pages cannot be discovered from one place.">no hub</span>'],
+      members: [
+        { url: "/blog/coffee-bean-guide", t: "The coffee bean guide", link: 37, sessions: 780, toPillar: null, fromPillar: null, pillar: true },
+        { url: "/blog/light-vs-dark-roast", t: "Light vs dark roast", link: 15, sessions: 690, toPillar: true, fromPillar: false },
+        { url: "/blog/single-origin-vs-blend", t: "Single origin vs blend", link: 14, sessions: 420, toPillar: false, fromPillar: false },
+        { url: "/blog/how-to-store-beans", t: "How to store beans", link: 16, sessions: 330, toPillar: true, fromPillar: false },
+        { url: "/blog/arabica-vs-robusta", t: "Arabica vs robusta", link: 12, sessions: 280, toPillar: false, fromPillar: false },
+        { url: "/blog/decaf-how-its-made", t: "Decaf: how it's made", link: 10, sessions: 240, toPillar: false, fromPillar: false },
+        { url: "/blog/coffee-freshness-window", t: "The freshness window", link: 8, sessions: 150, toPillar: false, fromPillar: false },
+        { url: "/blog/roast-dates-explained", t: "Roast dates, explained", link: 7, sessions: 110, toPillar: false, fromPillar: false, note: "not indexed" },
+        { url: "/blog/home-roasting-starter", t: "Home roasting starter", link: 5, sessions: 60, toPillar: false, fromPillar: false, note: "not indexed" },
+      ],
+      fixes: [
+        { state: "kept", page: "/blog/how-to-store-beans", fromT: "The coffee bean guide", toT: "How to store beans",
+          anchor: "storing beans properly", section: "Freshness", context: "beans fade within weeks of roasting",
+          agent: "the guide's freshness section recommends it in prose; the how-to exists and is unlinked" },
+        { state: "kept", page: "/blog/light-vs-dark-roast", fromT: "The coffee bean guide", toT: "Light vs dark roast",
+          anchor: "choosing your roast level", section: "Roast level", context: "the biggest flavour decision you'll make",
+          agent: "roast level is the guide's second section; the deep-dive belongs there" },
+        { state: "kept", brief: true, page: "/blog/coffee-bean-guide",
+          text: "✎ Brief: add a “further reading” section to the main guide covering all 9 pages — cheaper than a new hub page and achieves the same fan-out.",
+          agent: "one edit fixes discoverability for the whole topic" },
+        { state: "down", page: "/blog/decaf-how-its-made", fromT: "The coffee bean guide", toT: "Decaf: how it's made",
+          anchor: "how decaf is made",
+          agent: "the guide never mentions decaf — adding the link would promise coverage the guide doesn't have; the further-reading brief handles it honestly" },
+        { state: "queued", page: "/blog/single-origin-vs-blend", fromT: "Single origin vs blend", toT: "The coffee bean guide",
+          anchor: "the coffee bean guide" },
+      ],
+    },
+    {
+      id: 4, label: "Grinders", hex: "#d55181",
+      pillar: { url: "/blog/coffee-grinder-guide", link: 26, sessions: 510 },
+      hubUrl: "/blog/burr-vs-blade-grinders",
+      verdict: "Here the two roles are split, and that's fine: <b>The coffee grinder guide collects the trust (main page), while Burr vs blade grinders does the fanning out (hub)</b> — they don't have to be the same page. The real problem: <b>2 pages get all their links from the support section</b> while their content belongs here.",
+      flags: ['<span class="badge warn" title="2 pages whose content belongs here but whose links come from a different section of the site.">2 in wrong section</span>'],
+      members: [
+        { url: "/blog/coffee-grinder-guide", t: "The coffee grinder guide", link: 26, sessions: 510, toPillar: null, fromPillar: null, pillar: true },
+        { url: "/blog/burr-vs-blade-grinders", t: "Burr vs blade grinders", link: 13, sessions: 270, toPillar: true, fromPillar: true },
+        { url: "/blog/cleaning-your-grinder", t: "Cleaning your grinder", link: 6, sessions: 90, toPillar: true, fromPillar: true },
+        { url: "/blog/grind-size-chart", t: "The grind size chart", link: 9, sessions: 130, toPillar: false, fromPillar: false, misSiloed: true, note: "linked only from /support" },
+        { url: "/blog/single-dose-grinding", t: "Single-dose grinding", link: 8, sessions: 170, toPillar: false, fromPillar: false, misSiloed: true, note: "linked only from /support" },
+      ],
+      fixes: [
+        { state: "kept", page: "/blog/grind-size-chart", fromT: "The coffee grinder guide", toT: "The grind size chart",
+          anchor: "the grind size chart", section: "Getting the grind right", context: "every brewer wants a different grind",
+          agent: "its only inlink today is from /support; the topic's main page should be its doorway" },
+        { state: "kept", page: "/blog/single-dose-grinding", fromT: "The coffee grinder guide", toT: "Single-dose grinding",
+          anchor: "single-dose grinding, explained", section: "Workflow", context: "weigh, grind, brew",
+          agent: "same pattern — support links it, its own topic doesn't" },
+      ],
+    },
+  ];
+
+  const KEYPAGES = [
+    { url: "/", title: "Home", link: 100, inlinks: 61, sessions: 4820, revenue: 9800, depth: 0, index: "Indexed", note: "your strongest page — where it chooses to link matters most", verdict: "<b>Your strongest page.</b> Every other page's importance flows from here, so the few links it carries are the biggest lever on the whole site." },
+    { url: "/shop", title: "Shop", link: 71, inlinks: 38, sessions: 2140, revenue: 14900, depth: 1, index: "Indexed", note: "healthy — linked from every page via the menu", verdict: "Healthy. The site menu links here from everywhere, and it fans out to all product ranges." },
+    { url: "/shop/espresso-machines", title: "Espresso machines", link: 12, inlinks: 2, sessions: 1130, revenue: 6200, depth: 2, index: "Indexed", starved: true, note: "1 fix shipped in PR #12", verdict: "<b>Starved.</b> $6,200 of 90-day revenue landed on a page only 2 of your own pages link to. The espresso topic's shipped fix wires your strongest article straight to it." },
+    { url: "/shop/coffee-beans", title: "Coffee beans", link: 10, inlinks: 2, sessions: 890, revenue: 4100, depth: 2, index: "Indexed", starved: true, note: "fix queued for agent review", verdict: "<b>Starved.</b> $4,100 in revenue, almost no internal links. A fix from the bean guide is queued for the agent's review." },
+    { url: "/shop/grinders", title: "Grinders", link: 9, inlinks: 1, sessions: 640, revenue: 2850, depth: 2, index: "Indexed", starved: true, note: "fix queued for agent review", verdict: "<b>Starved.</b> One link in, from the grinder guide's sidebar. A fix from that guide's buying-advice section is queued." },
+    { url: "/shop/pour-over-gear", title: "Pour-over gear", link: 8, inlinks: 1, sessions: 410, revenue: 1300, depth: 2, index: "Indexed", starved: true, note: "fix queued for agent review", verdict: "<b>Starved.</b> The pour-over guide reviews this exact gear and never links to the shelf where it's sold." },
+    { url: "/shop/accessories", title: "Accessories", link: 6, inlinks: 1, sessions: 180, revenue: 410, depth: 2, index: "Not indexed", starved: true, note: "no link source found — consider a menu link", verdict: "<b>Starved, and Google skips it.</b> No article naturally mentions accessories, so this audit found no honest link to add — a menu or footer link is the practical fix." },
+    { url: "/support", title: "Support & guides", link: 44, inlinks: 19, sessions: 320, revenue: 0, depth: 1, index: "Indexed", note: "2 grinder articles are reachable only from here", verdict: "Well linked, but it hoards: two grinder articles can only be reached from support pages instead of from their own topic. The Grinders fixes rewire that." },
+    { url: "/about", title: "About us", link: 30, inlinks: 8, sessions: 210, revenue: 0, depth: 1, index: "Indexed", note: "fine as is", verdict: "Fine as is — enough links for a page nobody needs to find twice." },
+  ];
+
+  const STRAYS = [
+    { url: "/blog/coffee-gift-guide", t: "The coffee gift guide", inlinks: 0, sessions: 85, index: "Not indexed", take: "fix kept: link from The coffee bean guide" },
+    { url: "/blog/aeropress-recipes", t: "AeroPress recipes", inlinks: 0, sessions: 40, index: "Not indexed", take: "fix kept: link from The pour-over guide's “other brewers” section" },
+    { url: "/blog/milk-alternatives-for-coffee", t: "Milk alternatives for coffee", inlinks: 0, sessions: 55, index: "Not indexed", take: "fix kept: link from Milk frothing basics" },
+    { url: "/blog/coffee-and-health", t: "Coffee and health", inlinks: 0, sessions: 65, index: "Not indexed", take: "queued for agent review" },
+    { url: "/blog/history-of-espresso", t: "A history of espresso", inlinks: 0, sessions: 130, index: "Not indexed", take: "queued for agent review" },
+    { url: "/blog/office-coffee-setups", t: "Office coffee setups", inlinks: 0, sessions: 30, index: "Not indexed", take: "no link source found · 380 words" },
+    { url: "/blog/coffee-in-italy-travel", t: "Coffee in Italy", inlinks: 0, sessions: 25, index: "Not indexed", take: "no link source found · 620 words" },
+    { url: "/blog/french-press-vs-pour-over-2022", t: "French press vs pour-over (2022)", inlinks: 0, sessions: 20, index: "Excluded", take: "no link source found · Excluded by Google" },
+    { url: "/blog/best-coffee-quotes", t: "Best coffee quotes", inlinks: 0, sessions: 15, index: "Excluded", take: "no link source found · 150 words" },
+    { url: "/blog/what-is-third-wave-coffee", t: "What is third-wave coffee?", inlinks: 0, sessions: 10, index: "Excluded", take: "no link source found · Excluded by Google" },
+  ];
+
+  const ANCHORS = {
+    "/blog/espresso-tamping": [["proper tamping technique", "The espresso at home guide", false], ["click here", "Dialing in your espresso", true], ["read more", "Blog index", true]],
+    "/blog/gooseneck-kettle-technique": [["kettle technique", "Our V60 recipe", false], ["this post", "The bloom phase, explained", true]],
+    "/blog/grind-size-chart": [["see the chart", "Support: brewing FAQ", true]],
+    "/blog/single-dose-grinding": [["single dosing", "Support: grinder set-up", false]],
+  };
+
+  const CROSSFIXES = [
+    { state: "kept", page: "/", fromT: "Home", fromTag: "key page", toT: "The espresso at home guide", toTag: "Espresso at home",
+      anchor: "the espresso basics guide", section: "Learn", context: "start brewing better today",
+      agent: "your strongest page vouching for your strongest topic lifts the whole cluster — one link from Home is worth ten from blog posts" },
+    { state: "kept", page: "/blog/espresso-tamping", fromT: "Tamping, done right", fromTag: "Espresso at home", toT: "The grind size chart", toTag: "Grinders",
+      anchor: "the grind size chart", section: "Grind first", context: "tamping can't fix an uneven grind",
+      agent: "the tamping post's first section is about grind consistency — the chart is the natural next step even though it lives in another topic" },
+    { state: "kept", page: "/blog/water-for-coffee", fromT: "Water for coffee", fromTag: "Pour-over brewing", toT: "Cold brew at home", toTag: "Cold brew & iced",
+      anchor: "cold brew is more forgiving", section: "Hard water", context: "if your water fights you",
+      agent: "the hard-water section suggests trying cold brew in prose — the link exists in words but not as a link" },
+    { state: "down", page: "/about", fromT: "About us", fromTag: "key page", toT: "The coffee bean guide", toTag: "Beans & roasting",
+      anchor: "our coffee bean guide",
+      agent: "an about page linking into content reads as filler — Home already carries the navigation duty, and the pages barely overlap" },
+    { state: "queued", page: "/blog/milk-frothing-basics", fromT: "Milk frothing basics", fromTag: "Espresso at home", toT: "Iced latte vs iced coffee", toTag: "Cold brew & iced",
+      anchor: "frothing for iced drinks" },
+  ];
+
+  const DEFS = {
+    whatis: "Little circles like this one explain the jargon on this page in plain language. Hover or tap them anytime.",
+    topic: "A group of pages that cover the same subject. Meelu finds these groups automatically by reading what each page is about — no setup needed.",
+    pillar: "The main page of a topic — the one that collects the topic's trust. Every related page should link to it. It is often also the topic's hub, but it doesn't have to be.",
+    spoke: "A supporting page in a topic. It covers one narrow part of the subject and should link back to the topic's main page.",
+    hub: "The page that links out to the rest of its topic, so readers — and Google — can discover every page from one place. Often the main page plays this role too, but any page in the topic can be the hub.",
+    crosstopic: "Links don't have to stay inside one topic. A page can point at another topic's main page (like Home vouching for your best guide), or one section of a page can link to a related page that lives in a different topic. These fixes cross topic lines on purpose.",
+    linkscore: "How important a page is inside your own site, from 0 to 100. It rises when other pages link to it (especially important ones) and when real visitors land on it.",
+    hubscore: "How good this page is at sending readers onward — high means it links out to many of your important pages.",
+    authority: "How strongly the rest of your site vouches for this page — high means many well-linked pages point to it.",
+    orphan: "A page that no other page on your site links to. People and Google can only find it by luck, so it rarely shows up in search.",
+    inlinks: "How many of your own pages link to this one.",
+    sessions: "Visits from real people that started on this page, over the last 90 days (from your analytics).",
+    revenue: "Money from purchases in the last 90 days by visitors whose visit started on this page (from your analytics).",
+    depth: "How many clicks it takes to reach this page starting from the home page. More than 3–4 and both people and Google struggle to find it.",
+    index: "Whether Google shows this page in search results. “Not indexed” means Google knows the page exists but chose not to list it — often because too few pages link to it.",
+    health: "Computed from this audit's findings. A topic starts at 100 and loses points for: no main page (−50), no hub (−40), each missing link between a page and its main page (−6, up to −42), and each page in the wrong section (−12).",
+    fixes: "Link suggestions found by algorithms, then double-checked by the AI agent, which reads the actual pages and keeps only what a careful editor would agree with. Kept fixes ship on their own in the next site update; anything you turn down is remembered so it never comes back.",
+    starved: "A page that earns you money (shop, pricing) but that your own site barely links to — so Google gives it less attention than it deserves.",
+    topillar: "Does this page link to its topic's main page? A ✗ means the visits it earns push no strength back into the topic.",
+    frompillar: "Does the main page link back to this one? A ✗ means readers of the main page never discover it.",
+    anchor: "The clickable words of a link — the blue text. Google reads those words to understand what the linked page is about, so “espresso basics guide” beats “click here”.",
+  };
+  const NOTE_TIPS = {
+    "not indexed": "Google knows this page exists but chose not to show it in search results.",
+    "linked only from /support": "The only links pointing here come from the support section, not from this topic's own pages.",
+  };
+  const info = (k, cls = "") =>
+    `<span class="i ${cls}" tabindex="0" aria-label="explanation">i<span class="tip">${DEFS[k]}</span></span>`;
+
+  const $ = (id) => document.getElementById(id);
+  let active = 0;
+  let view = "kept";
+
+  for (const el of document.querySelectorAll(".i[data-def]")) {
+    el.tabIndex = 0;
+    el.innerHTML = `i<span class="tip">${DEFS[el.dataset.def]}</span>`;
+  }
+
+  function computeHealth(t) {
+    let h = 100;
+    if (!t.pillar) h -= 50;
+    if (t.noHub) h -= 40;
+    const gaps = t.members.filter((m) => !m.misSiloed && (m.toPillar === false || m.fromPillar === false)).length
+      + t.members.filter((m) => !m.misSiloed && m.toPillar === false && m.fromPillar === false).length;
+    h -= Math.min(gaps * 3, 42);
+    h -= t.members.filter((m) => m.misSiloed).length * 12;
+    return Math.max(5, h);
+  }
+
+  function fixCounts(t) {
+    return {
+      kept: t.fixes.filter((f) => f.state === "kept" || f.state === "shipped").length,
+      down: t.fixes.filter((f) => f.state === "down").length,
+      queued: t.fixes.filter((f) => f.state === "queued").length,
+    };
+  }
+
+  function renderStatFixes() {
+    let kept = 0, down = 0, queued = 0;
+    for (const t of TOPICS) {
+      const c = fixCounts(t);
+      kept += c.kept; down += c.down; queued += c.queued;
+    }
+    kept += CROSSFIXES.filter((f) => f.state === "kept" || f.state === "shipped").length;
+    down += CROSSFIXES.filter((f) => f.state === "down").length;
+    queued += CROSSFIXES.filter((f) => f.state === "queued").length;
+    $("n-kept").textContent = kept;
+    $("n-down").textContent = down;
+    $("n-queued").textContent = queued;
+  }
+
+  const ringColor = (h) => h >= 80 ? "#15803d" : h >= 55 ? "#d97706" : "#dc2626";
+
+  function ring(h) {
+    const r = 18, c = 2 * Math.PI * r;
+    return `<span class="ring">
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--wash)" stroke-width="5"/>
+        <circle cx="22" cy="22" r="${r}" fill="none" stroke="${ringColor(h)}" stroke-width="5"
+          stroke-linecap="round" stroke-dasharray="${(h / 100) * c} ${c}"/>
+      </svg>
+      <span class="pct">${h}</span>
+    </span>`;
+  }
+
+  function memberByUrl(t, url) {
+    return t.members.find((m) => m.url === url);
+  }
+
+  function renderGrid() {
+    $("grid").innerHTML = TOPICS.map((t) => `
+      <button class="topic" style="--tc:${t.hex}" data-t="${t.id}" aria-pressed="${t.id === active}">
+        <h3><span class="sdot"></span>${t.label}</h3>
+        <p class="pillar" title="${DEFS.pillar}">${t.pillar ? `main page <b>${memberByUrl(t, t.pillar.url)?.t ?? t.pillar.url}</b>${t.hubUrl && t.hubUrl !== t.pillar.url ? ` · hub <b>${memberByUrl(t, t.hubUrl)?.t ?? t.hubUrl}</b>` : ""}` : `<b>no main page</b> — best is ${memberByUrl(t, t.bestUrl)?.t ?? t.bestUrl}`}</p>
+        <div class="row">
+          <span class="n">${t.members.length} pages · ${t.members.reduce((s, m) => s + m.sessions, 0).toLocaleString("en-US")} visits</span>
+          ${ring(computeHealth(t))}
+        </div>
+        <div class="flags">${t.flags.join("")}</div>
+      </button>`).join("");
+    for (const b of $("grid").querySelectorAll(".topic")) {
+      b.addEventListener("click", () => { active = Number(b.dataset.t); view = "kept"; renderGrid(); renderDetail(); });
+    }
+  }
+
+  function spokeViz(t) {
+    const spokes = t.members.filter((m) => !m.pillar);
+    const W = 240, H = 240, cx = W / 2, cy = H / 2, R = 92;
+    let out = "";
+    spokes.forEach((m, i) => {
+      const a = (i / spokes.length) * 2 * Math.PI - Math.PI / 2;
+      const x = cx + R * Math.cos(a), y = cy + R * Math.sin(a);
+      const linked = m.toPillar;
+      out += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"
+        stroke="${linked ? "#15803d" : "#dc2626"}" stroke-width="${linked ? 2 : 1.5}"
+        ${linked ? "" : 'stroke-dasharray="4 4"'} opacity="${linked ? 0.75 : 0.6}"/>`;
+      out += `<circle cx="${x}" cy="${y}" r="7" fill="${linked ? t.hex : "var(--page)"}"
+        stroke="${linked ? t.hex : "#dc2626"}" stroke-width="1.5" data-url="${m.url}" class="vdot" style="cursor:pointer"/>`;
+    });
+    const pw = t.pillar && !t.members[0].weak;
+    out += `<circle cx="${cx}" cy="${cy}" r="14" fill="${pw ? t.hex : "var(--page)"}"
+      stroke="${pw ? t.hex : "#dc2626"}" stroke-width="${pw ? 0 : 2}" data-url="${t.members[0].url}" class="vdot" style="cursor:pointer"/>`;
+    out += `<text x="${cx}" y="${cy + 30}" text-anchor="middle" style="font-weight:600;fill:var(--ink-2)">${t.pillar ? "main page" : "no main page"}</text>`;
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Main page and supporting pages diagram">${out}</svg>`;
+  }
+
+  function fixRow(f, i) {
+    const dim = f.state === "down" ? "dim" : "";
+    let act = "";
+    if (f.state === "kept") act = `<button class="btn small ghost" data-d="${i}">✕ Discard</button>`;
+    if (f.state === "shipped") act = `<span class="badge good" title="This link already went out in a pull request.">shipped · ${f.pr}</span>`;
+    if (f.state === "queued") act = `<span class="badge warn">waiting for the agent</span>`;
+    if (f.state === "down") act = `<span class="badge plain">turned down</span> <button class="btn small ghost" data-r="${i}">↩ Restore</button>`;
+    const head = f.brief
+      ? `<p class="head">${f.text}</p>`
+      : `<p class="head"><b>${f.fromT}</b><span class="arrow">→</span><b>${f.toT}</b></p>`;
+    const where = !f.brief && f.section
+      ? `<p class="where">link text${info("anchor")} <b>“${f.anchor}”</b> · lands in the <b>“${f.section}”</b> section${f.context ? `, after “${f.context}”` : ""}</p>`
+      : !f.brief && f.anchor
+        ? `<p class="where">link text${info("anchor")} <b>“${f.anchor}”</b></p>`
+        : "";
+    const agentLine = f.state === "down" && f.you
+      ? `<p class="agent" style="border-left-color:var(--warn)">you: ${f.you}</p>`
+      : f.agent
+        ? `<p class="agent"><span class="ai">✦</span> ${f.agent}</p>`
+        : "";
+    return `<div class="fix ${dim}" data-i="${i}" data-page="${f.page}">
+      <div class="body">${head}${where}${agentLine}</div>
+      <div class="act">${act}</div>
+    </div>`;
+  }
+
+  function renderDetail() {
+    const t = TOPICS.find((x) => x.id === active);
+    const spokes = t.members.filter((m) => !m.pillar);
+    const linked = spokes.filter((m) => m.toPillar).length;
+    const c = fixCounts(t);
+    const shown = t.fixes
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => view === "kept" ? (f.state === "kept" || f.state === "shipped") : f.state === view);
+    $("detail").innerHTML = `
+      <div class="detail-head">
+        <div>
+          <h2><span class="sdot" style="background:${t.hex}"></span>${t.label}</h2>
+          <p class="verdict">${t.verdict}</p>
+        </div>
+        <span class="badge plain" style="flex:none">health ${computeHealth(t)} / 100${info("health", "tip-left")}</span>
+      </div>
+      <div class="detail-body">
+        <div class="spoke-viz">
+          <span class="cap">Hub${info("hub")} &amp; spoke${info("spoke")}</span>
+          ${spokeViz(t)}
+          <div class="viz-legend">
+            <span class="lg"><span class="kseg"></span>${linked} pages link to the main page</span>
+            <span class="lg"><span class="kseg miss"></span>${spokes.length - linked} don't — their strength is lost</span>
+          </div>
+        </div>
+        <div class="members">
+          <table>
+            <thead>
+              <tr><th>Page</th><th>Importance${info("linkscore")}</th><th>Visits${info("sessions")}</th><th>→ main${info("topillar", "tip-left")}</th><th>main →${info("frompillar", "tip-left")}</th></tr>
+            </thead>
+            <tbody>
+              ${t.members.map((m) => `
+                <tr class="${m.pillar ? "is-pillar" : ""}">
+                  <td data-url="${m.url}" title="${m.url}">${m.t}${m.note ? ` <span class="badge warn" style="margin-left:6px" title="${NOTE_TIPS[m.note] ?? ""}">${m.note}</span>` : ""}${m.pillar ? ` <span class="badge plain" style="margin-left:6px" title="${DEFS.pillar}">${t.pillar ? "main page" : "best page"}</span>` : ""}${t.hubUrl === m.url ? ` <span class="badge plain" style="margin-left:6px" title="${DEFS.hub}">hub</span>` : ""}</td>
+                  <td>${m.link}</td>
+                  <td>${m.sessions.toLocaleString("en-US")}</td>
+                  <td class="${m.toPillar === null ? "" : m.toPillar ? "ok" : "no"}">${m.toPillar === null ? "—" : m.toPillar ? "✓" : "✗"}</td>
+                  <td class="${m.fromPillar === null ? "" : m.fromPillar ? "ok" : "no"}">${m.fromPillar === null ? "—" : m.fromPillar ? "✓" : "✗"}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="fixes">
+        <div class="fixes-head">
+          <h3><span class="ai">✦</span> Fixes for this topic${info("fixes")}</h3>
+          <span class="seg" role="group" aria-label="Fix state filter">
+            <button data-v="kept" aria-pressed="${view === "kept"}">Kept · ${c.kept}</button>
+            <button data-v="down" aria-pressed="${view === "down"}">Turned down · ${c.down}</button>
+            <button data-v="queued" aria-pressed="${view === "queued"}">Queued · ${c.queued}</button>
+          </span>
+        </div>
+        <div id="fix-list">${shown.map(({ f, i }) => fixRow(f, i)).join("") || '<div class="fix" style="cursor:default;color:var(--muted);font-size:12.5px">Nothing in this view.</div>'}</div>
+      </div>
+      <div class="foot">Kept fixes ship on their own in the next site update — there is nothing to approve. Discarding one records your reason, and no later audit will raise the same link again. Links that cross topic lines have their own list below the topics.</div>`;
+
+    for (const b of $("detail").querySelectorAll("[data-v]")) {
+      b.addEventListener("click", () => { view = b.dataset.v; renderDetail(); });
+    }
+    for (const row of $("detail").querySelectorAll(".fix[data-page]")) {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("button, textarea, .dbox")) return;
+        openDrawer(row.dataset.page);
+      });
+    }
+    for (const b of $("detail").querySelectorAll("[data-d]")) {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const i = Number(b.dataset.d);
+        const row = b.closest(".fix");
+        if (row.querySelector(".dbox")) return;
+        const box = document.createElement("div");
+        box.className = "dbox";
+        box.innerHTML = `
+          <p>Turn this fix down — it will not ship, and it stays turned down through later audits so the same link is never suggested again.</p>
+          <p class="small">Same as the technical SEO desk: switch the filter to Turned down to bring it back.</p>
+          <textarea rows="2" placeholder="Why is this link wrong here? Optional — it shows against the fix on the Turned down list."></textarea>
+          <div class="btns">
+            <button class="btn small">Yes — turn it down</button>
+            <button class="btn small ghost">Not yet</button>
+          </div>`;
+        row.querySelector(".body").appendChild(box);
+        const [yes, no] = box.querySelectorAll(".btns .btn");
+        no.addEventListener("click", (ev) => { ev.stopPropagation(); box.remove(); });
+        yes.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const why = box.querySelector("textarea").value.trim();
+          const fix = TOPICS.find((x) => x.id === active).fixes[i];
+          fix.state = "down";
+          if (why) fix.you = why;
+          renderDetail();
+          renderStatFixes();
+        });
+      });
+    }
+    for (const b of $("detail").querySelectorAll("[data-r]")) {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const fix = TOPICS.find((x) => x.id === active).fixes[Number(b.dataset.r)];
+        fix.state = "kept";
+        delete fix.you;
+        renderDetail();
+        renderStatFixes();
+      });
+    }
+    for (const el of $("detail").querySelectorAll("td[data-url]")) {
+      el.addEventListener("click", () => openDrawer(el.dataset.url));
+    }
+    for (const el of $("detail").querySelectorAll(".vdot")) {
+      el.addEventListener("click", () => openDrawer(el.dataset.url));
+    }
+  }
+
+  function renderCross() {
+    $("cross-list").innerHTML = CROSSFIXES.map((f, i) => {
+      const dim = f.state === "down" ? "dim" : "";
+      let act = "";
+      if (f.state === "kept") act = `<button class="btn small ghost" data-cd="${i}">✕ Discard</button>`;
+      if (f.state === "queued") act = `<span class="badge warn">queued for Meelu's review</span>`;
+      if (f.state === "down") act = `<span class="badge plain">turned down</span> <button class="btn small ghost" data-cr="${i}">↩ Restore</button>`;
+      const where = f.section
+        ? `<p class="where">link text${info("anchor")} <b>“${f.anchor}”</b> · lands in the <b>“${f.section}”</b> section${f.context ? `, after “${f.context}”` : ""}</p>`
+        : f.anchor ? `<p class="where">link text${info("anchor")} <b>“${f.anchor}”</b></p>` : "";
+      const agentLine = f.state === "down" && f.you
+        ? `<p class="agent" style="border-left-color:var(--warn)">you: ${f.you}</p>`
+        : f.agent ? `<p class="agent"><span class="ai">✦</span> ${f.agent}</p>` : "";
+      return `<div class="fix ${dim}" data-page="${f.page}">
+        <div class="body">
+          <p class="head"><b>${f.fromT}</b> <span class="urlsub">(${f.fromTag})</span><span class="arrow">→</span><b>${f.toT}</b> <span class="urlsub">(${f.toTag})</span></p>
+          ${where}${agentLine}
+        </div>
+        <div class="act">${act}</div>
+      </div>`;
+    }).join("");
+    for (const row of $("cross-list").querySelectorAll(".fix[data-page]")) {
+      row.addEventListener("click", (e) => {
+        if (e.target.closest("button, textarea, .dbox")) return;
+        openDrawer(row.dataset.page);
+      });
+    }
+    for (const b of $("cross-list").querySelectorAll("[data-cd]")) {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const i = Number(b.dataset.cd);
+        const row = b.closest(".fix");
+        if (row.querySelector(".dbox")) return;
+        const box = document.createElement("div");
+        box.className = "dbox";
+        box.innerHTML = `
+          <p>Turn this fix down — it will not ship, and it stays turned down through later audits so the same link is never suggested again.</p>
+          <textarea rows="2" placeholder="Why is this link wrong here? Optional."></textarea>
+          <div class="btns">
+            <button class="btn small">Yes — turn it down</button>
+            <button class="btn small ghost">Not yet</button>
+          </div>`;
+        row.querySelector(".body").appendChild(box);
+        const [yes, no] = box.querySelectorAll(".btns .btn");
+        no.addEventListener("click", (ev) => { ev.stopPropagation(); box.remove(); });
+        yes.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const why = box.querySelector("textarea").value.trim();
+          CROSSFIXES[i].state = "down";
+          if (why) CROSSFIXES[i].you = why;
+          renderCross();
+          renderStatFixes();
+        });
+      });
+    }
+    for (const b of $("cross-list").querySelectorAll("[data-cr]")) {
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const f = CROSSFIXES[Number(b.dataset.cr)];
+        f.state = "kept";
+        delete f.you;
+        renderCross();
+        renderStatFixes();
+      });
+    }
+  }
+
+  function renderKeyPages() {
+    $("key-body").innerHTML = KEYPAGES.map((k) => `
+      <tr>
+        <td data-url="${k.url}" title="${k.url}">${k.title} <span class="urlsub">· ${k.url}</span>${k.starved ? ` <span class="badge warn" style="margin-left:6px" title="${DEFS.starved}">starved</span>` : ""}</td>
+        <td>${k.link}</td>
+        <td>${k.inlinks}</td>
+        <td>${k.sessions.toLocaleString("en-US")}</td>
+        <td>${k.revenue > 0 ? "$" + k.revenue.toLocaleString("en-US") : "—"}</td>
+        <td style="text-align:left;color:${k.index === "Indexed" ? "var(--good)" : "var(--warn)"}">${k.index}</td>
+        <td style="text-align:left;max-width:0;width:30%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${k.note}">${k.note}</td>
+      </tr>`).join("");
+    for (const el of $("key-body").querySelectorAll("[data-url]")) {
+      el.addEventListener("click", () => openDrawer(el.dataset.url));
+    }
+  }
+
+  function renderStrays() {
+    $("stray-body").innerHTML = STRAYS.map((s) => `
+      <tr>
+        <td data-url="${s.url}" title="${s.url}">${s.t}</td>
+        <td>${s.inlinks}</td>
+        <td>${s.sessions}</td>
+        <td style="text-align:left;color:${s.index === "Excluded" ? "var(--bad)" : "var(--warn)"}">${s.index}</td>
+        <td style="text-align:left;max-width:0;width:44%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.take}">${s.take}</td>
+      </tr>`).join("");
+    for (const el of $("stray-body").querySelectorAll("[data-url]")) {
+      el.addEventListener("click", () => openDrawer(el.dataset.url));
+    }
+  }
+
+  function openDrawer(url) {
+    let m = null, t = null;
+    for (const tt of TOPICS) {
+      const found = tt.members.find((x) => x.url === url);
+      if (found) { m = found; t = tt; break; }
+    }
+    const stray = STRAYS.find((s) => s.url === url);
+    const key = KEYPAGES.find((k) => k.url === url);
+    if (!m && !stray && !key) return;
+    const bar = (label, v, color) => `
+      <div class="score-row">
+        <span class="lbl">${label}</span>
+        <span class="track"><i style="width:${v}%;background:${color}"></i></span>
+        <span class="n">${v}</span>
+      </div>`;
+    const link = m?.link ?? key?.link ?? 0;
+    const sessions = m?.sessions ?? key?.sessions ?? stray?.sessions ?? 0;
+    const inlinks = key ? key.inlinks : stray ? 0 : Math.max(1, Math.round(link / 5));
+    const depth = key ? key.depth : m ? (m.pillar ? 2 : 3) : null;
+    const title = m?.t ?? key?.title ?? stray?.t ?? url;
+    const verdict = m
+      ? (m.pillar
+          ? `<b>${t.pillar ? "Main page" : "Best page"} of ${t.label}.</b> ${t.verdict}`
+          : m.toPillar
+            ? `A connected ${t.label} page — it passes the attention it earns up to the topic's main page.`
+            : `<b>A disconnected ${t.label} page.</b> It never links to its topic's main page, so the ${sessions.toLocaleString("en-US")} visits it earns push nothing back into the topic.`)
+      : key
+        ? key.verdict
+        : `<b>Orphan — nothing on your site links here.</b> ${stray?.take ?? ""}`;
+    const anchors = ANCHORS[url];
+    const anchorRows = inlinks === 0
+      ? '<p style="font-size:13px;color:var(--ink-2)">No links reach this page.</p>'
+      : (anchors ?? [[title.toLowerCase(), t ? (memberByUrl(t, t.pillar?.url ?? t.bestUrl)?.t ?? "a related page") : "the site menu", false]])
+          .map(([a, from, generic]) => `
+            <div class="anchor-row">
+              <span class="a ${generic ? "generic" : ""}">“${a}”${generic ? " ⚠" : ""}</span>
+              <span class="from">from ${from}</span>
+            </div>`).join("");
+    $("drawer").innerHTML = `
+      <div class="dw-head">
+        <button class="close" id="dw-close" aria-label="Close">×</button>
+        <h2>${title}</h2>
+        <p class="url">${url} · ${t ? t.label : key ? "key page" : "no topic"} · ${sessions.toLocaleString("en-US")} visits / 90d${key && key.revenue > 0 ? ` · $${key.revenue.toLocaleString("en-US")} revenue` : ""}</p>
+      </div>
+      <div class="dw-sec"><p class="dw-verdict">${verdict}</p></div>
+      <div class="dw-sec">
+        <h3>Scores — relative to this site</h3>
+        ${bar(`Importance${info("linkscore", "tip-right")}`, link, "var(--accent)")}
+        ${bar(`Sends onward${info("hubscore", "tip-right")}`, Math.max(1, Math.round(link * 0.6)), "#1baf7a")}
+        ${bar(`Vouched for${info("authority", "tip-right")}`, Math.min(100, Math.round(link * 1.15)), "#d97706")}
+      </div>
+      <div class="dw-sec">
+        <h3>Position on your site</h3>
+        <div class="dw-kv">
+          <div><p class="k">Links to main page${info("topillar")}</p><p class="v">${m ? (m.toPillar === null ? "is the main page" : m.toPillar ? "yes" : "no") : "—"}</p></div>
+          <div><p class="k">Main page links back${info("frompillar", "tip-left")}</p><p class="v">${m ? (m.fromPillar === null ? "—" : m.fromPillar ? "yes" : "no") : "—"}</p></div>
+          <div><p class="k">Inlinks${info("inlinks")}</p><p class="v">${inlinks}</p></div>
+          <div><p class="k">Clicks from home${info("depth", "tip-left")}</p><p class="v">${depth === null ? "not reachable" : depth}</p></div>
+          <div><p class="k">Visits / 90d${info("sessions")}</p><p class="v">${sessions.toLocaleString("en-US")}</p></div>
+          <div><p class="k">In Google${info("index", "tip-left")}</p><p class="v">${key ? key.index : stray ? stray.index : (m?.note === "not indexed" ? "Not indexed" : "Indexed")}</p></div>
+        </div>
+      </div>
+      <div class="dw-sec">
+        <h3>How pages link here${info("anchor")}</h3>
+        ${anchorRows}
+        ${anchors && anchors.some((a) => a[2]) ? '<p style="font-size:12px;color:var(--warn);margin-top:6px">⚠ Generic link text like “click here” tells Google nothing about this page.</p>' : ""}
+      </div>`;
+    $("drawer").classList.add("open");
+    $("scrim").classList.add("open");
+    $("dw-close").addEventListener("click", closeDrawer);
+  }
+
+  function closeDrawer() {
+    $("drawer").classList.remove("open");
+    $("scrim").classList.remove("open");
+  }
+  $("scrim").addEventListener("click", closeDrawer);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+  renderGrid();
+  renderDetail();
+  renderCross();
+  renderKeyPages();
+  renderStrays();
+  renderStatFixes();
+})();
+</script>
+</body>
+</html>

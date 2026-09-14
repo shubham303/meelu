@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meelu-api"
+version = "0.1.0"
+description = "Meelu backend — REST APIs over Postgres for the dashboard, app and agent."
+requires-python = ">=3.11"
+authors = [{ name = "Shubham Randive" }]
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy>=2",
+    "psycopg[binary]",
+    "greenlet",
+    "alembic",
+    "pydantic>=2",
+    "pydantic-settings",
+    "pwdlib[argon2]",
+    "pgvector",
+    "structlog",
+    "httpx",
+    "tenacity",
+    "onnxruntime",
+    "tokenizers",
+    "huggingface_hub",
+    "numpy",
+    "tzdata>=2026.3",
+]
+
+[project.optional-dependencies]
+agent = [
+    "mcp>=1.10,<2",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "statsmodels",
+    "shap",
+    "numba>=0.59",
+]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
