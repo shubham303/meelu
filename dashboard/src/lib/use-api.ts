@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { currentSiteId, setCurrentSite, siteHeader, subscribeToSite } from "./current-site";
+import { clearBillingBlock, readBillingBlock, setBillingBlock } from "./billing-block";
 
 export interface Pagination {
   page: number;
@@ -22,16 +23,19 @@ async function request(
   path: string,
   opts: { method?: string; body?: unknown } = {},
 ): Promise<Record<string, unknown>> {
+  const site = siteHeader();
   const res = await fetch(path, {
     method: opts.method ?? "GET",
     headers: {
-      ...siteHeader(),
+      ...site,
       ...(opts.body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {
+    const blocked = res.status === 402 ? readBillingBlock(payload?.error) : null;
+    if (blocked) setBillingBlock(blocked);
     const message = payload?.error?.message ?? `Request failed (${res.status})`;
     const stale = /^No website (\S+) in this workspace\.$/.exec(message);
     if (res.status === 404 && stale && stale[1] === currentSiteId()) {
@@ -39,6 +43,7 @@ async function request(
     }
     throw new Error(message);
   }
+  if (site["x-meelu-site"]) clearBillingBlock("site_disabled");
   return payload;
 }
 

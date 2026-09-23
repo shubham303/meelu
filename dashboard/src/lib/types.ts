@@ -662,9 +662,12 @@ export interface SiteSocialLink {
   handle?: string;
 }
 
+export type SiteStatus = "active" | "disabled";
+
 export interface SiteProfile extends BaseEntity {
   domain: string;
   name: string;
+  status: SiteStatus;
   country?: string;
   repoUrl?: string;
   summary?: string;

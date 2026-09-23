@@ -12,6 +12,17 @@ import { cn } from "@/lib/utils";
 import { MCP_CATALOG } from "@/lib/mcp-catalog";
 import type { SiteProfile } from "@/lib/types";
 
+function PausedTag() {
+  return (
+    <span
+      title="Paused — the workspace ran out of credits"
+      className="shrink-0 rounded border border-warn/40 bg-warn/10 px-1 text-[10px] leading-4 text-warn"
+    >
+      paused
+    </span>
+  );
+}
+
 export function SiteSwitcher() {
   const { data: sites, refresh } = useApi<SiteProfile[]>("/api/v1/sites?page_size=100");
   const router = useRouter();
@@ -73,7 +84,12 @@ export function SiteSwitcher() {
           <Globe size={14} className="text-accent shrink-0" />
         )}
         <span className="min-w-0 flex-1">
-          <span className="block text-sm text-ink truncate">{global ? "Global" : current?.name}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="block text-sm text-ink truncate">
+              {global ? "Global" : current?.name}
+            </span>
+            {current?.status === "disabled" && <PausedTag />}
+          </span>
           <span className="block text-[11px] text-faint truncate">
             {global ? "not about one website" : current?.domain}
           </span>
@@ -120,7 +136,10 @@ export function SiteSwitcher() {
                       )}
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm text-ink truncate">{site.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="block text-sm text-ink truncate">{site.name}</span>
+                        {site.status === "disabled" && <PausedTag />}
+                      </span>
                       <span className="block text-[11px] text-faint truncate">{site.domain}</span>
                     </span>
                   </button>
@@ -268,6 +287,10 @@ function AddSiteModal({
         <Field label="Business name">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Example Co" />
         </Field>
+        <p className="text-xs text-faint">
+          A website costs 0.4 credits a day, charged when you add it and every 24 hours after.
+          It pauses if the balance runs out and picks up again once you top up.
+        </p>
         <p className="text-xs text-faint">
           {isApp
             ? "That's all we need — the crawl starts from the Site desk, and your coworker writes up what the site is about once it has pages to read."

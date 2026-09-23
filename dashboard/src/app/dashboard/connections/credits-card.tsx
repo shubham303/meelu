@@ -24,8 +24,8 @@ function usd(value: number): string {
 }
 
 export function CreditsCard() {
-  const { data: balance } = useApi<Balance>("/credits");
-  const { data: ledger } = usePagedApi<LedgerEntry>("/credits/ledger?page_size=5");
+  const { data: balance } = useApi<Balance>("/api/v1/credits");
+  const { data: ledger } = usePagedApi<LedgerEntry>("/api/v1/credits/ledger?page_size=5");
   const entries = ledger?.data ?? [];
 
   return (
