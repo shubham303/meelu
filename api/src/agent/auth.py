@@ -16,23 +16,24 @@ async def resolve(api_key: str, site_header: str | None) -> AgentContext:
             raise HTTPException(401, "Invalid API key.")
         user_id = owner.user_id
 
-        site_id = site_domain = None
+        site_id = site_domain = site_status = None
         if site_header:
             site = await sites_repository.get_site(db, user_id, site_header)
             if site is None:
                 raise HTTPException(404, f"No website {site_header!r} in this workspace.")
-            site_id, site_domain = site.id, site.domain
+            site_id, site_domain, site_status = site.id, site.domain, site.status
         else:
             only = await sites_repository.default_site_id(db, user_id)
             if only:
                 site = await sites_repository.get_site(db, user_id, only)
-                site_id, site_domain = site.id, site.domain
+                site_id, site_domain, site_status = site.id, site.domain, site.status
 
     role, schema = await run_in_threadpool(ensure_user, user_id)
     return AgentContext(
         user_id=user_id,
         site_id=site_id,
         site_domain=site_domain,
+        site_status=site_status,
         role=role,
         schema=schema,
         api_key=api_key,

@@ -197,13 +197,17 @@ async def _resolve_site(db: AsyncSession, request: Request, user_id: str) -> str
     asked = header if header is not None else request.query_params.get("siteId")
 
     if asked:
-        if await sites_repository.get_site(db, user_id, asked):
-            return asked
+        site = await sites_repository.get_site(db, user_id, asked)
+        if site:
+            credits_service.require_active_site(site.id, site.status)
+            return site.id
         raise HTTPException(404, f"No website {asked} in this workspace.")
 
     only = await sites_repository.default_site_id(db, user_id)
     if only:
-        return only
+        site = await sites_repository.get_site(db, user_id, only)
+        credits_service.require_active_site(site.id, site.status)
+        return site.id
 
     count = await sites_repository.count_sites(db, user_id)
     if count == 0:

@@ -1,21 +1,38 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
-from src.credits import pricing
+from src.credits import billing, pricing
 from src.credits import repository as repo
-from src.credits.schemas import BalanceResponse, GrantRequest, LedgerEntryResponse
+from src.credits.schemas import (
+    BalanceResponse,
+    GrantRequest,
+    LedgerEntryResponse,
+    SiteBillingResponse,
+)
 from src.settings import settings
 
 
 class InsufficientCreditsError(Exception):
     code = "insufficient_credits"
 
-    def __init__(self, balance_micros: int):
+    def __init__(self, balance_micros: int, floor_micros: int):
         super().__init__(
-            "This workspace has no credits left "
-            f"(balance ${balance_micros / 1_000_000:.4f}). Add credits to keep calling vendors."
+            f"This workspace is below the ${floor_micros / 1_000_000:.2f} minimum needed to call "
+            f"a paid vendor (balance ${balance_micros / 1_000_000:.4f}). Add credits to continue."
         )
         self.balance_micros = balance_micros
+        self.floor_micros = floor_micros
+
+
+class SiteDisabledError(Exception):
+    code = "site_disabled"
+
+    def __init__(self, site_id: str):
+        super().__init__(
+            "This website is disabled because the workspace ran out of credits. "
+            "Add credits and it turns back on within 15 minutes."
+        )
+        self.site_id = site_id
 
 
 def to_micros(usd: float) -> int:
@@ -29,9 +46,33 @@ async def balance(db: AsyncSession, user_id: str) -> BalanceResponse:
 
 async def require_balance(db: AsyncSession, user_id: str) -> int:
     micros = await repo.balance(db, user_id)
-    if micros <= 0:
-        raise InsufficientCreditsError(micros)
+    floor = pricing.minimum_balance_micros()
+    if micros < floor:
+        raise InsufficientCreditsError(micros, floor)
     return micros
+
+
+def require_active_site(site_id: str, status: str) -> None:
+    if status != billing.ACTIVE:
+        raise SiteDisabledError(site_id)
+
+
+async def site_billing_state(db: AsyncSession, site_id: str, status: str) -> SiteBillingResponse:
+    row = await repo.site_billing(db, site_id)
+    last = row.last_charged_at if row else None
+    return SiteBillingResponse(
+        site_id=site_id,
+        status=status,
+        last_charged_at=last,
+        next_charge_at=None if last is None else last + billing.period(),
+        charge_count=row.charge_count if row else 0,
+        charged_micros=row.charged_micros if row else 0,
+        daily_price_micros=pricing.site_day_price_micros(),
+    )
+
+
+async def start_site_billing(db: AsyncSession, user_id: str, site_id: str) -> bool:
+    return await billing.start_site(db, user_id, site_id)
 
 
 async def grant(db: AsyncSession, user_id: str, body: GrantRequest) -> BalanceResponse:
@@ -63,14 +104,6 @@ async def charge_vendor_call(
         await repo.apply_delta(
             db, user_id, -price, "usage", f"{domain}/{capability}", provider_call_id
         )
-    return price
-
-
-async def charge_action(db: AsyncSession, user_id: str, action: str) -> int:
-    price = pricing.action_price(action)
-    if price > 0:
-        await require_balance(db, user_id)
-        await repo.apply_delta(db, user_id, -price, "usage", action)
     return price
 
 

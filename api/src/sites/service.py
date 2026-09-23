@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.credits import service as credits_service
 from src.sites import repository as repo
 from src.sites.schemas import (
     SiteCreateRequest,
@@ -34,7 +35,10 @@ async def create_site(db: AsyncSession, user_id: str, body: SiteCreateRequest) -
             f"{clash.name} ({body.domain}) is already in this workspace — switch to it rather "
             f"than adding it twice.",
         )
-    return await repo.create_site(db, user_id, body.model_dump())
+    site = await repo.create_site(db, user_id, body.model_dump())
+    await credits_service.start_site_billing(db, user_id, site.id)
+    refreshed = await repo.get_site(db, user_id, site.id)
+    return refreshed or site
 
 
 async def _apply(

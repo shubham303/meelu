@@ -35,6 +35,8 @@ def _conditions(user_id: str, f: SiteFilters):
         conds.append(Site.domain == f.domain)
     if f.country:
         conds.append(Site.country == f.country)
+    if f.status:
+        conds.append(Site.status == f.status)
     if f.has_repo is not None:
         conds.append(
             and_(Site.repo_url.is_not(None), Site.repo_url != "")

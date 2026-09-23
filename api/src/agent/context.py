@@ -9,6 +9,7 @@ class AgentContext:
     user_id: str
     site_id: str | None
     site_domain: str | None
+    site_status: str | None
     role: str
     schema: str
     api_key: str
@@ -44,5 +45,10 @@ def require_site() -> AgentContext:
         raise ValueError(
             "No website selected. Pass the x-meelu-site header (the workspace has "
             "more than one site)."
+        )
+    if ctx.site_status != "active":
+        raise ValueError(
+            f"{ctx.site_domain} is disabled because the workspace ran out of credits. "
+            "Tell the user to add credits — the website turns back on within 15 minutes."
         )
     return ctx

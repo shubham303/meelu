@@ -1,3 +1,5 @@
+import contextlib
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
@@ -10,8 +12,9 @@ from src.content.endpoints import router as content_router
 from src.core.envelope import install_envelope
 from src.core.logging import RequestLoggingMiddleware, configure_logging
 from src.crawl_jobs.endpoints import router as crawl_jobs_router
+from src.credits import cron as credits_cron
 from src.credits.endpoints import router as credits_router
-from src.credits.service import InsufficientCreditsError
+from src.credits.service import InsufficientCreditsError, SiteDisabledError
 from src.keys.endpoints import router as keys_router
 from src.leads.endpoints import router as leads_router
 from src.notes.endpoints import router as notes_router
@@ -33,7 +36,14 @@ from src.technical_seo.endpoints import router as technical_seo_router
 
 configure_logging()
 
-app = FastAPI(title="meelu-api")
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with credits_cron.running():
+        yield
+
+
+app = FastAPI(title="meelu-api", lifespan=lifespan)
 
 install_envelope(app)
 app.add_middleware(RequestLoggingMiddleware)
@@ -83,7 +93,22 @@ async def _provider_error(request, exc: ProviderError):
 @app.exception_handler(InsufficientCreditsError)
 async def _credits_error(request, exc: InsufficientCreditsError):
     return JSONResponse(
-        {"error": {"code": exc.code, "message": str(exc), "balanceMicros": exc.balance_micros}},
+        {
+            "error": {
+                "code": exc.code,
+                "message": str(exc),
+                "balanceMicros": exc.balance_micros,
+                "minimumMicros": exc.floor_micros,
+            }
+        },
+        status_code=402,
+    )
+
+
+@app.exception_handler(SiteDisabledError)
+async def _site_disabled(request, exc: SiteDisabledError):
+    return JSONResponse(
+        {"error": {"code": exc.code, "message": str(exc), "siteId": exc.site_id}},
         status_code=402,
     )
 

@@ -1,8 +1,16 @@
+from dataclasses import dataclass
+
 from pydantic import Field, computed_field
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
-LEDGER_KINDS = ("grant", "purchase", "usage", "refund", "adjustment")
+
+@dataclass(frozen=True)
+class DueSite:
+    site_id: str
+    user_id: str
+    status: str
+    domain: str
 
 
 def usd(micros: int) -> float:
@@ -37,3 +45,21 @@ class LedgerEntryResponse(EntityModel):
 class GrantRequest(RequestModel):
     amount_usd: float = Field(gt=0)
     note: str | None = None
+
+
+class SiteBillingResponse(EntityModel):
+    site_id: str
+    status: str
+    last_charged_at: JsDateTime | None
+    next_charge_at: JsDateTime | None
+    charge_count: int
+    charged_micros: int
+    daily_price_micros: int
+
+
+class SweepResult(EntityModel):
+    considered: int = 0
+    charged: int = 0
+    disabled: int = 0
+    reactivated: int = 0
+    failed: int = 0

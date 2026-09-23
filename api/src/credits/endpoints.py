@@ -1,12 +1,19 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import require
+from src.auth import current_user_id, require
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.credits import service
-from src.credits.schemas import BalanceResponse, GrantRequest, LedgerEntryResponse
+from src.credits import billing, service
+from src.credits.schemas import (
+    BalanceResponse,
+    GrantRequest,
+    LedgerEntryResponse,
+    SiteBillingResponse,
+    SweepResult,
+)
+from src.sites import repository as sites_repository
 
 router = APIRouter()
 
@@ -35,3 +42,22 @@ async def grant_credits(
     user_id: str = Depends(require("credits", "write")),
 ) -> BalanceResponse:
     return await service.grant(db, user_id, body)
+
+
+@router.get("/credits/sites/{site_id}")
+async def get_site_billing(
+    site_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+) -> SiteBillingResponse:
+    site = await sites_repository.get_site(db, user_id, site_id)
+    if site is None:
+        raise HTTPException(404, "Not found")
+    return await service.site_billing_state(db, site.id, site.status)
+
+
+@router.post("/credits/sweep")
+async def run_sweep(
+    user_id: str = Depends(require("credits", "write")),
+) -> SweepResult:
+    return await billing.sweep()

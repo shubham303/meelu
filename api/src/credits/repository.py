@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,7 +8,9 @@ from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
 from src.credits.models.credit_account import CreditAccount
 from src.credits.models.credit_ledger import CreditLedgerEntry
-from src.credits.schemas import LedgerEntryResponse
+from src.credits.models.site_billing import SiteBilling
+from src.credits.schemas import DueSite, LedgerEntryResponse
+from src.sites.models.site import Site
 
 
 async def ensure_account(db: AsyncSession, user_id: str) -> None:
@@ -71,3 +73,72 @@ async def list_ledger(
     return await PaginationService.paginate_query(
         db, query, paging.page, paging.page_size, LedgerEntryResponse
     )
+
+
+async def ensure_site_billing(db: AsyncSession, user_id: str, site_id: str) -> None:
+    await db.execute(
+        insert(SiteBilling)
+        .values(user_id=user_id, site_id=site_id)
+        .on_conflict_do_nothing(index_elements=["site_id"])
+    )
+
+
+async def due_sites(db: AsyncSession, cutoff: datetime, limit: int) -> list[DueSite]:
+    result = await db.execute(
+        select(SiteBilling.site_id, SiteBilling.user_id, Site.status, Site.domain)
+        .join(Site, Site.id == SiteBilling.site_id)
+        .where(
+            or_(
+                SiteBilling.last_charged_at.is_(None),
+                SiteBilling.last_charged_at <= cutoff,
+            )
+        )
+        .order_by(SiteBilling.last_charged_at.asc().nulls_first())
+        .limit(limit)
+    )
+    return [
+        DueSite(site_id=r.site_id, user_id=r.user_id, status=r.status, domain=r.domain)
+        for r in result
+    ]
+
+
+async def mark_charged(db: AsyncSession, site_id: str, charged_micros: int) -> None:
+    now = datetime.now(UTC)
+    await db.execute(
+        update(SiteBilling)
+        .where(SiteBilling.site_id == site_id)
+        .values(
+            last_charged_at=now,
+            charge_count=SiteBilling.charge_count + 1,
+            charged_micros=SiteBilling.charged_micros + charged_micros,
+            updated_at=now,
+        )
+    )
+
+
+async def set_site_status(db: AsyncSession, site_id: str, status: str) -> None:
+    await db.execute(
+        update(Site)
+        .where(Site.id == site_id, Site.status != status)
+        .values(status=status, updated_at=datetime.now(UTC))
+    )
+
+
+async def site_billing(db: AsyncSession, site_id: str) -> SiteBilling | None:
+    result = await db.execute(select(SiteBilling).where(SiteBilling.site_id == site_id).limit(1))
+    return result.scalars().first()
+
+
+async def lock_due_site(db: AsyncSession, site_id: str, cutoff: datetime) -> bool:
+    result = await db.execute(
+        select(SiteBilling.site_id)
+        .where(
+            SiteBilling.site_id == site_id,
+            or_(
+                SiteBilling.last_charged_at.is_(None),
+                SiteBilling.last_charged_at <= cutoff,
+            ),
+        )
+        .with_for_update(skip_locked=True)
+    )
+    return result.scalars().first() is not None

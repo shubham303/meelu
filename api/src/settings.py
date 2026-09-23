@@ -31,6 +31,11 @@ class Settings(EnvSettings):
     openrouter_jev_model: str = "~typesafe/jev-latest"
     openrouter_review_model: str = "anthropic/claude-sonnet-4.5"
     credits_signup_grant_usd: float = 5.0
+    credits_site_daily_usd: float = 0.4
+    credits_minimum_balance_usd: float = 0.2
+    credits_billing_period_hours: int = 24
+    credits_billing_sweep_seconds: int = 900
+    credits_billing_sweep_disabled: bool = False
     seo_job_vendor_ceiling_micros: int = 2_000_000
 
     log_level: str = "INFO"

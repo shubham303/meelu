@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Index, Integer
+from sqlalchemy import Boolean, DateTime, Index, Integer, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ class Site(EntityMixin, Base):
 
     domain: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
+    status: Mapped[str] = mapped_column(nullable=False, server_default=text("'active'"))
     country: Mapped[str | None]
     repo_url: Mapped[str | None]
     summary: Mapped[str | None]

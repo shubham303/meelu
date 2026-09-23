@@ -7,6 +7,7 @@ from src.core.schemas import EntityModel, JsDateTime, RequestModel
 from src.sites.host import read_host
 
 SiteSort = Literal["created", "name", "domain", "crawled"]
+SiteStatus = Literal["active", "disabled"]
 
 AGENT_WRITABLE = (
     "summary",
@@ -55,6 +56,7 @@ class SiteFilters(RequestModel):
     q: str | None = None
     domain: str | None = None
     country: str | None = None
+    status: SiteStatus | None = None
     has_repo: bool | None = None
     never_crawled: bool | None = None
     crawled_before: datetime | None = None
@@ -155,6 +157,7 @@ class SiteRecord(EntityModel):
     user_id: str
     domain: str
     name: str
+    status: SiteStatus
     country: str | None = None
     repo_url: str | None = None
     summary: str | None = None
@@ -181,6 +184,7 @@ class SiteResponse(EntityModel):
     id: str
     domain: str
     name: str
+    status: SiteStatus
     country: str | None = None
     repo_url: str | None = None
     summary: str | None = None
@@ -207,6 +211,7 @@ class SiteListItemResponse(EntityModel):
     id: str
     domain: str
     name: str
+    status: SiteStatus
     country: str | None = None
     repo_url: str | None = None
     summary: str | None = None
