@@ -27,3 +27,10 @@ export function formatRelative(iso: string | null | undefined): string {
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s;
 }
+
+export function formatUsd(value: number): string {
+  const sign = value < 0 ? "-" : "";
+  const size = Math.abs(value);
+  const digits = size > 0 && size < 0.01 ? 6 : size < 1 ? 4 : 2;
+  return `${sign}$${size.toFixed(digits)}`;
+}

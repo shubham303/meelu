@@ -75,17 +75,21 @@ async def list_ledger(
     )
 
 
-async def ensure_site_billing(db: AsyncSession, user_id: str, site_id: str) -> None:
+async def ensure_site_billing(db: AsyncSession, user_id: str, site_id: str, domain: str) -> None:
+    now = datetime.now(UTC)
     await db.execute(
         insert(SiteBilling)
-        .values(user_id=user_id, site_id=site_id)
-        .on_conflict_do_nothing(index_elements=["site_id"])
+        .values(user_id=user_id, domain=domain, site_id=site_id)
+        .on_conflict_do_update(
+            index_elements=["user_id", "domain"],
+            set_={"site_id": site_id, "updated_at": now},
+        )
     )
 
 
 async def due_sites(db: AsyncSession, cutoff: datetime, limit: int) -> list[DueSite]:
     result = await db.execute(
-        select(SiteBilling.site_id, SiteBilling.user_id, Site.status, Site.domain)
+        select(SiteBilling.site_id, SiteBilling.user_id, SiteBilling.domain, Site.status)
         .join(Site, Site.id == SiteBilling.site_id)
         .where(
             or_(
@@ -102,11 +106,27 @@ async def due_sites(db: AsyncSession, cutoff: datetime, limit: int) -> list[DueS
     ]
 
 
-async def mark_charged(db: AsyncSession, site_id: str, charged_micros: int) -> None:
+async def lock_due_billing(db: AsyncSession, user_id: str, domain: str, cutoff: datetime) -> bool:
+    result = await db.execute(
+        select(SiteBilling.domain)
+        .where(
+            SiteBilling.user_id == user_id,
+            SiteBilling.domain == domain,
+            or_(
+                SiteBilling.last_charged_at.is_(None),
+                SiteBilling.last_charged_at <= cutoff,
+            ),
+        )
+        .with_for_update(skip_locked=True)
+    )
+    return result.scalars().first() is not None
+
+
+async def mark_charged(db: AsyncSession, user_id: str, domain: str, charged_micros: int) -> None:
     now = datetime.now(UTC)
     await db.execute(
         update(SiteBilling)
-        .where(SiteBilling.site_id == site_id)
+        .where(SiteBilling.user_id == user_id, SiteBilling.domain == domain)
         .values(
             last_charged_at=now,
             charge_count=SiteBilling.charge_count + 1,
@@ -124,21 +144,19 @@ async def set_site_status(db: AsyncSession, site_id: str, status: str) -> None:
     )
 
 
-async def site_billing(db: AsyncSession, site_id: str) -> SiteBilling | None:
-    result = await db.execute(select(SiteBilling).where(SiteBilling.site_id == site_id).limit(1))
-    return result.scalars().first()
-
-
-async def lock_due_site(db: AsyncSession, site_id: str, cutoff: datetime) -> bool:
+async def disable_sites_of(db: AsyncSession, user_id: str) -> int:
     result = await db.execute(
-        select(SiteBilling.site_id)
-        .where(
-            SiteBilling.site_id == site_id,
-            or_(
-                SiteBilling.last_charged_at.is_(None),
-                SiteBilling.last_charged_at <= cutoff,
-            ),
-        )
-        .with_for_update(skip_locked=True)
+        update(Site)
+        .where(Site.user_id == user_id, Site.status != "disabled")
+        .values(status="disabled", updated_at=datetime.now(UTC))
     )
-    return result.scalars().first() is not None
+    return result.rowcount or 0
+
+
+async def site_billing(db: AsyncSession, user_id: str, domain: str) -> SiteBilling | None:
+    result = await db.execute(
+        select(SiteBilling)
+        .where(SiteBilling.user_id == user_id, SiteBilling.domain == domain)
+        .limit(1)
+    )
+    return result.scalars().first()

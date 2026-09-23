@@ -63,7 +63,7 @@ def mock_decision(state: Any, questions: dict[str, Question]) -> VendorResponse:
                 "confidence": 0.0,
             }
     return VendorResponse(
-        {"model": f"{settings.openrouter_jev_model} (mocked)", "answers": answers}, 21
+        {"model": f"{settings.openrouter_jev_model} (mocked)", "answers": answers}, 0
     )
 
 

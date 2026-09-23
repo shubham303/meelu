@@ -54,11 +54,14 @@ async def user_id_of(client, email):
 
 
 async def test_signup_grants_credits_and_ledger(client, email):
+    from tests.integration.credits.test_site_billing import make_operator
+
     await signup(client, email)
     r = await client.get("/api/v1/credits")
     assert r.status_code == 200
     assert r.json()["data"]["balanceUsd"] == 5.0
 
+    await make_operator((await client.get("/api/auth/me")).json()["data"]["id"])
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 2.5, "note": "top up"})
     assert r.json()["data"]["balanceUsd"] == 7.5
 

@@ -9,6 +9,7 @@ from src.providers.registry import Caller
 from src.site_page_llm_extraction import repository as repo
 from src.site_page_llm_extraction.questions import QUESTIONS, page_state, read_answers
 from src.site_page_llm_extraction.schemas import PageLlmExtractionCreateRequest, PendingPageRecord
+from src.sites import repository as sites_repo
 
 BATCH = 50
 CONCURRENCY = 8
@@ -79,6 +80,10 @@ async def classify_site(user_id: str, site_id: str) -> dict[str, int]:
     try:
         while True:
             async with unit_of_work() as db:
+                site = await sites_repo.get_site(db, user_id, site_id)
+                if site is None or site.status != "active":
+                    log.info("page classification paused", site_id=site_id)
+                    break
                 pages, _ = await repo.pending_pages(db, site_id, BATCH, exclude_ids=failed_ids)
             if not pages:
                 break

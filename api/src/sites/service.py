@@ -36,7 +36,7 @@ async def create_site(db: AsyncSession, user_id: str, body: SiteCreateRequest) -
             f"than adding it twice.",
         )
     site = await repo.create_site(db, user_id, body.model_dump())
-    await credits_service.start_site_billing(db, user_id, site.id)
+    await credits_service.start_site_billing(db, user_id, site.id, site.domain)
     refreshed = await repo.get_site(db, user_id, site.id)
     return refreshed or site
 

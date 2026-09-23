@@ -8,12 +8,16 @@ from src.core.orm import Base
 
 class SiteBilling(Base):
     __tablename__ = "site_billing"
-    __table_args__ = (Index("site_billing_due_idx", "last_charged_at"),)
-
-    site_id: Mapped[str] = mapped_column(
-        ForeignKey("site.id", ondelete="CASCADE"), primary_key=True
+    __table_args__ = (
+        Index("site_billing_due_idx", "last_charged_at"),
+        Index("site_billing_site_idx", "site_id"),
     )
-    user_id: Mapped[str] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    domain: Mapped[str] = mapped_column(primary_key=True)
+    site_id: Mapped[str | None] = mapped_column(ForeignKey("site.id", ondelete="SET NULL"))
     last_charged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     charge_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     charged_micros: Mapped[int] = mapped_column(

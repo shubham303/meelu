@@ -71,9 +71,7 @@ def scope_response(
 
     writes = list(dict.fromkeys(scope.write_names + [w for a in extra for w in a.write_names]))
     silent = list(
-        dict.fromkeys(
-            scope.silent_write_names + [w for a in extra for w in a.silent_write_names]
-        )
+        dict.fromkeys(scope.silent_write_names + [w for a in extra for w in a.silent_write_names])
     )
     tables = (
         None

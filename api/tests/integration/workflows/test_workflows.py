@@ -34,9 +34,7 @@ async def test_workflows_crud(client, email):
     )
     assert r.status_code == 400
     assert r.json() == {
-        "error": {
-            "message": "Not a desk: legal. Allowed: site, pages, content, social, analytics."
-        }
+        "error": {"message": "Not a desk: legal. Allowed: site, pages, content, social, analytics."}
     }
 
     r = await client.post(

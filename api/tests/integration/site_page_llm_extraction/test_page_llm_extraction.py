@@ -109,7 +109,7 @@ async def test_run_classifies_pending_pages(client, site, jev):
     await wait_idle(site["id"])
 
     assert len(jev.calls) == 3
-    assert jev.calls[0]["meta_description"] == "Who we are"
+    assert "Who we are" in [c["meta_description"] for c in jev.calls]
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
     assert r.json()["data"]["pageType"] == "company"

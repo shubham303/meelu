@@ -192,21 +192,25 @@ class OptionalSiteContext:
     site_id: str | None
 
 
-async def _resolve_site(db: AsyncSession, request: Request, user_id: str) -> str:
+async def _resolve_site(
+    db: AsyncSession, request: Request, user_id: str, gated: bool = True
+) -> str:
     header = request.headers.get("x-meelu-site")
     asked = header if header is not None else request.query_params.get("siteId")
 
     if asked:
         site = await sites_repository.get_site(db, user_id, asked)
         if site:
-            credits_service.require_active_site(site.id, site.status)
+            if gated:
+                credits_service.require_active_site(site.id, site.status)
             return site.id
         raise HTTPException(404, f"No website {asked} in this workspace.")
 
     only = await sites_repository.default_site_id(db, user_id)
     if only:
         site = await sites_repository.get_site(db, user_id, only)
-        credits_service.require_active_site(site.id, site.status)
+        if gated:
+            credits_service.require_active_site(site.id, site.status)
         return site.id
 
     count = await sites_repository.count_sites(db, user_id)
@@ -231,18 +235,43 @@ async def require_site(
     return AuthContext(user_id=user_id, site_id=await _resolve_site(db, request, user_id))
 
 
+async def any_site(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(current_user_id),
+) -> AuthContext:
+    return AuthContext(
+        user_id=user_id, site_id=await _resolve_site(db, request, user_id, gated=False)
+    )
+
+
 async def optional_site(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> OptionalSiteContext:
     try:
-        site_id = await _resolve_site(db, request, user_id)
+        site_id = await _resolve_site(db, request, user_id, gated=False)
     except HTTPException:
         if await sites_repository.count_sites(db, user_id) == 0:
             return OptionalSiteContext(user_id=user_id, site_id=None)
         raise
     return OptionalSiteContext(user_id=user_id, site_id=site_id)
+
+
+async def require_superuser(request: Request, db: AsyncSession = Depends(get_db)) -> str:
+    api_key = request.headers.get("x-api-key")
+    owner = await find_user_by_api_key(db, api_key) if api_key else None
+    user = (
+        await db.get(User, owner.user_id)
+        if owner
+        else await session_user(db, request.cookies.get(settings.session_cookie_name))
+    )
+    if user is None:
+        raise HTTPException(401, "Not authenticated. Sign in or pass an x-api-key header.")
+    if not user.is_superuser:
+        raise HTTPException(403, "This endpoint is for Meelu operators only.")
+    return user.id
 
 
 def require(feature: str, operation: str) -> Callable[..., Coroutine[Any, Any, str]]:

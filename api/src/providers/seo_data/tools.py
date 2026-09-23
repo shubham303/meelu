@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from src.agent.context import current
+from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.providers.registry import Caller
@@ -17,7 +17,7 @@ class LlmTarget(BaseModel):
 
 
 def caller() -> Caller:
-    ctx = current()
+    ctx = require_site()
     return Caller(user_id=ctx.user_id, site_id=ctx.site_id)
 
 

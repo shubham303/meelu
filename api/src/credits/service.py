@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.logging import get_logger
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits import billing, pricing
 from src.credits import repository as repo
@@ -10,6 +11,8 @@ from src.credits.schemas import (
     SiteBillingResponse,
 )
 from src.settings import settings
+
+log = get_logger("credits")
 
 
 class InsufficientCreditsError(Exception):
@@ -57,8 +60,10 @@ def require_active_site(site_id: str, status: str) -> None:
         raise SiteDisabledError(site_id)
 
 
-async def site_billing_state(db: AsyncSession, site_id: str, status: str) -> SiteBillingResponse:
-    row = await repo.site_billing(db, site_id)
+async def site_billing_state(
+    db: AsyncSession, user_id: str, site_id: str, domain: str, status: str
+) -> SiteBillingResponse:
+    row = await repo.site_billing(db, user_id, domain)
     last = row.last_charged_at if row else None
     return SiteBillingResponse(
         site_id=site_id,
@@ -71,8 +76,8 @@ async def site_billing_state(db: AsyncSession, site_id: str, status: str) -> Sit
     )
 
 
-async def start_site_billing(db: AsyncSession, user_id: str, site_id: str) -> bool:
-    return await billing.start_site(db, user_id, site_id)
+async def start_site_billing(db: AsyncSession, user_id: str, site_id: str, domain: str) -> bool:
+    return await billing.start_site(db, user_id, site_id, domain)
 
 
 async def grant(db: AsyncSession, user_id: str, body: GrantRequest) -> BalanceResponse:
@@ -100,9 +105,18 @@ async def charge_vendor_call(
     provider_call_id: str,
 ) -> int:
     price = pricing.vendor_call_price(domain, capability, vendor_cost_micros)
-    if price > 0:
-        await repo.apply_delta(
-            db, user_id, -price, "usage", f"{domain}/{capability}", provider_call_id
+    if price <= 0:
+        return 0
+    entry = await repo.apply_delta(
+        db, user_id, -price, "usage", f"{domain}/{capability}", provider_call_id
+    )
+    if entry.balance_after_micros < 0:
+        disabled = await repo.disable_sites_of(db, user_id)
+        log.warning(
+            "credits_overdrawn",
+            user_id=user_id,
+            balance_micros=entry.balance_after_micros,
+            sites_disabled=disabled,
         )
     return price
 

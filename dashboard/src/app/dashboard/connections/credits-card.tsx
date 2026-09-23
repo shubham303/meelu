@@ -2,8 +2,9 @@
 
 import { Coins } from "lucide-react";
 import { Card } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { usePagedApi, useApi } from "@/lib/use-api";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, formatUsd } from "@/lib/utils";
 
 interface Balance {
   balanceMicros: number;
@@ -17,10 +18,6 @@ interface LedgerEntry {
   balanceAfterUsd: number;
   note: string | null;
   createdAt: string;
-}
-
-function usd(value: number): string {
-  return `$${value.toFixed(value < 1 ? 4 : 2)}`;
 }
 
 export function CreditsCard() {
@@ -44,7 +41,7 @@ export function CreditsCard() {
         </div>
         <div className="text-right shrink-0">
           <div className="text-xl font-semibold tabular-nums">
-            {balance ? usd(balance.balanceUsd) : "—"}
+            {balance ? formatUsd(balance.balanceUsd) : "—"}
           </div>
           <div className="text-xs text-sub">available</div>
         </div>
@@ -60,7 +57,7 @@ export function CreditsCard() {
               <span className="tabular-nums shrink-0">
                 <span className={e.deltaUsd < 0 ? "text-bad" : "text-good"}>
                   {e.deltaUsd < 0 ? "−" : "+"}
-                  {usd(Math.abs(e.deltaUsd))}
+                  {formatUsd(Math.abs(e.deltaUsd))}
                 </span>
                 <span className="text-sub ml-2 text-xs">{formatRelative(e.createdAt)}</span>
               </span>

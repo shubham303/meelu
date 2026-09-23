@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import AuthContext, require_site
+from src.auth import AuthContext, any_site, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginationParams
 from src.core.pagination.utils import get_pagination_params
@@ -44,7 +44,7 @@ async def list_crawl_jobs(
     created_before: datetime | None = Query(None, alias="createdBefore"),
     sort: CrawlJobSort | None = Query(None),
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> CrawlJobListResponse:
     statuses = [s for s in status if s in CRAWL_JOB_STATUSES] if status else None
@@ -86,7 +86,7 @@ async def open_crawl_job(
 async def reap_crawl_jobs(
     body: CrawlJobReapRequest,
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobReapResponse:
     stale = body.stale_ms
     reaped = await service.reap_crawls(
@@ -117,7 +117,7 @@ async def reap_crawl_jobs(
 async def get_crawl_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobResponse:
     return CrawlJobResponse.model_validate(await service.read_crawl(db, ctx.site_id, job_id))
 
@@ -127,7 +127,7 @@ async def patch_crawl_job(
     job_id: str,
     body: CrawlJobUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobResponse | CrawlJobHeartbeatResponse:
     status = body.status or ""
 
@@ -158,7 +158,7 @@ async def patch_crawl_job(
 async def delete_crawl_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobDeleteResponse:
     return await service.remove_crawl(db, ctx.user_id, ctx.site_id, job_id)
 
@@ -167,6 +167,6 @@ async def delete_crawl_job(
 async def claim_crawl_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> CrawlPlanResponse:
     return await service.claim_crawl(db, ctx.user_id, ctx.site_id, job_id)

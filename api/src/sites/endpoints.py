@@ -3,7 +3,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.auth import AuthContext, OptionalSiteContext, optional_site, require, require_site
+from src.auth import (
+    AuthContext,
+    OptionalSiteContext,
+    any_site,
+    optional_site,
+    require,
+    require_site,
+)
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
@@ -134,7 +141,7 @@ async def patch_current_site(
 @router.delete("/site")
 async def delete_current_site(
     db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
+    ctx: AuthContext = Depends(any_site),
 ) -> SiteDeleteResponse:
     record = await service.delete_site(db, ctx.user_id, ctx.site_id)
     return SiteDeleteResponse(id=record.id)

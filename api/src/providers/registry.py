@@ -157,8 +157,12 @@ class ProviderFacade:
                 None,
                 started,
             )
-            row.charged_micros = await credits.charge_vendor_call(
-                db, caller.user_id, self.domain, capability, result.cost_micros, row.id
+            row.charged_micros = (
+                await credits.charge_vendor_call(
+                    db, caller.user_id, self.domain, capability, result.cost_micros, row.id
+                )
+                if adapter.charges
+                else 0
             )
             if caller.spend is not None:
                 caller.spend.calls += 1

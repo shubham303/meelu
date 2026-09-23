@@ -36,6 +36,13 @@ async def age_billing(site_id, hours):
         )
 
 
+async def make_operator(user_id):
+    async with unit_of_work() as db:
+        await db.execute(
+            text('UPDATE "user" SET is_superuser = true WHERE id = :u'), {"u": user_id}
+        )
+
+
 async def user_id_of(client):
     r = await client.get("/api/auth/me")
     return r.json()["data"]["id"]
@@ -96,6 +103,7 @@ async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(clien
     assert r.json()["data"][0]["status"] == "disabled"
 
     # the failed charge never advanced the clock, so the next sweep retries it
+    await make_operator(user_id)
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 5})
     assert r.status_code == 200, r.text
 

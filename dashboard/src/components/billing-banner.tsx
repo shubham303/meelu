@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { CreditCard, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
 import { api } from "@/lib/use-api";
+import { formatUsd } from "@/lib/utils";
 import {
   billingBlock,
   clearBillingBlock,
@@ -24,7 +25,7 @@ interface SiteBilling {
 }
 
 function usd(value: number | undefined): string | null {
-  return value === undefined ? null : `$${value.toFixed(2)}`;
+  return value === undefined ? null : formatUsd(value);
 }
 
 async function resolved(block: BillingBlock): Promise<boolean> {

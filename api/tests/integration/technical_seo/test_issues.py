@@ -234,5 +234,3 @@ async def test_page_issue_crud(client, email):
 async def test_issue_endpoints_need_a_site(client, email):
     r = await client.get("/api/v1/site/technical-seo/summary")
     assert r.status_code == 401
-
-
