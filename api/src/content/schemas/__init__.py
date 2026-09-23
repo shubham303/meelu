@@ -1,5 +1,4 @@
 from src.content.schemas.channels import (
-    PostingWindow,
     SiteChannelRecord,
     SiteChannelResponse,
     SiteChannelUpdateRequest,
@@ -15,7 +14,6 @@ from src.content.schemas.piece_issues import (
     ContentPieceIssueUpdateRequest,
 )
 from src.content.schemas.pieces import (
-    ContentFreeSlotsResponse,
     ContentPieceCountsResponse,
     ContentPieceCreateRequest,
     ContentPieceDeleteResponse,
@@ -28,7 +26,6 @@ from src.content.schemas.pieces import (
     ContentPieceUpdateRequest,
     PieceCheck,
     PieceMediaResult,
-    TakenSlot,
 )
 from src.content.schemas.unsplash import (
     UnsplashDownloadRequest,
@@ -38,7 +35,6 @@ from src.content.schemas.unsplash import (
 )
 
 __all__ = [
-    "ContentFreeSlotsResponse",
     "ContentPieceCountsResponse",
     "ContentPieceCreateRequest",
     "ContentPieceDeleteResponse",
@@ -61,11 +57,9 @@ __all__ = [
     "PostMediaContent",
     "PostMediaRecord",
     "PostMediaResponse",
-    "PostingWindow",
     "SiteChannelRecord",
     "SiteChannelResponse",
     "SiteChannelUpdateRequest",
-    "TakenSlot",
     "UnsplashDownloadRequest",
     "UnsplashDownloadResponse",
     "UnsplashPhotoResponse",

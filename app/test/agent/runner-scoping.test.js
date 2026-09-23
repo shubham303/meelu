@@ -33,23 +33,23 @@ after(() => {
   llm?.close();
 });
 
-async function turn(message, sessionId) {
+async function turn(message, sessionId, { action = "ask-pages", askPermission = async () => "allow" } = {}) {
   const events = [];
   let sid = sessionId;
   await runner.runAgentTurn(
-    { action: "ask-pages", siteId: "site_test", message, sessionId, form: {} },
+    { action, siteId: "site_test", message, sessionId, form: {} },
     (event, data) => {
       events.push([event, data]);
       if (event === "session") sid = data.sessionId;
     },
-    { cwd, abortController: new AbortController(), askPermission: async () => "allow" },
+    { cwd, abortController: new AbortController(), askPermission },
   );
   const done = events.find(([e]) => e === "done")?.[1];
   return { sessionId: sid, done, events };
 }
 
 const PAGES_TOOLS = ["delete_note", "find_plans", "get_plan", "run_sql", "save_note", "search_page", "update_note"];
-const CONTENT_TOOLS = [...PAGES_TOOLS, "content_create_piece", "content_free_slots", "content_update_piece"].sort();
+const CONTENT_TOOLS = [...PAGES_TOOLS, "content_create_piece", "content_update_piece"].sort();
 
 test("one task does one MCP handshake across three turns, and hides the other desks' tools", async () => {
   llm.script.push({ text: "one" }, { text: "two" }, { text: "three" });
@@ -115,4 +115,22 @@ test("add_desk unhides the desk's tools on the next model call without a new han
   assert.equal(mcp.counts["tools/list"] - before["tools/list"], 1, "new task: one CLI handshake, catalog cached");
   assert.equal(scopeApi.calls.at(-1).desks, "content", "scope refetched with the added desk");
   assert.equal(scopeApi.calls.length, 3);
+});
+
+test("silent writes of an approved job skip the permission prompt", async () => {
+  const asked = [];
+  const askPermission = async ({ tool }) => {
+    asked.push(tool);
+    return "allow";
+  };
+  llm.script.push(
+    { tool: "mcp__meelu__start_seo_job", input: { q: "what should I do" } },
+    { tool: "mcp__meelu__screen_page_suggestions", input: { job_id: "sjob_1" } },
+    { tool: "mcp__meelu__rank_page_suggestions", input: { job_id: "sjob_1" } },
+    { tool: "mcp__meelu__rank_page_suggestions", input: { job_id: "sjob_2" } },
+    { text: "done" },
+  );
+  const res = await turn("what should I do", undefined, { action: "ask-seo", askPermission });
+  assert.equal(res.done.ok, true, res.done.error);
+  assert.deepEqual(asked, ["start_seo_job", "screen_page_suggestions", "rank_page_suggestions"]);
 });

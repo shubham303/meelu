@@ -19,7 +19,7 @@ ARG MEELU_API_URL=http://api:8000
 ENV MEELU_API_URL=$MEELU_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache npm run build
 
 # ---- runner: standalone server only --------------------------------------
 FROM node:22-slim AS runner

@@ -9,6 +9,12 @@ MAX_SAMPLES = 10
 MAX_HOSTS = 50
 MAX_STRINGS = 100
 MIN_STALE_MS = 60_000
+MAX_LINK_URLS = 500
+MAX_HEAD_STRINGS = 10
+MAX_SCHEMA_HASHES = 60
+MAX_IMAGES = 100
+MAX_TEXT_CHARS = 500
+SETTLE_REASONS = ("idle", "timeout")
 
 RENDER_SCOPES = ("sample", "all")
 USER_AGENT_PROFILES = ("googlebot", "generic", "ai_bot")
@@ -54,11 +60,28 @@ def _device(v: Any) -> str:
     return v if v in RENDER_DEVICES else "desktop"
 
 
+MAX_PAGE_LIMIT = 5000
+
+
 class RenderJobOpenRequest(RequestModel):
     trigger: str = "api"
     scope: str = "sample"
     device: str = "desktop"
     user_agent_profile: str = "googlebot"
+    limit: int | None = None
+    url: str | None = None
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def _validate_limit(cls, v: Any) -> int | None:
+        n = _optional_int(v)
+        return None if n is None or n < 1 else min(n, MAX_PAGE_LIMIT)
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def _validate_url(cls, v: Any) -> str | None:
+        text = str(v).strip() if isinstance(v, str) else ""
+        return text if text.startswith(("http://", "https://")) else None
 
     @field_validator("device", mode="before")
     @classmethod
@@ -150,6 +173,61 @@ class PageRenderCreateRequest(RequestModel):
     hidden_internal_links: int | None = None
     viewport_overflow_px: int | None = None
     small_tap_targets: int | None = None
+    status: int | None = None
+    document_bytes: int = 0
+    html_bytes: int = 0
+    settle_reason: str | None = None
+    pending_requests: int = 0
+    pending_samples: list[Any] = Field(default_factory=list)
+    main_frame_navigations: int = 0
+    visible_word_count: int = 0
+    exception_count: int = 0
+    soft404_signal: bool = False
+    service_worker: bool = False
+    internal_link_urls: list[str] = Field(default_factory=list)
+    external_link_hosts: list[str] = Field(default_factory=list)
+    uncrawlable_anchors: int = 0
+    uncrawlable_nav_anchors: int = 0
+    uncrawlable_samples: list[Any] = Field(default_factory=list)
+    hashbang_links: int = 0
+    meta_fragment: bool = False
+    dangling_fragment_links: int = 0
+    load_more_control: bool = False
+    pagination_links: bool = False
+    images: list[Any] = Field(default_factory=list)
+    images_without_src: int = 0
+    images_without_src_above_fold: int = 0
+    shadow_dom_words: int = 0
+    plugin_content: int = 0
+    title_count: int = 0
+    description_count: int = 0
+    canonical_count: int = 0
+    canonical_hrefs: list[str] = Field(default_factory=list)
+    robots_meta_contents: list[str] = Field(default_factory=list)
+    schema_blocks: int = 0
+    schema_invalid_blocks: int = 0
+    schema_hashes: list[str] = Field(default_factory=list)
+    hreflang: dict[str, Any] = Field(default_factory=dict)
+    hreflang_invalid: int = 0
+    social_meta_count: int = 0
+    nosnippet_count: int = 0
+    template_tokens_head: int = 0
+    template_tokens_body: int = 0
+    viewport_meta: str | None = None
+    failed_data_requests: int = 0
+    failed_data_samples: list[Any] = Field(default_factory=list)
+    failed_scripts: int = 0
+    failed_script_samples: list[Any] = Field(default_factory=list)
+    cors_errors: int = 0
+    websocket_used: bool = False
+    mixed_content_active: int = 0
+    mixed_content_passive: int = 0
+    largest_resource_bytes: int = 0
+    largest_resource_url: str | None = None
+    overlay_coverage: float | None = None
+    overlay_sample: str | None = None
+    small_text_ratio: float | None = None
+    text_chars: int | None = None
     html_path: str | None = None
 
     @field_validator("page_id", mode="before")
@@ -232,6 +310,128 @@ class PageRenderCreateRequest(RequestModel):
     def _validate_count(cls, v: Any) -> int:
         return _count(v)
 
+    @field_validator("status", "text_chars", mode="before")
+    @classmethod
+    def _validate_optional_count(cls, v: Any) -> int | None:
+        n = _optional_int(v)
+        return None if n is None or n < 0 else n
+
+    @field_validator("settle_reason", mode="before")
+    @classmethod
+    def _validate_settle_reason(cls, v: Any) -> str | None:
+        return v if v in SETTLE_REASONS else None
+
+    @field_validator("largest_resource_url", "overlay_sample", "viewport_meta", mode="before")
+    @classmethod
+    def _validate_optional_short_text(cls, v: Any) -> str | None:
+        return v[:MAX_TEXT_CHARS] if isinstance(v, str) and v != "" else None
+
+    @field_validator(
+        "soft404_signal",
+        "service_worker",
+        "meta_fragment",
+        "load_more_control",
+        "pagination_links",
+        "websocket_used",
+        mode="before",
+    )
+    @classmethod
+    def _validate_flag(cls, v: Any) -> bool:
+        return v is True
+
+    @field_validator("internal_link_urls", mode="before")
+    @classmethod
+    def _validate_link_urls(cls, v: Any) -> list[str]:
+        return _strings(v, MAX_LINK_URLS)
+
+    @field_validator("external_link_hosts", mode="before")
+    @classmethod
+    def _validate_link_hosts(cls, v: Any) -> list[str]:
+        return _strings(v, MAX_STRINGS)
+
+    @field_validator("canonical_hrefs", "robots_meta_contents", mode="before")
+    @classmethod
+    def _validate_head_strings(cls, v: Any) -> list[str]:
+        return _strings(v, MAX_HEAD_STRINGS)
+
+    @field_validator("schema_hashes", mode="before")
+    @classmethod
+    def _validate_schema_hashes(cls, v: Any) -> list[str]:
+        return _strings(v, MAX_SCHEMA_HASHES)
+
+    @field_validator(
+        "pending_samples",
+        "uncrawlable_samples",
+        "failed_data_samples",
+        "failed_script_samples",
+        mode="before",
+    )
+    @classmethod
+    def _validate_more_samples(cls, v: Any) -> list[Any]:
+        return _samples(v)
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def _validate_images(cls, v: Any) -> list[Any]:
+        if not isinstance(v, list):
+            return []
+        return [i for i in v if isinstance(i, dict) and isinstance(i.get("src"), str)][:MAX_IMAGES]
+
+    @field_validator("hreflang", mode="before")
+    @classmethod
+    def _validate_hreflang(cls, v: Any) -> dict[str, Any]:
+        if not isinstance(v, dict):
+            return {}
+        return {str(k): str(val) for k, val in v.items() if isinstance(val, str)}
+
+    @field_validator("overlay_coverage", "small_text_ratio", mode="before")
+    @classmethod
+    def _validate_ratio(cls, v: Any) -> float | None:
+        if isinstance(v, bool) or v is None:
+            return None
+        try:
+            n = float(v)
+        except (TypeError, ValueError):
+            return None
+        return None if n < 0 else min(n, 1.0)
+
+    @field_validator(
+        "document_bytes",
+        "html_bytes",
+        "pending_requests",
+        "main_frame_navigations",
+        "visible_word_count",
+        "exception_count",
+        "uncrawlable_anchors",
+        "uncrawlable_nav_anchors",
+        "hashbang_links",
+        "dangling_fragment_links",
+        "images_without_src",
+        "images_without_src_above_fold",
+        "shadow_dom_words",
+        "plugin_content",
+        "title_count",
+        "description_count",
+        "canonical_count",
+        "schema_blocks",
+        "schema_invalid_blocks",
+        "hreflang_invalid",
+        "social_meta_count",
+        "nosnippet_count",
+        "template_tokens_head",
+        "template_tokens_body",
+        "failed_data_requests",
+        "failed_scripts",
+        "cors_errors",
+        "mixed_content_active",
+        "mixed_content_passive",
+        "largest_resource_bytes",
+        mode="before",
+    )
+    @classmethod
+    def _validate_more_counts(cls, v: Any) -> int:
+        return _count(v)
+
     def values(self) -> dict[str, Any]:
         return self.model_dump(exclude={"page_id", "device"})
 
@@ -245,6 +445,8 @@ class RenderJobRecord(EntityModel):
     status: str
     trigger: str
     scope: str
+    page_limit: int | None = None
+    page_url: str | None = None
     device: str
     user_agent_profile: str
     started_at: JsDateTime | None = None
@@ -292,6 +494,61 @@ class PageRenderRecord(EntityModel):
     hidden_internal_links: int | None = None
     viewport_overflow_px: int | None = None
     small_tap_targets: int | None = None
+    status: int | None = None
+    document_bytes: int = 0
+    html_bytes: int = 0
+    settle_reason: str | None = None
+    pending_requests: int = 0
+    pending_samples: list[Any] = Field(default_factory=list)
+    main_frame_navigations: int = 0
+    visible_word_count: int = 0
+    exception_count: int = 0
+    soft404_signal: bool = False
+    service_worker: bool = False
+    internal_link_urls: list[str] = Field(default_factory=list)
+    external_link_hosts: list[str] = Field(default_factory=list)
+    uncrawlable_anchors: int = 0
+    uncrawlable_nav_anchors: int = 0
+    uncrawlable_samples: list[Any] = Field(default_factory=list)
+    hashbang_links: int = 0
+    meta_fragment: bool = False
+    dangling_fragment_links: int = 0
+    load_more_control: bool = False
+    pagination_links: bool = False
+    images: list[Any] = Field(default_factory=list)
+    images_without_src: int = 0
+    images_without_src_above_fold: int = 0
+    shadow_dom_words: int = 0
+    plugin_content: int = 0
+    title_count: int = 0
+    description_count: int = 0
+    canonical_count: int = 0
+    canonical_hrefs: list[str] = Field(default_factory=list)
+    robots_meta_contents: list[str] = Field(default_factory=list)
+    schema_blocks: int = 0
+    schema_invalid_blocks: int = 0
+    schema_hashes: list[str] = Field(default_factory=list)
+    hreflang: dict[str, Any] = Field(default_factory=dict)
+    hreflang_invalid: int = 0
+    social_meta_count: int = 0
+    nosnippet_count: int = 0
+    template_tokens_head: int = 0
+    template_tokens_body: int = 0
+    viewport_meta: str | None = None
+    failed_data_requests: int = 0
+    failed_data_samples: list[Any] = Field(default_factory=list)
+    failed_scripts: int = 0
+    failed_script_samples: list[Any] = Field(default_factory=list)
+    cors_errors: int = 0
+    websocket_used: bool = False
+    mixed_content_active: int = 0
+    mixed_content_passive: int = 0
+    largest_resource_bytes: int = 0
+    largest_resource_url: str | None = None
+    overlay_coverage: float | None = None
+    overlay_sample: str | None = None
+    small_text_ratio: float | None = None
+    text_chars: int | None = None
     html_path: str | None = None
     created_at: JsDateTime
     updated_at: JsDateTime
@@ -364,6 +621,8 @@ class RenderJobResponse(EntityModel):
     status: str
     trigger: str
     scope: str
+    page_limit: int | None = None
+    page_url: str | None = None
     device: str
     user_agent_profile: str
     started_at: JsDateTime | None = None

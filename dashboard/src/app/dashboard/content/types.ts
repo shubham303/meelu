@@ -22,34 +22,17 @@ export interface PieceIssue {
 
 export const STATUSES: Array<{ key: PieceStatus; label: string }> = [
   { key: "draft", label: "Draft" },
-  { key: "scheduled", label: "Scheduled" },
-  { key: "posted", label: "Posted" },
-  { key: "failed", label: "Failed" },
   { key: "blocked", label: "Blocked" },
 ];
 
 export const STATUS_TONE: Record<PieceStatus, BadgeTone> = {
   draft: "neutral",
-  scheduled: "accent",
-  posted: "good",
-  failed: "bad",
   blocked: "bad",
 };
 
 export const STATUS_LABEL: Record<PieceStatus, string> = {
   draft: "Draft",
-  scheduled: "Scheduled",
-  posted: "Posted",
-  failed: "Failed",
   blocked: "Blocked",
-};
-
-export const STATUS_BAR: Record<PieceStatus, string> = {
-  draft: "border-l-edge2",
-  scheduled: "border-l-accent",
-  posted: "border-l-good",
-  failed: "border-l-bad",
-  blocked: "border-l-bad",
 };
 
 export const CHANNEL_LABEL: Record<string, string> = {

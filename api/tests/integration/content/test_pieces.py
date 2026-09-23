@@ -1,12 +1,6 @@
 from tests.integration.content.conftest import make_piece
 
 
-async def agent_headers(client, workspace):
-    r = await client.post("/api/v1/keys", json={"name": "agent"})
-    assert r.status_code == 201
-    return {"x-api-key": r.json()["data"]["key"], "x-meelu-site": workspace["id"]}
-
-
 async def test_pieces_crud(client, workspace):
     r = await client.post("/api/v1/content/pieces", json={"channelKey": "website"})
     assert r.status_code == 400
@@ -23,7 +17,6 @@ async def test_pieces_crud(client, workspace):
     assert piece["wordCount"] == 3
     assert piece["bodyMarkdown"] == "one two three"
     assert piece["checks"] == []
-    assert piece["scheduledAt"] is None
     assert piece["createdBy"] == "user"
     assert "userId" not in piece and "seq" not in piece
 
@@ -40,12 +33,6 @@ async def test_pieces_crud(client, workspace):
     assert updated["wordCount"] == 2
     assert updated["status"] == "draft"
 
-    r = await client.patch(f"/api/v1/content/pieces/{piece['id']}", json={"status": "ready"})
-    assert r.status_code == 400
-
-    r = await client.patch(f"/api/v1/content/pieces/{piece['id']}", json={"status": "published"})
-    assert r.status_code == 400
-
     r = await client.get(f"/api/v1/content/pieces/{piece['id']}/markdown")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/markdown")
@@ -59,19 +46,13 @@ async def test_pieces_crud(client, workspace):
 
 async def test_pieces_list_and_counts(client, workspace):
     a = await make_piece(client, title="Alpha grinder", bodyMarkdown="about beans")
-    b = await make_piece(
-        client, title="Beta", channelKey="twitter", scheduledAt="2026-06-01T09:00:00Z"
-    )
+    await make_piece(client, title="Beta", channelKey="twitter")
     r = await client.get("/api/v1/content/pieces")
     rows = r.json()["data"]
     assert r.json()["pagination"]["total"] == 2
     assert [p["title"] for p in rows] == ["Beta", "Alpha grinder"]
     assert "bodyMarkdown" not in rows[0]
-    assert (rows[0]["channelKey"], rows[0]["status"], rows[0]["scheduledAt"]) == (
-        "twitter",
-        "draft",
-        "2026-06-01T09:00:00.000Z",
-    )
+    assert (rows[0]["channelKey"], rows[0]["status"]) == ("twitter", "draft")
 
     r = await client.get("/api/v1/content/pieces?status=draft")
     assert [p["title"] for p in r.json()["data"]] == ["Beta", "Alpha grinder"]
@@ -82,22 +63,13 @@ async def test_pieces_list_and_counts(client, workspace):
     r = await client.get("/api/v1/content/pieces?search=beans")
     assert [p["id"] for p in r.json()["data"]] == [a["id"]]
 
-    r = await client.get("/api/v1/content/pieces?from=2026-06-01T00:00:00Z&to=2026-06-02T00:00:00Z")
-    assert [p["title"] for p in r.json()["data"]] == ["Beta"]
-
     r = await client.get("/api/v1/content/pieces?status=bogus")
     assert r.status_code == 400
     r = await client.get("/api/v1/content/pieces?channel=myspace")
     assert r.status_code == 400
 
     r = await client.get("/api/v1/content/pieces?counts=true")
-    assert r.json()["data"]["byStatus"] == {
-        "draft": 2,
-        "blocked": 0,
-        "scheduled": 0,
-        "posted": 0,
-        "failed": 0,
-    }
+    assert r.json()["data"]["byStatus"] == {"draft": 2, "blocked": 0}
 
 
 async def test_clone_piece(client, workspace):
@@ -166,105 +138,6 @@ async def test_hard_checks_block_and_unblock(client, workspace):
     assert r.json()["data"]["status"] == "blocked"
 
 
-async def test_status_rules_for_agents_and_system(client, workspace):
-    piece = await make_piece(client, title="Rules", channelKey="linkedin")
-    url = f"/api/v1/content/pieces/{piece['id']}"
-    AGENT = await agent_headers(client, workspace)
-
-    r = await client.patch(url, json={"status": "posted"}, headers=AGENT)
-    assert r.status_code == 400
-    assert "Only a person" in r.json()["error"]["message"]
-
-    r = await client.patch(url, json={"status": "scheduled"})
-    assert r.status_code == 400
-
-    r = await client.patch(url, json={"status": "draft"}, headers=AGENT)
-    assert r.status_code == 200
-
-    r = await client.patch(url, json={"status": "posted", "postedUrl": "https://li/1"})
-    assert r.status_code == 200
-    posted = r.json()["data"]
-    assert posted["status"] == "posted"
-    assert posted["postedUrl"] == "https://li/1"
-    assert posted["postedAt"] is not None
-
-    r = await client.patch(url, json={"bodyMarkdown": "rewrite"})
-    assert r.status_code == 400
-    r = await client.patch(url, json={"status": "draft"})
-    assert r.status_code == 400
-
-
-async def test_scheduling_respects_slots_gap_and_windows(client, workspace):
-    await client.put(
-        "/api/v1/content/channels/twitter",
-        json={"minGapHours": 6, "timezone": "UTC"},
-    )
-
-    first = await make_piece(
-        client, title="A", channelKey="twitter", scheduledAt="2026-06-01T09:20:00Z"
-    )
-    assert first["scheduledAt"] == "2026-06-01T09:00:00.000Z"
-
-    r = await client.post(
-        "/api/v1/content/pieces",
-        json={"title": "B", "channelKey": "twitter", "scheduledAt": "2026-06-01T09:00:00Z"},
-    )
-    assert r.status_code == 409
-    assert "already holds" in r.json()["error"]["message"]
-
-    r = await client.post(
-        "/api/v1/content/pieces",
-        json={"title": "B", "channelKey": "twitter", "scheduledAt": "2026-06-01T12:00:00Z"},
-    )
-    assert r.status_code == 409
-    assert "Too close" in r.json()["error"]["message"]
-
-    second = await make_piece(
-        client, title="B", channelKey="twitter", scheduledAt="2026-06-01T16:00:00Z"
-    )
-    assert second["status"] == "draft"
-
-    other = await make_piece(
-        client, title="Elsewhere", channelKey="linkedin", scheduledAt="2026-06-01T09:00:00Z"
-    )
-    assert other["scheduledAt"] == "2026-06-01T09:00:00.000Z"
-
-    r = await client.get(
-        "/api/v1/content/channels/twitter/free-slots?from=2026-06-01T00:00:00Z&to=2026-06-02T00:00:00Z"
-    )
-    assert r.status_code == 200
-    slots = r.json()["data"]
-    assert slots["channelKey"] == "twitter"
-    assert slots["minGapHours"] == 6
-    assert "2026-06-01T09:00:00.000Z" not in slots["free"]
-    assert "2026-06-01T12:00:00.000Z" not in slots["free"]
-    assert "2026-06-01T16:00:00.000Z" not in slots["free"]
-    assert [t["title"] for t in slots["taken"]] == ["A", "B"]
-
-    r = await client.put(
-        "/api/v1/content/channels/twitter",
-        json={"postingWindows": [{"days": [0], "time": "18:00"}, {"days": [0], "time": "23:00"}]},
-    )
-    assert r.status_code == 200
-    r = await client.get(
-        "/api/v1/content/channels/twitter/free-slots?from=2026-06-01T00:00:00Z&to=2026-06-03T00:00:00Z"
-    )
-    assert r.json()["data"]["free"] == ["2026-06-01T23:00:00.000Z"]
-
-    r = await client.get("/api/v1/content/channels/twitter/free-slots?from=x")
-    assert r.status_code == 400
-    r = await client.get(
-        "/api/v1/content/channels/twitter/free-slots?from=2026-06-01T00:00:00Z&to=2026-09-01T00:00:00Z"
-    )
-    assert r.status_code == 400
-
-    await client.put("/api/v1/content/channels/twitter", json={"enabled": False})
-    r = await client.get("/api/v1/content/channels/twitter/free-slots")
-    assert r.status_code == 400
-    r = await client.post("/api/v1/content/pieces", json={"title": "Off", "channelKey": "twitter"})
-    assert r.status_code == 400
-
-
 async def test_piece_issues(client, workspace):
     piece = await make_piece(
         client, title="T", bodyMarkdown="The plant runs three shifts. Hires every quarter."
@@ -327,25 +200,3 @@ async def test_piece_issues(client, workspace):
 
     r = await client.get("/api/v1/content/pieces/cpc_missing/issues")
     assert r.status_code == 404
-
-
-async def test_system_actor_sets_publishing_fields(client, workspace):
-    piece = await make_piece(client, title="Facade", channelKey="linkedin")
-    url = f"/api/v1/content/pieces/{piece['id']}"
-    SYSTEM = {**(await agent_headers(client, workspace)), "x-meelu-actor": "system"}
-
-    r = await client.patch(
-        url, json={"status": "scheduled", "externalPostId": "pp_1"}, headers=SYSTEM
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["data"]["status"] == "scheduled"
-    assert r.json()["data"]["externalPostId"] == "pp_1"
-
-    r = await client.patch(
-        url,
-        json={"status": "failed", "externalPostId": None, "failure": "bad aspect ratio"},
-        headers=SYSTEM,
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["data"]["failure"] == "bad aspect ratio"
-    assert r.json()["data"]["externalPostId"] is None

@@ -25,7 +25,6 @@ const OPENROUTER_MODEL = process.env.MEELU_OPENROUTER_MODEL ?? "";
 const TOKEN = /\{\{(\w+)\}\}/g;
 
 const ACTION_ALIASES = {
-  "outreach-prospects": "run-campaign",
   "analytics-ask": "analyze-data",
 };
 
@@ -52,21 +51,97 @@ function desksServer(offers, onAdd) {
   return createSdkMcpServer({ name: "desks", version: "1.0.0", tools: [addDesk] });
 }
 
-function readerAgent(readToolNames, siteId) {
+const NO_WEB_DESKS = new Set(["site"]);
+
+function webAllowed(scope) {
+  return !NO_WEB_DESKS.has(scope.desk);
+}
+
+const NO_WEB_PROMPT = `
+
+## The open web is off in this task
+WebSearch and WebFetch are not available here and will be refused. Everything
+you need about this website is already in the workspace: every page was
+crawled, split into passages, embedded and classified, and the tools below
+read that corpus faster, cheaper and more completely than fetching a page
+could. Fetching a page would hand you one page's text in your own context;
+the tools reach every page at once and return only what matters. Never say
+you lack a way to read the site, and never send the user to fetch anything.`;
+
+const STRUCTURE_PROMPT = `
+
+## Finding internal links: use the pipeline, not your own reading
+
+The user's message is a strategy for which links to find. This section is how
+you run any strategy. Follow it every time, whatever the strategy says.
+
+Why the tools and not you: the site is thousands of passages. Reading pages
+to spot links yourself covers a handful, spends the whole context, and misses
+every pair you did not think to open. The tools below walk the entire corpus,
+score every pair with the same search and reranker the workspace already
+uses, and store the result as rows the user reviews on the Structure screen.
+Rows are the deliverable, not prose. A link you describe in chat but never
+save does not exist.
+
+Run in this order:
+
+1. start_structure_job with the user's strategy text as the prompt. It hands
+   back the job_id every later call needs and settles old rows first
+   (suggestions whose link now exists become done; suggestions on gone pages
+   become stale).
+2. Pick the pages. Use run_sql over site_pages, site_page_links,
+   site_page_llm_extraction and site_search_daily to select the from set and
+   the to set the strategy describes (page types, inlinks, depth, freshness,
+   rankings). Select only page_id columns you will hand to a generator. Do
+   not read body_text to choose — the generators read the passages.
+3. Generate draft rows with the generator that fits:
+   - propose_unlinked_mentions when the strategy is about a target page that
+     other passages already talk about: give it the target page ids and the
+     phrases a passage would use for each (title, H1, queries it ranks for).
+   - propose_hierarchy_links when the strategy is about the site's skeleton:
+     home to and from hubs and utility pages, hub to hub. Text similarity is
+     useless for these pages, so this tool ignores it and uses URL structure.
+   Every generator skips edges that already exist or already have a row.
+4. screen_link_suggestions with the job_id. A cheap model throws out the
+   clear noes. Pass a question only when the strategy needs a different bar
+   than "would a reader of the source want the target next".
+5. review_link_suggestions with the job_id and the user's strategy as the
+   prompt. A stronger model reads every remaining draft one by one and is the
+   only step that marks a row ready. Do not judge rows yourself; do not skip
+   this step; do not paraphrase the strategy — pass it as the user wrote it,
+   plus any sharpening the strategy itself asked for.
+6. rank_link_suggestions. It scores every open row on the site and cuts each
+   source page to its link budget, weakest first. Run it once, after review.
+7. finish_structure_job with the job_id and COMPLETED, or FAILED if a step
+   could not run. Then tell the user, in a few lines, how many rows are ready
+   on the Structure screen, what was rejected and why in one sentence, and
+   what the strategy could not cover.
+
+Rules that hold for every strategy:
+- Never mark a row done or user_rejected; those are the user's decisions on
+  the Structure screen.
+- Never save a suggestion by hand for a pair you found in chat; route it
+  through a generator so it is deduplicated and scored like every other row.
+- If a tool reports stopped (no provider, no credits), say so and stop the
+  pipeline there rather than improvising the step yourself.
+- Numbers about the site (how many orphans, how many hubs) come from run_sql,
+  never from counting what you read.`;
+
+function readerAgent(readToolNames, siteId, withWeb) {
   return {
     description:
       "Read-only bulk reader. Delegate reading you only need a summary of: many pages or rows, a set of URLs, a list. Brief it precisely; it reads in its own context and returns a dense factual report.",
     prompt: `You are the reader, a read-only subagent inside a Meelu task. The main agent gave you a bulk reading job because the raw detail would crowd its context. Do the reading, then return ONE dense, factual report: what you read, what you found, and the examples and numbers you were asked for. Report facts, not advice. You start fresh and know only your brief. If the brief lacks something you need, say so in your report rather than guess. You hold read tools only. Do not claim to have saved, sent or changed anything. If a tool call fails or a tool is missing, note it in the report and carry on.${sitePrompt(siteId)}`,
-    tools: [...readToolNames, "WebSearch", "WebFetch"],
+    tools: withWeb ? [...readToolNames, "WebSearch", "WebFetch"] : readToolNames,
     maxTurns: READER_MAX_TURNS,
   };
 }
 
-const READER_PROMPT = `
+const readerPrompt = (withWeb) => `
 
 ## Delegating bulk reads
 
-Every task holds a subagent named \`reader\`, launched with the Task tool. It carries this task's read tools plus WebSearch and WebFetch, writes nothing, and reads in its own context. Only its report enters yours. Use it when the next step is a lot of reading you only need conclusions from. Keep single lookups, writes and the judgement in your own hands. Brief it precisely: what to read, what to answer, what examples to bring back. It knows only what you tell it.
+Every task holds a subagent named \`reader\`, launched with the Task tool. It carries this task's read tools${withWeb ? " plus WebSearch and WebFetch" : ""}, writes nothing, and reads in its own context. Only its report enters yours. Use it when the next step is a lot of reading you only need conclusions from. Keep single lookups, writes and the judgement in your own hands. Brief it precisely: what to read, what to answer, what examples to bring back. It knows only what you tell it.
 
 Always launch readers with \`run_in_background: false\`. Nothing can wake you once your turn ends, so you would never see a background reader's report. To fan out, make several Task calls in the same message. Go on once every report is in. Never end your turn while a reader is still running. On a local model the Task tool may be missing; then do the reading yourself.`;
 
@@ -475,13 +550,27 @@ async function buildConfig(session) {
   const catalog = await agentToolCatalog(ENV_DEFAULTS.agentMcpUrl, meeluHeaders);
 
   const writes = scope.writes ?? [];
-  const readOnly = isReadOnly(scope);
   const missingWrites = writes.filter((w) => !catalog.some((t) => t.name === w));
-  if (missingWrites.length > 0) forgetToolCatalog(ENV_DEFAULTS.agentMcpUrl);
-  session.access = deskAccess(catalog, [scope.desk, ...desks], writes);
+  if (missingWrites.length > 0) {
+    forgetToolCatalog(ENV_DEFAULTS.agentMcpUrl);
+    throw new Error(
+      `The agent server does not register ${missingWrites.join(", ")}, which the ${action} task writes with. ` +
+        "Rebuild and restart the agent server so it serves the current tools.",
+    );
+  }
+  const readOnly = isReadOnly(scope);
+  const providerDomains = readOnly ? [] : (scope.providers ?? []);
+  session.access = deskAccess(catalog, [scope.desk, ...desks], writes, providerDomains, scope.silentWrites);
   const readTools = [...session.access.allowed]
     .filter((n) => !writes.includes(n))
     .map((n) => `mcp__meelu__${n}`);
+  const vendorTools = catalog
+    .filter((t) => t.provider !== null && session.access.allowed.has(t.name))
+    .map((t) => t.name);
+  const vendorPrompt =
+    vendorTools.length > 0
+      ? `\n\nVendor-backed tools in this task: ${vendorTools.join(", ")}. Each uncached call spends the workspace's credits; say what you are about to pull before calling one, and prefer one wide call over many narrow ones.`
+      : "";
 
   const {
     servers: extraServers,
@@ -491,7 +580,6 @@ async function buildConfig(session) {
   } = await resolveScopeServers(scope, connectors, siteId, { readOnly });
   const extraNames = Object.keys(extraServers);
 
-  const providerDomains = readOnly ? [] : (scope.providers ?? []);
   const providerServer =
     providers && providerDomains.length > 0
       ? providersMcpServer(providers.facades, {
@@ -503,7 +591,7 @@ async function buildConfig(session) {
   const providerTools = providerServer ? providerServer.allowed : new Set();
   const providerPrompt =
     providerTools.size > 0
-      ? `\n\nProvider tools in this task, using the user's own accounts: ${[...providerTools].join(", ")}. Each call may spend their vendor budget or publish for them. Say what you are about to do before calling one.`
+      ? `\n\nLocal provider tools in this task: ${[...providerTools].join(", ")}. Say what you are about to do before calling one.`
       : "";
 
   const deskOffers = scope.desks ?? [];
@@ -515,7 +603,13 @@ async function buildConfig(session) {
       ...(params ?? {}),
       desks: [...desks].join(","),
     });
-    session.access = deskAccess(catalog, [scope.desk, ...desks], merged.writes ?? []);
+    session.access = deskAccess(
+      catalog,
+      [scope.desk, ...desks],
+      merged.writes ?? [],
+      readOnly ? [] : (merged.providers ?? []),
+      merged.silentWrites,
+    );
     await session.q.applyFlagSettings({ permissions: { deny: session.access.hidden } });
     return offer?.brief ?? `The ${desk} desk is loaded.`;
   });
@@ -527,8 +621,9 @@ async function buildConfig(session) {
         ? await serverLimits(gateway.baseUrl, gateway.apiKey)
         : null;
 
+  const withWeb = webAllowed(scope);
   const agents = {
-    reader: readerAgent(readTools, siteId),
+    reader: readerAgent(readTools, siteId, withWeb),
     ...Object.fromEntries(
       Object.entries(scope.subagents ?? {}).map(([name, def]) => [
         name,
@@ -549,8 +644,7 @@ async function buildConfig(session) {
       (addDeskServer && toolName === "mcp__desks__add_desk") ||
       server !== undefined ||
       providerTool ||
-      toolName === "WebSearch" ||
-      toolName === "WebFetch" ||
+      (withWeb && (toolName === "WebSearch" || toolName === "WebFetch")) ||
       toolName === "Agent" ||
       toolName === "Task";
     if (!inScope) {
@@ -592,6 +686,12 @@ async function buildConfig(session) {
       return { behavior: "allow", updatedInput: input };
     }
 
+    const silent = session.access.silentWrites ?? new Set();
+    const jobId = typeof input?.job_id === "string" ? input.job_id : null;
+    if (!providerTool && silent.has(short) && jobId && session.approvedJobs.has(jobId)) {
+      return { behavior: "allow", updatedInput: input };
+    }
+
     const decision = await askPermission({ tool: short, fullName: toolName, input });
     if (decision === "deny") {
       return {
@@ -599,6 +699,7 @@ async function buildConfig(session) {
         message: `The user declined ${short}. Do not try it again. Say what you were going to do and stop.`,
       };
     }
+    if (jobId) session.approvedJobs.add(jobId);
     return { behavior: "allow", updatedInput: input };
   };
 
@@ -610,12 +711,14 @@ async function buildConfig(session) {
     limits,
     writes,
     readOnly,
+    tools: withWeb ? ["WebSearch", "WebFetch", "Agent", "Task"] : ["Agent", "Task"],
     systemPrompt:
       scope.systemPrompt +
-      WEB_TOOLS_PROMPT +
-      READER_PROMPT +
+      (withWeb ? WEB_TOOLS_PROMPT : NO_WEB_PROMPT + STRUCTURE_PROMPT) +
+      readerPrompt(withWeb) +
       promptSuffix +
       providerPrompt +
+      vendorPrompt +
       sitePrompt(siteId) +
       writesPrompt(writes, readOnly) +
       (readOnly ? readOnlyPrompt() : "") +
@@ -644,10 +747,10 @@ async function buildConfig(session) {
   };
 }
 
-function deskAccess(catalog, desks, writes) {
-  const allowed = allowedToolNames(catalog, desks.filter(Boolean), writes);
+function deskAccess(catalog, desks, writes, providers = [], silentWrites = []) {
+  const allowed = allowedToolNames(catalog, desks.filter(Boolean), writes, providers);
   const hidden = catalog.filter((t) => !allowed.has(t.name)).map((t) => `mcp__meelu__${t.name}`);
-  return { allowed, hidden, writes };
+  return { allowed, hidden, writes, silentWrites: new Set(silentWrites ?? []) };
 }
 
 function userMessage(message, form, files, cwd, saveAttachments) {
@@ -678,7 +781,8 @@ class LiveSession {
     this.params = params;
     this.options = options;
     this.desks = new Set();
-    this.access = { allowed: new Set(), hidden: [], writes: [] };
+    this.access = { allowed: new Set(), hidden: [], writes: [], silentWrites: new Set() };
+    this.approvedJobs = new Set();
     this.sessionId = null;
     this.q = null;
     this.input = null;
@@ -708,7 +812,7 @@ class LiveSession {
         ...(resumeId ? { resume: resumeId } : {}),
         systemPrompt: config.systemPrompt,
         mcpServers: config.mcpServers,
-        tools: ["WebSearch", "WebFetch", "Agent", "Task"],
+        tools: config.tools,
         agents: config.agents,
         allowedTools: [],
         canUseTool: config.canUseTool,

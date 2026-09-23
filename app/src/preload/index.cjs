@@ -25,26 +25,12 @@ const bridge = {
     ipcRenderer.on("crawl:event", listener);
     return () => ipcRenderer.removeListener("crawl:event", listener);
   },
-  analyzeSite: (payload) => ipcRenderer.invoke("site:analyze", payload),
-  stopAnalysis: (jobId) => ipcRenderer.invoke("site:analyzeStop", { jobId }),
-  onAnalysisEvent: (callback) => {
-    const listener = (_event, message) => callback(message);
-    ipcRenderer.on("analysis:event", listener);
-    return () => ipcRenderer.removeListener("analysis:event", listener);
-  },
   renderSite: (payload) => ipcRenderer.invoke("site:render", payload),
   stopRender: (jobId) => ipcRenderer.invoke("site:renderStop", { jobId }),
   onRenderEvent: (callback) => {
     const listener = (_event, message) => callback(message);
     ipcRenderer.on("render:event", listener);
     return () => ipcRenderer.removeListener("render:event", listener);
-  },
-  checkIssues: (payload) => ipcRenderer.invoke("site:issueCheck", payload),
-  stopIssueCheck: (siteId) => ipcRenderer.invoke("site:issueCheckStop", { siteId }),
-  onIssueCheckEvent: (callback) => {
-    const listener = (_event, message) => callback(message);
-    ipcRenderer.on("issue-check:event", listener);
-    return () => ipcRenderer.removeListener("issue-check:event", listener);
   },
   abort: (turnId) => ipcRenderer.invoke("agent:abort", turnId),
   sessionUsage: () => ipcRenderer.invoke("usage:session"),
@@ -53,24 +39,27 @@ const bridge = {
   getLlmConfig: () => ipcRenderer.invoke("llm:get"),
   setLlmConfig: (cfg) => ipcRenderer.invoke("llm:set", cfg),
   getConnectors: () => ipcRenderer.invoke("connectors:list"),
-  providersCatalog: () => ipcRenderer.invoke("providers:catalog"),
-  providersStatus: () => ipcRenderer.invoke("providers:status"),
-  setProviderDefault: (domain, providerId) =>
-    ipcRenderer.invoke("providers:setDefault", { domain, providerId }),
-  providerCall: (tool, input) => ipcRenderer.invoke("providers:call", { tool, input }),
   setConnector: (provider, values, secretKeys) =>
     ipcRenderer.invoke("connectors:set", provider, values, secretKeys),
   removeConnector: (provider) => ipcRenderer.invoke("connectors:remove", provider),
   connectGsc: () => ipcRenderer.invoke("connectors:connectGsc"),
   connectGa4: () => ipcRenderer.invoke("connectors:connectGa4"),
-  getMailboxAccounts: () => ipcRenderer.invoke("mailbox:accounts"),
-  connectMailbox: (values, secretKeys) =>
-    ipcRenderer.invoke("mailbox:connect", { values, secretKeys }),
-  forgetMailbox: (accountId) => ipcRenderer.invoke("mailbox:forget", { accountId }),
-  mailboxList: (params) => ipcRenderer.invoke("mailbox:list", params),
-  mailboxRead: (params) => ipcRenderer.invoke("mailbox:read", params),
-  mailboxSyncProspects: (params) => ipcRenderer.invoke("mailbox:syncProspects", params),
-  mailboxSend: (params) => ipcRenderer.invoke("mailbox:send", params),
+  socialSignalsSearch: (payload) => ipcRenderer.invoke("social-signals:search", payload),
+  socialSignalsStop: (jobId) => ipcRenderer.invoke("social-signals:stop", { jobId }),
+  socialSignalsPlatforms: () => ipcRenderer.invoke("social-signals:platforms"),
+  onSocialSignalsEvent: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on("social-signals:event", listener);
+    return () => ipcRenderer.removeListener("social-signals:event", listener);
+  },
+  leadsRun: (payload) => ipcRenderer.invoke("leads:run", payload),
+  leadsStop: (jobId) => ipcRenderer.invoke("leads:stop", { jobId }),
+  prospectSources: () => ipcRenderer.invoke("leads:sources"),
+  onLeadsEvent: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on("leads:event", listener);
+    return () => ipcRenderer.removeListener("leads:event", listener);
+  },
   analyticsSaveSource: (params) => ipcRenderer.invoke("analytics:saveSource", params),
   analyticsCheckSession: (params) => ipcRenderer.invoke("analytics:checkSession", params),
   analyticsResolvePaths: (params) => ipcRenderer.invoke("analytics:resolvePaths", params),

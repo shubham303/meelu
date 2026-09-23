@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   FileText,
+  Network,
   Search as SearchIcon,
   ShieldCheck,
   type LucideIcon,
@@ -20,14 +21,12 @@ import {
 } from "@/components/ui";
 import { useApi, useCurrentSite } from "@/lib/use-api";
 import { formatRelative } from "@/lib/utils";
-import { AnalyseButton, AnalysisSummary } from "./analysis";
 import { CrawlButton, CrawlNotes } from "./crawl-button";
 import { CrawlProgress } from "./crawl-progress";
 import { SiteRecordSection } from "./record-section";
 import { SiteAskButton } from "./site-ask";
 import { useCrawl } from "./tracked";
-import { useAnalysis } from "./tracked-analysis";
-import type { SiteProfile, SiteIssueSummary } from "@/lib/types";
+import type { SiteDiscovery, SiteProfile, SiteIssueSummary } from "@/lib/types";
 import * as chips from "@/features/prompt-chips/site";
 
 interface Stats {
@@ -62,7 +61,6 @@ export default function SiteDeskPage() {
   };
 
   const crawl = useCrawl(siteId, reload);
-  const analysis = useAnalysis(siteId);
 
   const live = stats ? stats.pages - stats.gone : 0;
   const sitemapListed = stats?.sitemapUrlCount ?? 0;
@@ -79,7 +77,6 @@ export default function SiteDeskPage() {
         }
         actions={
           <div className="flex items-center gap-2">
-            <AnalyseButton analysis={analysis} />
             <CrawlButton crawl={crawl} />
             <SiteAskButton
               title="Ask — Site"
@@ -94,7 +91,6 @@ export default function SiteDeskPage() {
       <div className="space-y-4">
         <CrawlProgress crawl={crawl} />
         <CrawlNotes crawl={crawl} />
-        <AnalysisSummary analysis={analysis} />
 
         {stats && !stats.pages && (
           <EmptyState
@@ -187,6 +183,8 @@ function Sections({ pages }: { pages: number }) {
   const { data: summary } = useApi<SiteIssueSummary>("/api/v1/site/technical-seo/summary");
   const { data: search } = useApi<SearchSummary>("/api/v1/site/search-data");
   const { data: traffic } = useApi<TrafficSummary>("/api/v1/site/traffic");
+  const { data: discovery } = useApi<SiteDiscovery>("/api/v1/site/pages/discovery");
+  const blocked = (discovery?.orphans ?? 0) + (discovery?.unreachable ?? 0) + (discovery?.deep ?? 0);
   const open = (summary?.site.open ?? 0) + (summary?.pages.open ?? 0);
   const rejected = (summary?.site.rejected ?? 0) + (summary?.pages.rejected ?? 0);
 
@@ -199,6 +197,19 @@ function Sections({ pages }: { pages: number }) {
         blurb="Every page the crawl has read, and what the passages inside them say."
       >
         {pages > 0 && <Badge tone="neutral">{pages} pages</Badge>}
+      </SectionCard>
+
+      <SectionCard
+        href="/dashboard/site/structure"
+        icon={Network}
+        title="Structure"
+        blurb="How pages are reached from the home page — orphans, unreachable pages, and pages buried too deep."
+      >
+        {discovery && discovery.live > 0 && (
+          <Badge tone={blocked > 0 ? "warn" : "good"}>
+            {blocked > 0 ? `${blocked} hard to reach` : "all reachable"}
+          </Badge>
+        )}
       </SectionCard>
 
       <SectionCard

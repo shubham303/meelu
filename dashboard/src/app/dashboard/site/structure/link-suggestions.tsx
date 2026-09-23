@@ -1,0 +1,376 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Link2,
+  RotateCcw,
+  Search as SearchIcon,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Badge, Button, ConfirmDelete, EmptyState, Select, Spinner, Tabs, type BadgeTone } from "@/components/ui";
+import { api, useApi, usePagedApi } from "@/lib/use-api";
+import { cn, formatRelative } from "@/lib/utils";
+import {
+  LINK_SUGGESTION_ACTIONS,
+  type LinkSuggestion,
+  type LinkSuggestionAction,
+  type LinkSuggestionState,
+  type LinkSuggestionSummary,
+} from "@/lib/types";
+
+const PAGE_SIZE = 50;
+
+type TabState = Exclude<LinkSuggestionState, "draft">;
+
+const STATE_LABEL: Record<TabState, string> = {
+  ready: "Ready",
+  done: "Done",
+  user_rejected: "Turned down",
+  llm_rejected: "Screened out",
+  stale: "Stale",
+};
+
+const ACTION_LABEL: Record<LinkSuggestionAction, string> = {
+  create: "Add link",
+  delete: "Remove link",
+  edit: "Change link",
+};
+
+const ACTION_TONE: Record<LinkSuggestionAction, BadgeTone> = {
+  create: "good",
+  delete: "bad",
+  edit: "accent",
+};
+
+const EMPTY: Record<TabState, string> = {
+  ready: "No link suggestions ready. Ask the agent to find internal links worth adding, and they land here.",
+  done: "Nothing marked done yet.",
+  user_rejected: "Nothing turned down yet.",
+  llm_rejected: "The agent has not screened anything out.",
+  stale: "No suggestion has gone stale. One does when either page leaves the crawl.",
+};
+
+const EMPTY_SUMMARY: LinkSuggestionSummary = {
+  draft: 0,
+  ready: 0,
+  llm_rejected: 0,
+  user_rejected: 0,
+  done: 0,
+  stale: 0,
+};
+
+export function LinkSuggestions() {
+  const [state, setState] = useState<TabState>("ready");
+  const [action, setAction] = useState<LinkSuggestionAction | "">("");
+  const [q, setQ] = useState("");
+  const [needle, setNeedle] = useState("");
+  const [page, setPage] = useState(1);
+
+  const { data: summary, refresh: refreshSummary } = useApi<LinkSuggestionSummary>(
+    "/api/v1/site/structure/link-suggestions/summary",
+  );
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setNeedle(q.trim());
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const pickState = (next: TabState) => {
+    setState(next);
+    setPage(1);
+  };
+  const pickAction = (next: LinkSuggestionAction | "") => {
+    setAction(next);
+    setPage(1);
+  };
+
+  const path = useMemo(() => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE), state });
+    if (action) params.set("action", action);
+    if (needle) params.set("url", needle);
+    return `/api/v1/site/structure/link-suggestions?${params}`;
+  }, [page, state, action, needle]);
+
+  const { data: paged, loading, error, refresh } = usePagedApi<LinkSuggestion>(path);
+  const rows = paged?.data ?? null;
+  const pagination = paged?.pagination ?? null;
+
+  const reload = useCallback(() => {
+    void refresh();
+    void refreshSummary();
+  }, [refresh, refreshSummary]);
+
+  const counts = summary ?? EMPTY_SUMMARY;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const nothingAtAll = summary !== null && total === 0;
+
+  return (
+    <div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-display text-lg text-ink">Link suggestions</h2>
+        <span className="text-xs text-faint">
+          Internal links the agent proposes. You make the change on the site, then mark it done.
+        </span>
+      </div>
+
+      {counts.draft > 0 && (
+        <p className="mb-3 text-xs text-sub">
+          {counts.draft} suggestion{counts.draft === 1 ? "" : "s"} still being screened by the
+          agent. Only the ones that pass show here.
+        </p>
+      )}
+
+      {nothingAtAll ? (
+        <EmptyState
+          icon={Link2}
+          title="No link suggestions yet"
+          hint="Ask the agent which pages deserve a link from where. Each suggestion that passes its screening shows up here for you to act on."
+        />
+      ) : (
+        <>
+          <Tabs
+            active={state}
+            onChange={(k) => pickState(k as TabState)}
+            tabs={(Object.keys(STATE_LABEL) as TabState[]).map((k) => ({
+              key: k,
+              label: STATE_LABEL[k],
+              count: counts[k],
+            }))}
+          />
+
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[220px] flex-1">
+              <SearchIcon size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Filter by URL"
+                className="w-full rounded-lg border border-edge2 bg-panel2 py-1.5 pl-8 pr-3 text-xs text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+              />
+            </div>
+            <Select
+              value={action}
+              onChange={(e) => pickAction(e.target.value as LinkSuggestionAction | "")}
+              className="w-auto text-xs"
+            >
+              <option value="">Any action</option>
+              {LINK_SUGGESTION_ACTIONS.map((a) => (
+                <option key={a} value={a}>
+                  {ACTION_LABEL[a]}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {error && <p className="text-sm text-bad">{error}</p>}
+          {loading && rows === null && !error && (
+            <div className="flex justify-center py-10">
+              <Spinner />
+            </div>
+          )}
+          {rows !== null && rows.length === 0 && (
+            <p className="text-sm text-sub">
+              {q || action ? "Nothing matches these filters." : EMPTY[state]}
+            </p>
+          )}
+          {rows !== null && rows.length > 0 && (
+            <div className="divide-y divide-edge overflow-hidden rounded-2xl border border-edge bg-panel">
+              {rows.map((row) => (
+                <SuggestionRow key={row.id} row={row} onChanged={reload} />
+              ))}
+            </div>
+          )}
+          {pagination && pagination.total_pages > 1 && (
+            <div className="mt-3 flex items-center justify-between text-xs text-sub">
+              <span>
+                Page {pagination.page} of {pagination.total_pages} · {pagination.total} suggestions
+              </span>
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!pagination.has_prev}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!pagination.has_next}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const move = async (to: LinkSuggestionState) => {
+    setBusy(true);
+    try {
+      await api(`/api/v1/site/structure/link-suggestions/${row.id}`, {
+        method: "PATCH",
+        body: { state: to },
+      });
+      onChanged();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    await api(`/api/v1/site/structure/link-suggestions/${row.id}`, { method: "DELETE" });
+    onChanged();
+  };
+
+  const toggle = () => {
+    if (window.getSelection()?.toString()) return;
+    setExpanded((v) => !v);
+  };
+
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  return (
+    <div className="select-text">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={toggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggle();
+          }
+        }}
+        className="flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors hover:bg-panel2/50"
+      >
+        <span className="mt-1 shrink-0 text-sub">
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </span>
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <Badge tone={ACTION_TONE[row.action]}>{ACTION_LABEL[row.action]}</Badge>
+            <PageLink url={row.fromUrl ?? row.fromPageId} />
+            <ArrowRight size={13} className="shrink-0 text-faint" />
+            <PageLink url={row.toUrl ?? row.toPageId} />
+          </div>
+          <p className={cn("text-[13px] leading-relaxed text-ink", !expanded && "line-clamp-2")}>
+            {row.suggestion}
+          </p>
+          <div className="flex flex-wrap items-center gap-2.5 text-xs text-faint">
+            {row.fromChunkHeading && <span className="truncate">in “{row.fromChunkHeading}”</span>}
+            <span>{formatRelative(row.createdAt)}</span>
+            {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
+            {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
+            {row.state === "stale" && <Badge tone="warn">Stale</Badge>}
+            {row.state === "done" && <Badge tone="good">Done</Badge>}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1" onClick={stop} onKeyDown={stop}>
+          {row.state === "ready" && (
+            <>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => move("done")}>
+                <Check size={13} /> Done
+              </Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
+                <X size={13} /> Turn down
+              </Button>
+            </>
+          )}
+          {row.state !== "ready" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("ready")}>
+              <RotateCcw size={13} /> Reopen
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => setDeleting(true)}
+            title="Delete this suggestion for good"
+          >
+            <Trash2 size={13} />
+          </Button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="grid gap-x-6 gap-y-1 px-4 pb-4 pl-[42px] text-xs sm:grid-cols-[auto_1fr]">
+          <span className="text-faint">From</span>
+          <PageLink url={row.fromUrl ?? row.fromPageId} />
+          <span className="text-faint">To</span>
+          <PageLink url={row.toUrl ?? row.toPageId} />
+          <span className="text-faint">Where</span>
+          <span className="text-sub">
+            {row.fromChunkHeading
+              ? `Passage ${row.fromChunkOrdinal ?? "?"} — ${row.fromChunkHeading}`
+              : row.fromChunkId
+                ? `Passage ${row.fromChunkOrdinal ?? "?"}`
+                : "No passage pinned; anywhere in the body copy."}
+          </span>
+          {row.confidence !== null && row.confidence !== undefined && (
+            <>
+              <span className="text-faint">Screen</span>
+              <span className="text-sub">passed at {Math.round(row.confidence * 100)}% confidence</span>
+            </>
+          )}
+          {row.score !== null && row.score !== undefined && (
+            <>
+              <span className="text-faint">Rank</span>
+              <span className="text-sub">{row.score.toFixed(2)}</span>
+            </>
+          )}
+          {row.searchScore !== null && row.searchScore !== undefined && (
+            <>
+              <span className="text-faint">Match</span>
+              <span className="text-sub">{row.searchScore.toFixed(2)}</span>
+            </>
+          )}
+        </div>
+      )}
+
+      <ConfirmDelete
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        onConfirm={remove}
+        what="this link suggestion"
+      />
+    </div>
+  );
+}
+
+function PageLink({ url }: { url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="inline-flex min-w-0 max-w-full items-center gap-1 truncate font-mono text-xs text-sub hover:text-accent"
+    >
+      <span className="truncate">{url}</span>
+      <ExternalLink size={11} className="shrink-0 text-faint" />
+    </a>
+  );
+}

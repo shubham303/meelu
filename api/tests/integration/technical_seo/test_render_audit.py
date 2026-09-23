@@ -121,6 +121,7 @@ def renders(pages: dict[str, str]):
         {
             "page_id": pages[f"{ORIGIN}/redirects"],
             "final_url": f"{ORIGIN}/elsewhere",
+            "main_frame_navigations": 1,
             "title": "Moved",
             "word_count": 500,
             "canonical": f"{ORIGIN}/elsewhere",
@@ -375,3 +376,346 @@ async def test_site_is_flagged_when_mobile_head_differs_from_desktop(client, ema
 
     r = await client.get("/api/v1/site/technical-seo/issues", params={"type": "mobile"})
     assert [i["kind"] for i in r.json()["data"]] == ["mobile-differs-from-desktop"]
+
+
+CLEAN_V2: dict[str, Any] = {
+    "settle_reason": "idle",
+    "status": 200,
+    "title": "A perfectly ordinary title for testing",
+    "meta_description": "A description long enough to sit inside the limits the checks apply.",
+    "h1": ["Heading"],
+    "word_count": 500,
+    "visible_word_count": 500,
+    "internal_links": 1,
+    "internal_link_urls": [f"{ORIGIN}/"],
+    "schema_types": ["WebPage"],
+    "schema_hashes": ["abc123"],
+    "canonical_count": 1,
+    "title_count": 1,
+    "description_count": 1,
+    "viewport_meta": "width=device-width, initial-scale=1",
+}
+
+
+def v2_row(pages, url, device, **over):
+    return {
+        **CLEAN_V2,
+        "page_id": pages[url],
+        "device": device,
+        "canonical": url,
+        "canonical_hrefs": [url],
+        "final_url": url,
+        **over,
+    }
+
+
+SOFT_OVERRIDES: dict[str, Any] = {
+    "soft404_signal": True,
+    "visible_word_count": 20,
+    "h1": [],
+    "exception_count": 1,
+    "word_count": 50,
+    "internal_links": 0,
+    "internal_link_urls": [],
+    "uncrawlable_nav_anchors": 1,
+    "hashbang_links": 1,
+    "dangling_fragment_links": 5,
+    "main_frame_navigations": 0,
+    "load_more_control": True,
+    "pagination_links": False,
+    "images_without_src_above_fold": 1,
+    "shadow_dom_words": 200,
+    "service_worker": True,
+}
+
+SOFT_KINDS = {
+    "soft-404-after-render": "p0",
+    "rendered-body-empty": "p0",
+    "render-exception-with-thin-content": "p0",
+    "content-lost-after-render": "p1",
+    "links-lost-after-render": "p1",
+    "uncrawlable-anchors-after-render": "p1",
+    "old-ajax-crawling-scheme": "p1",
+    "dangling-fragment-links": "p2",
+    "url-changed-by-history-api": "p1",
+    "interaction-gated-content": "p2",
+    "images-without-src-after-render": "p1",
+    "shadow-dom-content-unslotted": "p2",
+    "service-worker-registered": "p3",
+}
+
+HEALTH_OVERRIDES: dict[str, Any] = {
+    "failed_data_requests": 1,
+    "failed_scripts": 1,
+    "cors_errors": 1,
+    "settle_reason": "timeout",
+    "pending_requests": 3,
+    "websocket_used": True,
+    "mixed_content_active": 1,
+    "mixed_content_passive": 1,
+    "document_bytes": 3_000_000,
+    "largest_resource_bytes": 3_000_000,
+    "html_bytes": 3_000_000,
+    "overlay_coverage": 0.6,
+}
+
+HEALTH_KINDS = {
+    "failed-data-request": "p1",
+    "failed-first-party-script": "p1",
+    "cors-blocked-request": "p1",
+    "network-never-idle": "p2",
+    "websocket-transport-used": "p2",
+    "mixed-content-active": "p1",
+    "mixed-content-passive": "p3",
+    "document-over-2mb": "p0",
+    "resource-over-2mb": "p1",
+    "rendered-html-over-2mb": "p1",
+}
+
+META_OVERRIDES: dict[str, Any] = {
+    "schema_types": ["Product"],
+    "schema_hashes": ["dup", "dup"],
+    "schema_invalid_blocks": 1,
+    "canonical": "/relative",
+    "canonical_count": 2,
+    "robots_meta_contents": ["index, follow", "noindex"],
+    "robots_directives": "nofollow",
+    "title": "Changed by a script",
+    "meta_description": "A different description written by a script.",
+    "h1": ["Other heading"],
+    "title_count": 2,
+    "description_count": 2,
+    "hreflang_invalid": 1,
+    "template_tokens_head": 1,
+    "template_tokens_body": 3,
+    "images": [{"src": f"{ORIGIN}/injected.png"}],
+    "external_link_hosts": [f"w{n}.example.org" for n in range(5)],
+    "plugin_content": 1,
+}
+
+META_KINDS = {
+    "schema-changed-by-js": "p1",
+    "schema-duplicated-after-render": "p2",
+    "schema-invalid-after-render": "p1",
+    "canonical-conflict-after-render": "p0",
+    "canonical-invalid-after-render": "p1",
+    "robots-directives-conflict-after-render": "p1",
+    "nofollow-changed-by-js": "p1",
+    "title-modified-by-js": "p1",
+    "meta-description-modified-by-js": "p2",
+    "h1-modified-by-js": "p2",
+    "title-duplicated-after-render": "p2",
+    "description-duplicated-after-render": "p2",
+    "hreflang-changed-by-js": "p2",
+    "hreflang-invalid-after-render": "p2",
+    "unrendered-template-tokens": "p1",
+    "unrendered-template-tokens-body": "p2",
+    "js-injected-images-missing-alt": "p2",
+    "external-links-injected-by-js": "p3",
+    "plugin-content-after-render": "p3",
+}
+
+PARITY_MOBILE_KINDS = {
+    "mobile-status-differs-from-desktop": "p0",
+    "mobile-final-url-differs-from-desktop": "p1",
+    "viewport-meta-missing": "p1",
+    "mobile-intrusive-overlay": "p1",
+    "mobile-illegible-text": "p2",
+    "mobile-word-count-drop": "p1",
+    "mobile-description-differs-from-desktop": "p1",
+    "mobile-h1-differs-from-desktop": "p2",
+    "mobile-schema-differs-from-desktop": "p1",
+    "mobile-image-alt-differs": "p3",
+}
+
+
+async def test_v2_measurement_rules(client, email):
+    await signup(client, email)
+    user_id = await user_id_of(email)
+    r = await client.post("/api/v1/sites", json={"domain": "spa.example.com", "name": "SPA"})
+    site = r.json()["data"]
+    now = datetime.now(UTC)
+    await set_site_facts(
+        site["id"],
+        robots_txt="User-agent: *\nSitemap: https://spa.example.com/sitemap.xml\n",
+        robots_status=200,
+        robots_fetched_at=now,
+        last_crawled_at=now,
+        sitemap_urls=[f"{ORIGIN}/sitemap.xml"],
+        sitemap_url_count=1,
+        sitemap_at_root=True,
+    )
+    clean, soft, health, meta, meta2, parity = (
+        f"{ORIGIN}/clean",
+        f"{ORIGIN}/soft",
+        f"{ORIGIN}/health",
+        f"{ORIGIN}/meta",
+        f"{ORIGIN}/meta2",
+        f"{ORIGIN}/parity",
+    )
+    pages = await seed_pages(
+        site["id"],
+        user_id,
+        [
+            page("/clean"),
+            page("/soft"),
+            page("/health"),
+            page("/meta", hreflang={}),
+            page("/meta2", meta_description=None),
+            page("/parity"),
+        ],
+    )
+    shared = {"src": f"{ORIGIN}/hero.png"}
+    rows = [
+        v2_row(pages, clean, "desktop"),
+        v2_row(pages, clean, "mobile"),
+        v2_row(pages, soft, "desktop", final_url=f"{ORIGIN}/soft-moved", **SOFT_OVERRIDES),
+        v2_row(pages, soft, "mobile", final_url=f"{ORIGIN}/soft-moved", **SOFT_OVERRIDES),
+        v2_row(pages, health, "desktop", **HEALTH_OVERRIDES),
+        v2_row(
+            pages,
+            meta,
+            "desktop",
+            canonical_hrefs=[meta, f"{ORIGIN}/other"],
+            hreflang={"en": meta},
+            **META_OVERRIDES,
+        ),
+        v2_row(pages, meta, "mobile", viewport_meta="width=device-width, user-scalable=no"),
+        v2_row(
+            pages,
+            meta2,
+            "desktop",
+            canonical_count=2,
+            canonical_hrefs=[meta2, meta2],
+            meta_description="Only after scripts run.",
+        ),
+        v2_row(pages, parity, "desktop", images=[{**shared, "alt": "Hero"}]),
+        v2_row(
+            pages,
+            parity,
+            "mobile",
+            status=404,
+            final_url=f"{ORIGIN}/m/parity",
+            viewport_meta=None,
+            overlay_coverage=0.6,
+            small_text_ratio=0.5,
+            text_chars=300,
+            visible_word_count=100,
+            meta_description="Phone description.",
+            h1=["Phone heading"],
+            schema_types=["Other"],
+            images=[shared],
+        ),
+    ]
+    await seed_renders(site["id"], user_id, rows)
+
+    r = await client.post("/api/v1/site/technical-seo/run-audit", json={})
+    assert r.status_code == 201, r.text
+    groups = by_kind(r.json()["data"]["openPageIssues"])
+
+    def expect(kind, severity, url, issue_type):
+        assert kind in groups, f"{kind} missing from {sorted(groups)}"
+        assert groups[kind]["severity"] == severity, kind
+        assert groups[kind]["issueType"] == issue_type, kind
+        assert url in groups[kind]["examples"], (kind, groups[kind]["examples"])
+
+    for kind, severity in SOFT_KINDS.items():
+        expect(kind, severity, soft, "desktop")
+        expect(f"mobile-{kind}", severity, soft, "mobile")
+    for kind, severity in HEALTH_KINDS.items():
+        expect(kind, severity, health, "desktop")
+    expect("intrusive-overlay", "p2", health, "desktop")
+    for kind, severity in META_KINDS.items():
+        expect(kind, severity, meta, "desktop")
+    expect("canonical-repeated-after-render", "p2", meta2, "desktop")
+    expect("meta-description-only-after-js", "p2", meta2, "desktop")
+    expect("viewport-meta-restrictive", "p2", meta, "mobile")
+    for kind, severity in PARITY_MOBILE_KINDS.items():
+        expect(kind, severity, parity, "mobile")
+
+    assert "client-side-redirect" not in groups
+    from src.technical_seo.rules.render import V2_PAGE_RULES
+
+    v2_kinds = {rule.kind for rule in V2_PAGE_RULES}
+    for kind, group in groups.items():
+        if kind in v2_kinds:
+            assert clean not in group["examples"], (kind, group["examples"])
+
+
+async def test_raw_counterpart_rules_compare_crawl_and_render(client, email):
+    from sqlalchemy import update
+
+    from src.core.database import SessionLocal
+    from src.site_pages.models.site_page import SitePage
+
+    site, user_id, pages = await prepare(client, email)
+    changed = pages[f"{ORIGIN}/static"]
+    clean = pages[f"{ORIGIN}/slow"]
+    async with SessionLocal() as db:
+        await db.execute(
+            update(SitePage)
+            .where(SitePage.id == changed)
+            .values(
+                viewport_meta="width=device-width, initial-scale=1",
+                nosnippet_count=0,
+                social_meta_count=0,
+            )
+        )
+        await db.execute(
+            update(SitePage)
+            .where(SitePage.id == clean)
+            .values(
+                viewport_meta="width=device-width, initial-scale=1",
+                nosnippet_count=2,
+                social_meta_count=4,
+            )
+        )
+        await db.commit()
+    measured = {"settle_reason": "idle", "status": 200}
+    await seed_renders(
+        site["id"],
+        user_id,
+        [
+            {
+                "page_id": changed,
+                "title": "Static",
+                "word_count": 500,
+                **measured,
+                "viewport_meta": "width=device-width, initial-scale=1, user-scalable=no",
+                "nosnippet_count": 3,
+                "social_meta_count": 5,
+            },
+            {
+                "page_id": changed,
+                "device": "mobile",
+                "title": "Static",
+                "word_count": 500,
+                **measured,
+                "viewport_meta": "width=device-width,initial-scale=1",
+                "nosnippet_count": 0,
+                "social_meta_count": 0,
+            },
+            {
+                "page_id": clean,
+                "title": "Slow",
+                "word_count": 500,
+                **measured,
+                "viewport_meta": "width=device-width,initial-scale=1",
+                "nosnippet_count": 2,
+                "social_meta_count": 4,
+            },
+        ],
+    )
+
+    r = await client.post("/api/v1/site/technical-seo/run-audit", json={})
+    assert r.status_code == 201, r.text
+    groups = by_kind(r.json()["data"]["openPageIssues"])
+    for kind in (
+        "viewport-meta-changed-by-js",
+        "data-nosnippet-changed-by-js",
+        "og-tags-only-after-js",
+    ):
+        assert kind in groups, kind
+        assert groups[kind]["issueType"] == "desktop"
+        assert groups[kind]["examples"] == [f"{ORIGIN}/static"], kind
+        assert f"mobile-{kind}" not in groups, kind

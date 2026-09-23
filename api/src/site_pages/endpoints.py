@@ -12,6 +12,7 @@ from src.site_pages.schemas import (
     SitePageBatchResult,
     SitePageCreateRequest,
     SitePageDeleteResponse,
+    SitePageDiscoveryResponse,
     SitePageExportListItemResponse,
     SitePageGraphResult,
     SitePageKeywordCoverageResponse,
@@ -20,6 +21,8 @@ from src.site_pages.schemas import (
     SitePageListResponse,
     SitePagePruneResult,
     SitePageResponse,
+    SitePageSearchRequest,
+    SitePageSearchResponse,
     SitePageSlimListItemResponse,
     SitePageStatsResponse,
     SitePageTextListItemResponse,
@@ -54,6 +57,15 @@ async def list_pages(
     )
 
 
+@router.post("/site/pages/search")
+async def search_pages(
+    body: SitePageSearchRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> SitePageSearchResponse:
+    return await service.search(db, ctx.site_id, body)
+
+
 @router.post("/site/pages")
 async def save_pages(
     body: SitePageBatchRequest | SitePageCreateRequest,
@@ -84,6 +96,14 @@ async def page_stats(
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageStatsResponse:
     return SitePageStatsResponse.model_validate(await service.stats(db, ctx.user_id, ctx.site_id))
+
+
+@router.get("/site/pages/discovery")
+async def page_discovery(
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> SitePageDiscoveryResponse:
+    return SitePageDiscoveryResponse.model_validate(await service.discovery(db, ctx.site_id))
 
 
 @router.get("/site/pages/keywords")

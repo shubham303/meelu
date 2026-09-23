@@ -203,7 +203,6 @@ def host_variant_rules(site: SiteRecord) -> list[SiteRule]:
         ),
         SiteRule(
             kind="host-variant-distinct",
-            llm_check=True,
             severity="p2",
             issue=(
                 f"{_field(host, 'url', 'The other host form')} answered 200 with different content from "
@@ -220,7 +219,6 @@ def host_variant_rules(site: SiteRecord) -> list[SiteRule]:
         ),
         SiteRule(
             kind="host-variant-elsewhere",
-            llm_check=True,
             severity="p1",
             issue=(
                 f"{_field(host, 'url', 'The other host form')} does redirect, but it lands on "

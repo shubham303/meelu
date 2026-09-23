@@ -29,6 +29,7 @@ class AgentScope:
     limits: dict[str, Any] = field(default_factory=dict)
     save_attachments: bool = False
     providers: list[str] = field(default_factory=list)
+    silent_writes: list[Tool] = field(default_factory=list)
 
     @property
     def table_names(self) -> frozenset[str] | None:
@@ -39,6 +40,10 @@ class AgentScope:
     @property
     def write_names(self) -> list[str]:
         return [w.__name__ for w in self.writes]
+
+    @property
+    def silent_write_names(self) -> list[str]:
+        return [w.__name__ for w in self.silent_writes]
 
     @property
     def create_tool_names(self) -> str | list[str] | None:

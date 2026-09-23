@@ -25,8 +25,6 @@ from src.technical_seo.schemas import (
     IssueBulkUpdateResult,
     IssueGroupResponse,
     IssueUpdateRequest,
-    LlmCheckRequest,
-    LlmCheckResult,
     PageIssueBulkUpdateRequest,
     PageIssueCreateRequest,
     PageIssueDeleteResponse,
@@ -152,16 +150,6 @@ async def update_site_issue(
     return SiteIssueResponse.model_validate(record)
 
 
-@router.post("/issues/{issue_id}/llm-check")
-async def llm_check_site_issue(
-    issue_id: str,
-    body: LlmCheckRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> LlmCheckResult:
-    return await service.llm_check_site_issue(db, ctx.site_id, issue_id, body)
-
-
 @router.delete("/issues/{issue_id}")
 async def delete_site_issue(
     issue_id: str,
@@ -225,16 +213,6 @@ async def update_page_issue(
 ) -> PageIssueResponse:
     record = await service.update_page_issue(db, ctx.site_id, issue_id, body)
     return PageIssueResponse.model_validate(record)
-
-
-@router.post("/page-issues/{issue_id}/llm-check")
-async def llm_check_page_issue(
-    issue_id: str,
-    body: LlmCheckRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> LlmCheckResult:
-    return await service.llm_check_page_issue(db, ctx.site_id, issue_id, body)
 
 
 @router.delete("/page-issues/{issue_id}")

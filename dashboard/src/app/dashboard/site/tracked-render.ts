@@ -9,6 +9,8 @@ interface RenderBridge {
     siteId: string | null;
     device: SiteRenderDevice;
     scope?: SiteRenderScope;
+    limit?: number;
+    url?: string;
   }) => Promise<{ jobId?: string | null; started?: boolean; reason?: string; error?: string }>;
   stopRender?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
   onRenderEvent?: (
@@ -191,7 +193,7 @@ export function useRender(
   }, [poll, siteId, device]);
 
   const start = useCallback(
-    async (opts: { scope?: SiteRenderScope } = {}) => {
+    async (opts: { scope?: SiteRenderScope; limit?: number; url?: string } = {}) => {
       setNote(null);
       const run = bridge()?.renderSite;
       if (!run) {

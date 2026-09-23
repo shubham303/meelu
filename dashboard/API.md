@@ -24,8 +24,8 @@ human. These APIs serve the UI — the agent does not read through them.
 
 One API serves three clients — the browser dashboard, the MCP server, and the
 desktop app — and a few rules care whether a *person* or a *model* initiated
-the action (only a person may mark a post `posted`; todos record who added
-them). A session cookie is always `user`. A key-authenticated request is
+the action (a content piece records whether a person or the agent created it;
+todos record who added them). A session cookie is always `user`. A key-authenticated request is
 `agent` unless it carries **`x-meelu-actor: user`**, which the desktop app
 sends on direct UI clicks. The MCP server never sends it — that header is a
 human's claim, and the agent has no honest way to make it.
@@ -191,7 +191,7 @@ One group per desk — the same object `GET /api/v1/context` carries as `stats`.
 - `GET /api/v1/stats` → `data: {`
   - `outreach: { projects, campaigns, activeCampaigns, prospects, emailsDrafted,
     emailsSent, emailsFailed, replies }`
-  - `content: { projects, pending, ready, posted }` — `projects` counts `active` ones
+  - `content: { drafts, blocked }`
   - `contacts: { total, neverContacted }`
   - `seo: { pages }`
   - `todos: { open, overdue }` — overdue means the six-hour block ran out and it is still open
@@ -320,68 +320,35 @@ in `CONTACTS_AGENT.md`.
   dated in the user's own timezone. There is no message store and no reply
   tracking in v0; this is the whole history.
 
-## Website content — the desk that never existed
+## Content — pieces, each written for one channel
 
-`/content/posts` and `/content/pages` are **not the same resource**, and the
-reason is one column: a post carries `platformKey` and a notNull `scheduledAt`,
-so every row must have a slot. That is a social assumption. A piece of website
-content has no slot — it is draft, ready, in a PR, or published. Sending
-`scheduledAt` or `platformKey` here is a **400 that says so**; a shared table
-would have meant inventing a fake time for every article and then teaching every
-query to ignore it.
+Meelu writes and checks; it never posts. A piece is one text for exactly one
+channel (`website`, `linkedin`, `twitter`, …). On every save the channel's hard
+limits run (character count, links, hashtags, image) and set `status` to
+`draft` or `blocked`. Nothing in the api schedules, publishes or records what
+went out — the user copies the piece and posts it themselves, or hands it to
+whatever scheduler they already use.
 
-- `GET /api/v1/content/pages?status=&kind=&projectId=&targetPageId=&search=&view=&limit=&offset=`
-  → `{ pages, total, shown }`. Slim by default — these rows carry
-  `bodyMarkdown`, and forty drafts would otherwise be forty articles down the
-  wire to answer "what have we got". `?counts=true` gives the status tally.
-- `POST /api/v1/content/pages` — `{ title, kind?, slug?, bodyMarkdown?,
-  description?, frontmatter?, projectId?, targetPageId?, matchedPassage?,
-  linkFromPageId?, status?, publishTarget?, sourcePageId? }`, 201.
-  - `kind: "update"` **requires `targetPageId` and `matchedPassage`** — which
-    page this rewrites, and the sentence on it that made this an update rather
-    than a new piece. Without them the piece is a new page that happens to
-    overlap one you already have.
-  - The `source*` references are written at creation time even when nothing
-    reads them yet. They cost a column now and are unbackfillable later.
-- `GET | PATCH | DELETE /api/v1/content/pages/:id`
-  - PATCH refuses to rewrite the body of a **published** piece: the stored
-    record would then disagree with the live page, and nothing downstream could
-    tell which one "the article we published in March" meant. Draft the change
-    as a new `update` against it.
-  - DELETE refuses on a published piece for a different reason — removing the
-    row does not unpublish anything, and it loses the reference saying where
-    the piece came from, which is the only way to find out later whether
-    it worked.
-- `POST /api/v1/content/pages/:id/publish` — `{ publishTarget, prUrl?, prState?,
-  publishedUrl?, publishedAt? }`.
-
-  **It does not publish and it does not merge.** The PR is opened by the harness
-  on the user's device against their own GitHub credential — this backend has
-  never held one, for the same reason it holds no LLM key. So the body is a
-  report, and `prUrl` and `publishedUrl` are different strengths of claim stored
-  separately: a merge is a fact about a repository, and only a live URL is a
-  fact about the website. When `linkFromPageId` is set, a publish answers with
-  `pendingLinkFromPageId` — adding that link is an edit to the user's site, so
-  it is surfaced rather than acted on.
-
-## Social — publishing through the app
-
-Publishing runs in the Meelu app, through the user's own connected provider
-(Postproxy today). The api holds only the binding between a website and its
-account at the provider, plus the channel flags; every vendor call and every
-piece state change is made by the app's social scheduler, which patches the
-content piece with the `system` actor (`x-meelu-actor: system`).
-
-- `GET /api/v1/social/account` → `{ id, provider, externalAccountId }`, 404
-  when the website has none yet.
-- `PUT /api/v1/social/account` — `{ provider, externalAccountId }`, upsert.
-- `DELETE /api/v1/social/account`.
-- `POST /api/v1/social/channels/sync` — `{ platforms[] }` flips the website's
-  channels on or off to match what is connected at the provider.
-
-`scheduled` and `posted` are the only two statuses no caller may set: they are
-facts about what the vendor did, so `api/src/content` refuses them from
-every actor except `system`, which is the app's scheduler.
+- `GET /api/v1/content/channels` → every channel for the website, seeded from
+  the platform defaults on first read. Each carries `enabled`, the site's own
+  `rules` list, and the read-only limits (`characterLimit`, `requiresMedia`,
+  `maxLinks`, `maxHashtags`, `maxMedia`).
+- `GET | PUT /api/v1/content/channels/:channelKey` — PUT takes `{ rules?,
+  enabled? }`; `rules` replaces the whole list.
+- `POST /api/v1/content/channels/:channelKey/reset` — rules back to the shipped
+  default.
+- `GET /api/v1/content/pieces?status=&channel=&search=` — slim rows, newest
+  first. `?counts=true` gives `{ byStatus }`.
+- `POST /api/v1/content/pieces` — `{ title, channelKey, bodyMarkdown?, media
+  fields?, sourcePageId?, cloneFromPieceId? }`, 201. A disabled channel refuses.
+- `GET | PATCH | DELETE /api/v1/content/pieces/:id` — PATCH takes title, body,
+  media and `sourcePageId`; the checks rerun and the status follows.
+- `GET /api/v1/content/pieces/:id/markdown` — the piece as a markdown file.
+- `GET | POST /api/v1/content/pieces/:id/issues`,
+  `PATCH /api/v1/content/pieces/:id/issues/:issueId` — findings from the local
+  checks (readability, overlap, AI detector), replaced per tool on each run.
+- `POST /api/v1/content/media`, `GET /api/v1/content/media/:id` — uploaded
+  images. `GET | POST /api/v1/content/unsplash` proxies the Unsplash search.
 
 ## Crawling — the one job this backend runs
 

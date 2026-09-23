@@ -4,11 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
-import { ArrowLeft, Check, Copy, PanelRight, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Copy, PanelRight, Sparkles } from "lucide-react";
 import { Badge, Button, Card, ConfirmDelete, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
-import { providerCall, useProviderConnected } from "@/lib/providers";
 import { cn, formatRelative } from "@/lib/utils";
 import type { SiteChannel } from "@/lib/types";
 import { STATUS_LABEL, STATUS_TONE, type ContentPiece, type PieceIssue } from "../types";
@@ -17,12 +16,11 @@ import { buildProposal, pendingCount, resolve, type Proposal } from "./diff";
 import { Document, scrollToAnchor } from "./document";
 import { ProposalReview } from "./proposal-review";
 import { Rail } from "./rail";
-import { PublishPanel } from "./publish-panel";
 import { useAgent } from "./use-agent";
 import { formFrom, useAutosave, type SaveState } from "./use-autosave";
 import { useAgentTasks } from "../../agent-tasks";
 
-type Panel = "rail" | "publish" | "checks" | null;
+type Panel = "rail" | "checks" | null;
 
 const pieceTasks = new Map<string, string>();
 
@@ -81,7 +79,7 @@ export default function ContentPiecePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const isApp = useIsApp();
-  const { data: fetched, loading, error, refresh: refreshPiece } = useApi<ContentPiece>(`/api/v1/content/pieces/${id}`);
+  const { data: fetched, loading, error } = useApi<ContentPiece>(`/api/v1/content/pieces/${id}`);
   const [saved, setSaved] = useState<ContentPiece | null>(null);
   const piece = saved ?? fetched;
   const { data: channels } = useApi<SiteChannel[]>("/api/v1/content/channels");
@@ -93,19 +91,6 @@ export default function ContentPiecePage() {
     initial,
     setSaved,
   );
-  const locked = piece?.status === "scheduled" || piece?.status === "posted";
-  const reloadPiece = useCallback(async () => {
-    setSaved(null);
-    await refreshPiece();
-  }, [refreshPiece]);
-
-  const socialReady = useProviderConnected("social");
-  useEffect(() => {
-    if (!isApp || !socialReady || piece?.status !== "scheduled") return;
-    void providerCall<{ reconciled: number }>("social_reconcile", { pieceIds: [id] })
-      .then((r) => (r.reconciled > 0 ? reloadPiece() : undefined))
-      .catch(() => {});
-  }, [isApp, socialReady, id, piece?.status, reloadPiece]);
 
   const [panel, setPanel] = useState<Panel>(null);
   const [deleting, setDeleting] = useState(false);
@@ -376,7 +361,7 @@ export default function ContentPiecePage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={locked || (saveState !== "dirty" && saveState !== "error")}
+            disabled={saveState !== "dirty" && saveState !== "error"}
             onClick={() => void flush()}
           >
             Save
@@ -392,9 +377,6 @@ export default function ContentPiecePage() {
           </button>
           <TopToggle active={panel === "rail"} onClick={() => togglePanel("rail")}>
             <PanelRight size={14} /> Details
-          </TopToggle>
-          <TopToggle active={panel === "publish"} onClick={() => togglePanel("publish")}>
-            <Send size={14} /> Publish
           </TopToggle>
           <TopToggle active={panel === "checks"} onClick={() => togglePanel("checks")}>
             <CheckIcon /> Checks
@@ -421,20 +403,9 @@ export default function ContentPiecePage() {
               rows={1}
               onChange={(e) => setForm({ title: e.target.value })}
               placeholder="Untitled piece"
-              disabled={locked}
               className="w-full resize-none overflow-hidden bg-transparent font-display text-[40px] leading-[1.15] text-ink placeholder:text-faint focus:outline-none"
             />
             <div className="mb-9 mt-3 flex flex-wrap gap-3 text-[13px] text-faint">
-              {locked && (
-                <>
-                  <span className="text-warn">
-                    {piece.status === "scheduled"
-                      ? "Scheduled with the publisher — cancel the schedule to edit"
-                      : "Posted — clone it to reuse the text"}
-                  </span>
-                  <span>·</span>
-                </>
-              )}
               <span>{wordCount} words</span>
               <span>·</span>
               <span>{readingTime(wordCount)}</span>
@@ -454,22 +425,12 @@ export default function ContentPiecePage() {
                 anchors={activeAnchor ? [activeAnchor] : []}
                 activeAnchor={activeAnchor}
                 editorRef={editorRef}
-                editable={!locked}
               />
             )}
           </div>
         </div>
 
         {panel === "rail" && <Rail piece={piece} channel={channel} onDelete={() => setDeleting(true)} />}
-        {panel === "publish" && (
-          <PublishPanel
-            piece={piece}
-            channel={channel}
-            flush={flush}
-            onChanged={reloadPiece}
-            onClose={() => setPanel(null)}
-          />
-        )}
         {panel === "checks" && (
           <ChecksPanel
             issues={issues}

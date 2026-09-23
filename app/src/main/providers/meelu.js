@@ -25,6 +25,7 @@ export class MeeluApi {
     if (!res.ok && !allow.includes(res.status)) {
       const err = new Error(json?.error?.message ?? `${method} ${path} failed (${res.status})`);
       err.status = res.status;
+      err.code = json?.error?.code ?? null;
       throw err;
     }
     if (!res.ok) return null;

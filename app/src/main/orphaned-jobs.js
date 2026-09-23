@@ -37,10 +37,8 @@ async function attempt({ cookieHeader, log }) {
   for (const site of sites) {
     if (!site?.id) continue;
     const crawls = await reap("/site/crawl-jobs/reap", site.id, cookie).catch(() => 0);
-    const analyses = await reap("/site/analysis-jobs/reap", site.id, cookie).catch(() => 0);
     const renders = await reap("/site/render-jobs/reap", site.id, cookie).catch(() => 0);
     if (crawls > 0) log(`cleared ${crawls} crawl(s) of ${site.domain} left running by the previous app process`);
-    if (analyses > 0) log(`cleared ${analyses} page analysis run(s) of ${site.domain} left running by the previous app process`);
     if (renders > 0) log(`cleared ${renders} render(s) of ${site.domain} left running by the previous app process`);
   }
   return true;

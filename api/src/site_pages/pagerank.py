@@ -17,15 +17,16 @@ def page_rank(
         return result
 
     index = {page_id: i for i, page_id in enumerate(ids)}
-    out_counts = [0] * n
-    inbound: list[list[int]] = [[] for _ in range(n)]
+    out_weight = [0.0] * n
+    inbound: list[list[tuple[int, float]]] = [[] for _ in range(n)]
     for e in edges:
         src = index.get(e.src)
         dst = index.get(e.dst)
-        if src is None or dst is None or src == dst:
+        w = float(getattr(e, "weight", 1.0))
+        if src is None or dst is None or src == dst or w <= 0:
             continue
-        out_counts[src] += 1
-        inbound[dst].append(src)
+        out_weight[src] += w
+        inbound[dst].append((src, w))
 
     tele = [1 / n] * n
     if teleport is not None:
@@ -38,11 +39,11 @@ def page_rank(
 
     rank = [1 / n] * n
     for _ in range(iterations):
-        dangling = sum(rank[i] for i in range(n) if out_counts[i] == 0)
+        dangling = sum(rank[i] for i in range(n) if out_weight[i] == 0)
         nxt = [(1 - damping + damping * dangling) * tele[i] for i in range(n)]
         for i in range(n):
-            for src in inbound[i]:
-                nxt[i] += damping * rank[src] / out_counts[src]
+            for src, w in inbound[i]:
+                nxt[i] += damping * rank[src] * w / out_weight[src]
         rank = nxt
 
     top = max(1e-12, max(rank))

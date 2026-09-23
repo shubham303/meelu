@@ -11,12 +11,14 @@ export const CATALOG = [
   { name: "update_note", desk: null, writes: true },
   { name: "delete_note", desk: null, writes: true },
   { name: "search_page", desk: "pages", writes: false },
-  { name: "content_free_slots", desk: "content", writes: false },
   { name: "content_create_piece", desk: "content", writes: true },
   { name: "content_update_piece", desk: "content", writes: true },
   { name: "cluster", desk: "analytics", writes: false },
   { name: "forecast", desk: "analytics", writes: false },
   { name: "save_profile", desk: "profile", writes: true },
+  { name: "start_seo_job", desk: "seo", writes: true },
+  { name: "screen_page_suggestions", desk: "seo", writes: true },
+  { name: "rank_page_suggestions", desk: "seo", writes: true },
 ];
 
 const NOTE_WRITES = ["save_note", "update_note", "delete_note"];
@@ -26,6 +28,12 @@ export const SCOPES = {
     desk: "pages",
     writes: NOTE_WRITES,
     systemPrompt: "PAGES DESK PROMPT. Answer about the site's pages.\n\n## The database\n\n- site_pages: url text",
+  },
+  "ask-seo": {
+    desk: "seo",
+    writes: [...NOTE_WRITES, "start_seo_job", "screen_page_suggestions", "rank_page_suggestions"],
+    silentWrites: ["screen_page_suggestions", "rank_page_suggestions"],
+    systemPrompt: "SEO DESK PROMPT.\n\n## The database\n\n- seo_keywords: keyword text",
   },
   "ask-pages+content": {
     desk: "pages",
@@ -51,6 +59,7 @@ function scopeBody(action, desks) {
     limits: {},
     saveAttachments: false,
     providers: [],
+    silentWrites: base.silentWrites ?? [],
     desks: offers,
     systemPrompt: base.systemPrompt,
   };
@@ -84,7 +93,7 @@ export async function startMcp() {
         t.name,
         {
           description: `${t.name} tool`,
-          inputSchema: { q: z.string().optional() },
+          inputSchema: { q: z.string().optional(), job_id: z.string().optional() },
           _meta: { "meelu/writes": t.writes, ...(t.desk ? { "meelu/desk": t.desk } : {}) },
         },
         async () => ({ content: [{ type: "text", text: `${t.name} ok` }] }),

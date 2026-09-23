@@ -39,7 +39,15 @@ async def start_render(
     )
 
     job = await repo.open_job(
-        db, user_id, target.id, body.trigger, body.scope, body.device, body.user_agent_profile
+        db,
+        user_id,
+        target.id,
+        body.trigger,
+        body.scope,
+        body.device,
+        body.user_agent_profile,
+        body.limit,
+        body.url,
     )
     if job is None:
         return RenderJobStartResult(
@@ -56,7 +64,9 @@ async def claim_render(
 ) -> RenderJobClaimResult:
     job = await _find_job(db, site_id, job_id)
     target = await get_site(db, user_id, site_id)
-    pages = await repo.candidates(db, target.id, job.scope, job.device)
+    pages = await repo.candidates(
+        db, target.id, job.scope, job.device, job.page_limit, job.page_url
+    )
     if not await repo.start_job(db, job.id, len(pages)):
         raise HTTPException(
             409,

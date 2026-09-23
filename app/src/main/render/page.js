@@ -1,4 +1,5 @@
 import { BrowserWindow, session } from "electron";
+import { createHash } from "node:crypto";
 import robotsParserModule from "robots-parser";
 import { extract } from "../crawler/extract.js";
 import { normalise, sameSite } from "../crawler/url.js";
@@ -35,14 +36,19 @@ const SAMPLE_LIMIT = 10;
 const WINDOW_REUSE = 25;
 const SCRIPT_TYPES = new Set(["Script"]);
 const ASSET_TYPES = new Set(["Script", "Stylesheet", "Font", "Image", "Fetch", "XHR", "Document", "Other", "Media"]);
+const DATA_TYPES = new Set(["XHR", "Fetch"]);
+const ACTIVE_TYPES = new Set(["Script", "Stylesheet", "XHR", "Fetch", "Document"]);
+const PASSIVE_TYPES = new Set(["Image", "Media", "Font"]);
+const BEACON_PATH = /collect|beacon|track|log|analytics|pixel/i;
+const CORS_MESSAGE = /blocked by CORS policy|No 'Access-Control-Allow-Origin'/i;
 
 const HTML_SCRIPT = "document.documentElement.outerHTML";
 
-const MOBILE_SCRIPT = `
-(() => {
+const HELPERS = `
   const MAX = 5000;
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "TEMPLATE", "HEAD"]);
-  const vw = window.innerWidth;
+  const TRACKING = new Set(["gclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "igshid", "ref", "_hsenc", "_hsmi"]);
+  const host = location.hostname.replace(/^www\\./, "").toLowerCase();
   const hiddenCache = new Map();
   const hidden = (el) => {
     if (!el || el === document.documentElement) return false;
@@ -61,25 +67,279 @@ const MOBILE_SCRIPT = `
     hiddenCache.set(el, out);
     return out;
   };
-  let scanned = 0;
-  let hiddenWordCount = 0;
-  const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
-  let node;
-  while ((node = walker.nextNode()) && scanned < MAX) {
-    scanned++;
-    const el = node.parentElement;
-    if (!el || SKIP.has(el.tagName) || el.closest("script,style,noscript,svg,template")) continue;
-    const text = node.textContent.trim();
-    if (!text) continue;
-    if (hidden(el)) hiddenWordCount += text.split(/\s+/).length;
-  }
-  const host = location.hostname.replace(/^www\./, "");
-  let hiddenInternalLinks = 0;
-  const anchors = Array.from(document.querySelectorAll("a[href]")).slice(0, MAX);
+  const skipped = (el) => !el || SKIP.has(el.tagName) || el.closest("script,style,noscript,svg,template");
+  const words = (s) => (s || "").trim().split(/\\s+/).filter(Boolean).length;
+  const abs = (href) => {
+    try {
+      const u = new URL(href, location.href);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+      u.hash = "";
+      if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
+      return u.toString();
+    } catch { return null; }
+  };
+  const norm = (href) => {
+    try {
+      const u = new URL(href, location.href);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+      u.hash = "";
+      u.hostname = u.hostname.toLowerCase();
+      for (const key of [...u.searchParams.keys()]) {
+        if (key.startsWith("utm_") || TRACKING.has(key)) u.searchParams.delete(key);
+      }
+      u.searchParams.sort();
+      if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
+      return u.toString();
+    } catch { return null; }
+  };
+  const same = (u) => { try { return new URL(u).hostname.replace(/^www\\./, "").toLowerCase() === host; } catch { return false; } };
+  const visibleTextNodes = () => {
+    const out = [];
+    const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
+    let node, scanned = 0;
+    while ((node = walker.nextNode()) && scanned < MAX) {
+      scanned++;
+      const el = node.parentElement;
+      if (skipped(el)) continue;
+      const text = node.textContent.trim();
+      if (!text) continue;
+      out.push({ el, text, visible: !hidden(el) });
+    }
+    return out;
+  };
+`;
+
+const COMMON_SCRIPT = `
+(async () => {
+  ${HELPERS}
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const nodes = visibleTextNodes();
+  let visibleWordCount = 0;
+  const bodyText = [];
+  for (const n of nodes) if (n.visible) { visibleWordCount += words(n.text); bodyText.push(n.text); }
+
+  const h1s = Array.from(document.querySelectorAll("h1")).map((h) => h.textContent.trim());
+  const SOFT404 = /\\b(404|not found|page (doesn't|does not|cannot be) (exist|found)|no longer available|oops)\\b/i;
+  const soft404Signal = SOFT404.test(document.title || "") || h1s.some((t) => SOFT404.test(t));
+
+  let serviceWorker = false;
+  try {
+    const regs = navigator.serviceWorker ? await Promise.race([navigator.serviceWorker.getRegistrations(), new Promise((r) => setTimeout(() => r([]), 1000))]) : [];
+    serviceWorker = (regs || []).length > 0;
+  } catch {}
+
+  const anchors = Array.from(document.querySelectorAll("a")).slice(0, MAX);
+  const internal = new Set();
+  const external = new Set();
+  let hashbangLinks = 0, danglingFragmentLinks = 0;
+  const ownPath = location.pathname.replace(/\\/$/, "") + location.search;
   for (const a of anchors) {
+    const raw = a.getAttribute("href");
+    if (!raw) continue;
+    let u;
+    try { u = new URL(raw, location.href); } catch { continue; }
+    if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+    if (same(u.href)) {
+      if (raw.includes("#!")) hashbangLinks++;
+      const n = norm(u.href);
+      if (n) internal.add(n);
+      const path = u.pathname.replace(/\\/$/, "") + u.search;
+      if (u.hash && u.hash.length > 1 && path === ownPath) {
+        let id = "";
+        try { id = decodeURIComponent(u.hash.slice(1)); } catch { id = u.hash.slice(1); }
+        if (id && !document.getElementById(id) && !document.querySelector('[name="' + CSS.escape(id) + '"]')) danglingFragmentLinks++;
+      }
+    } else {
+      external.add(u.hostname.toLowerCase());
+    }
+  }
+
+  const NAV_CODE = /location\\.(href|assign|replace)|router\\.(push|navigate)|history\\.pushState/;
+  const inNav = (el) => !!el.closest("nav,header,footer,[role=navigation]");
+  let uncrawlableAnchors = 0, uncrawlableNavAnchors = 0;
+  const uncrawlableSamples = [];
+  const flag = (el, href) => {
+    uncrawlableAnchors++;
+    if (inNav(el)) uncrawlableNavAnchors++;
+    if (uncrawlableSamples.length < 10) uncrawlableSamples.push({ tag: el.tagName.toLowerCase(), href: href ?? null, text: (el.textContent || "").trim().slice(0, 80) });
+  };
+  for (const a of anchors) {
+    const raw = a.getAttribute("href");
+    if (raw === null) {
+      if (a.hasAttribute("id")) continue;
+      if (a.hasAttribute("onclick") || a.hasAttribute("role")) flag(a, null);
+      continue;
+    }
+    const t = raw.trim();
+    if (/^(mailto|tel):/i.test(t)) continue;
+    if (t === "" || t === "#" || /^javascript:/i.test(t) || /^file:/i.test(t)) flag(a, t);
+  }
+  for (const el of Array.from(document.querySelectorAll("[role=link]:not(a)")).slice(0, MAX)) flag(el, null);
+  for (const el of Array.from(document.querySelectorAll("[onclick]:not(a)")).slice(0, MAX)) {
+    if (NAV_CODE.test(el.getAttribute("onclick") || "")) flag(el, null);
+  }
+  const metaFragment = !!document.querySelector('meta[name="fragment"]');
+
+  const LOAD_MORE = /^(load|show|view|see) more/i;
+  let loadMoreControl = false;
+  for (const el of Array.from(document.querySelectorAll("button, a, [role=button]")).slice(0, MAX)) {
+    if (hidden(el) || el.closest("form")) continue;
+    if (LOAD_MORE.test((el.textContent || "").trim())) { loadMoreControl = true; break; }
+  }
+  const PAGINATION = /[?&]page=\\d+|\\/page\\/\\d+/;
+  const paginationLinks = !!document.querySelector('link[rel="next"]') ||
+    anchors.some((a) => PAGINATION.test(a.getAttribute("href") || ""));
+
+  const images = [];
+  let imagesWithoutSrc = 0, imagesWithoutSrcAboveFold = 0;
+  for (const img of Array.from(document.querySelectorAll("img")).slice(0, MAX)) {
+    const r = img.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) continue;
+    const srcAttr = img.getAttribute("src");
+    const lazy = img.dataset.src || img.dataset.lazy || img.dataset.original;
+    const broken = !srcAttr || (srcAttr.startsWith("data:") && img.naturalWidth <= 1) || (lazy && !img.currentSrc);
+    if (broken) {
+      imagesWithoutSrc++;
+      if (r.top < vh) imagesWithoutSrcAboveFold++;
+    }
+    if (images.length < 100) {
+      const src = abs(img.currentSrc || srcAttr || lazy || "");
+      if (src) {
+        const entry = { src };
+        if (img.hasAttribute("alt")) entry.alt = (img.getAttribute("alt") || "").trim();
+        images.push(entry);
+      }
+    }
+  }
+
+  let shadowDomWords = 0, scannedHosts = 0;
+  const all = document.querySelectorAll("*");
+  for (let i = 0; i < all.length && scannedHosts < MAX; i++) {
+    const el = all[i];
+    if (!el.shadowRoot) continue;
+    scannedHosts++;
+    let slotted = 0;
+    for (const child of el.children) if (child.assignedSlot) slotted += words(child.textContent);
+    shadowDomWords += Math.max(0, words(el.shadowRoot.textContent) - slotted);
+  }
+
+  const PLUGIN_TYPE = /application\\/x-(shockwave-flash|silverlight|java)/i;
+  const PLUGIN_SRC = /\\.(swf|flv|class|xap)(\\?|$)/i;
+  let pluginContent = 0;
+  for (const el of document.querySelectorAll("embed, object, applet")) {
+    const type = el.getAttribute("type") || "";
+    const src = el.getAttribute("src") || el.getAttribute("data") || "";
+    if (PLUGIN_TYPE.test(type) || PLUGIN_SRC.test(src)) pluginContent++;
+  }
+
+  const head = document.head || document.documentElement;
+  const titleCount = head.querySelectorAll("title").length;
+  const descriptionCount = document.querySelectorAll('meta[name="description"]').length;
+  const canonicalHrefs = Array.from(document.querySelectorAll('link[rel="canonical"]')).map((l) => abs(l.getAttribute("href") || "") || (l.getAttribute("href") || "")).slice(0, 10);
+  const canonicalCount = document.querySelectorAll('link[rel="canonical"]').length;
+  const robotsMetaContents = Array.from(document.querySelectorAll('meta[name="robots"], meta[name="googlebot"]')).map((m) => (m.getAttribute("content") || "").trim()).slice(0, 10);
+
+  const sorted = (v) => {
+    if (Array.isArray(v)) return v.map(sorted);
+    if (v && typeof v === "object") { const o = {}; for (const k of Object.keys(v).sort()) o[k] = sorted(v[k]); return o; }
+    return v;
+  };
+  const flatten = (v, depth = 0) => {
+    if (depth > 3 || !v || typeof v !== "object") return [];
+    if (Array.isArray(v)) return v.flatMap((x) => flatten(x, depth + 1));
+    const g = v["@graph"];
+    return g ? [v, ...flatten(g, depth + 1)] : [v];
+  };
+  const blocks = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+  let schemaInvalidBlocks = 0;
+  const schemaNodes = [];
+  for (const b of blocks) {
+    let parsed;
+    try { parsed = JSON.parse(b.textContent || ""); } catch { schemaInvalidBlocks++; continue; }
+    for (const node of flatten(parsed)) {
+      const t = node["@type"];
+      const types = typeof t === "string" ? [t] : Array.isArray(t) ? t.map(String) : [];
+      if (!types.length || schemaNodes.length >= 60) continue;
+      let json = "";
+      try { json = JSON.stringify(sorted(node)).slice(0, 20000); } catch { continue; }
+      schemaNodes.push({ type: types.join("|"), json });
+    }
+  }
+
+  const hreflang = {};
+  let hreflangInvalid = 0;
+  for (const l of document.querySelectorAll('link[rel="alternate"][hreflang]')) {
+    const k = (l.getAttribute("hreflang") || "").trim();
+    const href = l.getAttribute("href") || "";
+    if (!k) continue;
+    hreflang[k] = abs(href) || href;
+    const lang = k.split("-")[0].toLowerCase();
+    const okLang = k.toLowerCase() === "x-default" || /^[a-z]{2,3}$/.test(lang);
+    if (!/^https?:/i.test(abs(href) || href) || !okLang) hreflangInvalid++;
+  }
+
+  const socialMetaCount = document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]').length;
+  const nosnippetCount = document.querySelectorAll("[data-nosnippet]").length;
+  const TOKEN = /\\{\\{[^}]+\\}\\}|\\[\\[[^\\]]+\\]\\]/g;
+  const desc = document.querySelector('meta[name="description"]')?.getAttribute("content") || "";
+  const headText = [document.title || "", desc, ...h1s].join("\\n");
+  const templateTokensHead = (headText.match(TOKEN) || []).length;
+  const templateTokensBody = (bodyText.join("\\n").match(TOKEN) || []).length;
+  const viewportMeta = document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? null;
+
+  let overlayCoverage = 0, overlaySample = null;
+  const area = vw * vh;
+  const center = document.elementFromPoint(Math.floor(vw / 2), Math.floor(vh / 2));
+  for (let i = 0; i < all.length && i < MAX * 2; i++) {
+    const el = all[i];
+    const cs = getComputedStyle(el);
+    if (!(cs.position === "fixed" || cs.position === "sticky" || cs.position === "absolute")) continue;
+    if (cs.visibility === "hidden" || parseFloat(cs.opacity) <= 0.05) continue;
+    const r = el.getBoundingClientRect();
+    const ix = Math.max(0, Math.min(r.right, vw) - Math.max(r.left, 0));
+    const iy = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+    const cover = area > 0 ? (ix * iy) / area : 0;
+    if (cover < 0.5) continue;
+    if (!center || !(el === center || el.contains(center))) continue;
+    if (words(el.textContent) < 15) continue;
+    if (cover > overlayCoverage) {
+      overlayCoverage = Math.round(cover * 100) / 100;
+      overlaySample = (el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".") : "") + " " + (el.textContent || "").trim().slice(0, 100)).slice(0, 200);
+    }
+  }
+
+  return {
+    visibleWordCount, soft404Signal, serviceWorker,
+    internalLinkUrls: [...internal].slice(0, 500),
+    externalLinkHosts: [...external].slice(0, 100),
+    uncrawlableAnchors, uncrawlableNavAnchors, uncrawlableSamples,
+    hashbangLinks, metaFragment, danglingFragmentLinks, loadMoreControl, paginationLinks,
+    images, imagesWithoutSrc, imagesWithoutSrcAboveFold, shadowDomWords, pluginContent,
+    titleCount, descriptionCount, canonicalCount, canonicalHrefs, robotsMetaContents,
+    schemaBlocks: blocks.length, schemaInvalidBlocks, schemaNodes,
+    hreflang, hreflangInvalid, socialMetaCount, nosnippetCount,
+    templateTokensHead, templateTokensBody, viewportMeta, overlayCoverage, overlaySample,
+  };
+})()
+`;
+
+const MOBILE_SCRIPT = `
+(() => {
+  ${HELPERS}
+  const vw = window.innerWidth;
+  let hiddenWordCount = 0, textChars = 0, smallChars = 0;
+  for (const n of visibleTextNodes()) {
+    if (!n.visible) { hiddenWordCount += words(n.text); continue; }
+    const len = n.text.length;
+    textChars += len;
+    const size = parseFloat(getComputedStyle(n.el).fontSize);
+    if (Number.isFinite(size) && size < 12) smallChars += len;
+  }
+  let hiddenInternalLinks = 0;
+  for (const a of Array.from(document.querySelectorAll("a[href]")).slice(0, MAX)) {
     let u;
     try { u = new URL(a.getAttribute("href"), location.href); } catch { continue; }
-    if (u.hostname.replace(/^www\./, "") !== host) continue;
+    if (!same(u.href)) continue;
     if (hidden(a)) hiddenInternalLinks++;
   }
   const targets = Array.from(document.querySelectorAll("a, button, [role=button], input[type=submit]")).slice(0, MAX);
@@ -104,7 +364,8 @@ const MOBILE_SCRIPT = `
     if (crowded) smallTapTargets++;
   }
   const viewportOverflowPx = Math.max(0, document.documentElement.scrollWidth - vw);
-  return { hiddenWordCount, hiddenInternalLinks, viewportOverflowPx, smallTapTargets };
+  const smallTextRatio = textChars > 0 ? Math.round((smallChars / textChars) * 1000) / 1000 : 0;
+  return { hiddenWordCount, hiddenInternalLinks, viewportOverflowPx, smallTapTargets, smallTextRatio, textChars };
 })()
 `;
 
@@ -183,6 +444,22 @@ function hostOf(url) {
   }
 }
 
+function schemeOf(url) {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return null;
+  }
+}
+
+function pathOf(url) {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return "";
+  }
+}
+
 function robotsFor(robotsTxt, origin) {
   if (!robotsTxt) return null;
   try {
@@ -216,6 +493,74 @@ async function emulate(dbg, device) {
   }
 }
 
+function schemaHash(node) {
+  return createHash("sha256").update(`${node.type}:${node.json}`).digest("hex").slice(0, 16);
+}
+
+function number(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function list(v, cap) {
+  return Array.isArray(v) ? v.slice(0, cap) : [];
+}
+
+function commonFacts(common) {
+  if (!common || typeof common !== "object") return {};
+  return {
+    visibleWordCount: number(common.visibleWordCount),
+    soft404Signal: common.soft404Signal === true,
+    serviceWorker: common.serviceWorker === true,
+    internalLinkUrls: [...new Set(list(common.internalLinkUrls, 500).map((u) => normalise(String(u))))],
+    externalLinkHosts: list(common.externalLinkHosts, 100).map(String),
+    uncrawlableAnchors: number(common.uncrawlableAnchors),
+    uncrawlableNavAnchors: number(common.uncrawlableNavAnchors),
+    uncrawlableSamples: list(common.uncrawlableSamples, SAMPLE_LIMIT),
+    hashbangLinks: number(common.hashbangLinks),
+    metaFragment: common.metaFragment === true,
+    danglingFragmentLinks: number(common.danglingFragmentLinks),
+    loadMoreControl: common.loadMoreControl === true,
+    paginationLinks: common.paginationLinks === true,
+    images: list(common.images, 100),
+    imagesWithoutSrc: number(common.imagesWithoutSrc),
+    imagesWithoutSrcAboveFold: number(common.imagesWithoutSrcAboveFold),
+    shadowDomWords: number(common.shadowDomWords),
+    pluginContent: number(common.pluginContent),
+    titleCount: number(common.titleCount),
+    descriptionCount: number(common.descriptionCount),
+    canonicalCount: number(common.canonicalCount),
+    canonicalHrefs: list(common.canonicalHrefs, 10).map(String),
+    robotsMetaContents: list(common.robotsMetaContents, 10).map(String),
+    schemaBlocks: number(common.schemaBlocks),
+    schemaInvalidBlocks: number(common.schemaInvalidBlocks),
+    schemaHashes: list(common.schemaNodes, 60)
+      .filter((n) => n && typeof n.type === "string" && typeof n.json === "string")
+      .map(schemaHash),
+    hreflang: common.hreflang && typeof common.hreflang === "object" && !Array.isArray(common.hreflang) ? common.hreflang : {},
+    hreflangInvalid: number(common.hreflangInvalid),
+    socialMetaCount: number(common.socialMetaCount),
+    nosnippetCount: number(common.nosnippetCount),
+    templateTokensHead: number(common.templateTokensHead),
+    templateTokensBody: number(common.templateTokensBody),
+    viewportMeta: typeof common.viewportMeta === "string" ? common.viewportMeta : null,
+    overlayCoverage: number(common.overlayCoverage),
+    overlaySample: typeof common.overlaySample === "string" ? common.overlaySample : null,
+  };
+}
+
+function mobileFacts(mobile) {
+  if (!mobile || typeof mobile !== "object") return {};
+  return {
+    hiddenWordCount: number(mobile.hiddenWordCount),
+    hiddenInternalLinks: number(mobile.hiddenInternalLinks),
+    viewportOverflowPx: number(mobile.viewportOverflowPx),
+    smallTapTargets: number(mobile.smallTapTargets),
+    smallTextRatio: number(mobile.smallTextRatio),
+    textChars: number(mobile.textChars),
+  };
+}
+
 export async function renderPage({
   url,
   device = "desktop",
@@ -229,64 +574,113 @@ export async function renderPage({
   const ses = contents.session;
   const origin = new URL(url).origin;
   const robots = robotsFor(robotsTxt, origin);
+  const pageHost = hostOf(url);
+  const pageHttps = schemeOf(url) === "https:";
 
   const requests = new Map();
   const failed = [];
   const blocked = [];
   const consoleErrors = [];
   const thirdParty = new Set();
+  let exceptionCount = 0;
+  let corsErrors = 0;
   let jsBytes = 0;
   let totalBytes = 0;
   let lastActivity = Date.now();
   let inFlight = 0;
+  let mainFrameId = null;
+  let mainDocumentRequestId = null;
+  let documentResponses = 0;
+  let mainFrameNavigations = 0;
+  let status = null;
+  let documentBytes = 0;
+
+  const isMainDocument = (params) =>
+    params.type === "Document" && (mainFrameId === null || params.frameId === mainFrameId);
+
+  const noteCors = (text) => {
+    if (CORS_MESSAGE.test(String(text ?? ""))) corsErrors++;
+  };
 
   const onDebuggerMessage = (_event, method, params) => {
     lastActivity = Date.now();
-    if (method === "Network.requestWillBeSent") {
+    if (method === "Page.frameNavigated") {
+      if (!params.frame?.parentId) mainFrameId = params.frame.id;
+    } else if (method === "Network.requestWillBeSent") {
       const req = params.request;
+      const type = params.type ?? "Other";
+      const mainDocument = isMainDocument(params);
+      if (params.redirectResponse) {
+        if (mainDocument) mainFrameNavigations++;
+        const prior = requests.get(params.requestId);
+        if (prior) prior.done = true;
+        inFlight = Math.max(0, inFlight - 1);
+      }
       inFlight++;
-      requests.set(params.requestId, { url: req.url, type: params.type ?? "Other", status: null });
+      const entry = { url: req.url, type, status: null, bytes: 0, error: null, mainDocument };
+      requests.set(params.requestId, entry);
+      if (mainDocument) mainDocumentRequestId = params.requestId;
       const host = hostOf(req.url);
-      if (host && !sameSite(req.url, url) && host !== hostOf(url)) thirdParty.add(host);
-      if (robots && sameSite(req.url, url) && req.url !== url && ASSET_TYPES.has(params.type ?? "Other")) {
+      if (host && !sameSite(req.url, url) && host !== pageHost) thirdParty.add(host);
+      if (robots && sameSite(req.url, url) && req.url !== url && ASSET_TYPES.has(type)) {
         let allowed = true;
         try {
           allowed = robots.isAllowed(req.url, "Googlebot") !== false;
         } catch {
         }
-        if (!allowed && blocked.length < SAMPLE_LIMIT) blocked.push({ url: req.url, type: params.type ?? "Other" });
-        if (!allowed) requests.get(params.requestId).blocked = true;
+        if (!allowed && blocked.length < SAMPLE_LIMIT) blocked.push({ url: req.url, type });
+        if (!allowed) entry.blocked = true;
       }
     } else if (method === "Network.responseReceived") {
       const entry = requests.get(params.requestId);
-      if (entry) entry.status = params.response?.status ?? null;
+      if (entry) {
+        entry.status = params.response?.status ?? null;
+        if (entry.mainDocument && isMainDocument(params)) {
+          documentResponses++;
+          if (documentResponses > 1) mainFrameNavigations++;
+          status = entry.status;
+          mainDocumentRequestId = params.requestId;
+        }
+      }
     } else if (method === "Network.loadingFinished") {
       inFlight = Math.max(0, inFlight - 1);
       const entry = requests.get(params.requestId);
       const bytes = Number(params.encodedDataLength ?? 0);
       totalBytes += bytes;
-      if (entry && SCRIPT_TYPES.has(entry.type)) jsBytes += bytes;
-      if (entry && entry.status !== null && entry.status >= 400 && failed.length < SAMPLE_LIMIT) {
-        failed.push({ url: entry.url, status: entry.status, type: entry.type });
+      if (entry) {
+        entry.bytes = bytes;
+        entry.done = true;
+        if (SCRIPT_TYPES.has(entry.type)) jsBytes += bytes;
+        if (params.requestId === mainDocumentRequestId) documentBytes = bytes;
+        if (entry.status !== null && entry.status >= 400 && failed.length < SAMPLE_LIMIT) {
+          failed.push({ url: entry.url, status: entry.status, type: entry.type });
+        }
       }
-      if (entry) entry.done = true;
     } else if (method === "Network.loadingFailed") {
       inFlight = Math.max(0, inFlight - 1);
       const entry = requests.get(params.requestId);
-      if (entry && !params.canceled) {
-        entry.failed = true;
-        if (failed.length < SAMPLE_LIMIT) failed.push({ url: entry.url, error: params.errorText ?? "failed", type: entry.type });
+      if (entry) {
+        entry.done = true;
+        if (!params.canceled) {
+          entry.failed = true;
+          entry.error = params.errorText ?? "failed";
+          if (failed.length < SAMPLE_LIMIT) failed.push({ url: entry.url, error: entry.error, type: entry.type });
+        }
       }
-      if (entry) entry.done = true;
+      if (params.blockedReason === "cors" || /cors/i.test(params.errorText ?? "")) corsErrors++;
     } else if (method === "Runtime.exceptionThrown") {
+      exceptionCount++;
       const text = params.exceptionDetails?.exception?.description ?? params.exceptionDetails?.text ?? "Uncaught exception";
       consoleErrors.push({ level: "exception", text: String(text).slice(0, 300) });
-    } else if (method === "Runtime.consoleAPICalled" && params.type === "error") {
+    } else if (method === "Runtime.consoleAPICalled") {
       const text = (params.args ?? [])
         .map((a) => a.value ?? a.description ?? "")
         .join(" ")
         .trim();
-      consoleErrors.push({ level: "error", text: text.slice(0, 300) });
+      noteCors(text);
+      if (params.type === "error") consoleErrors.push({ level: "error", text: text.slice(0, 300) });
+    } else if (method === "Log.entryAdded") {
+      noteCors(params.entry?.text);
     }
   };
 
@@ -308,6 +702,8 @@ export async function renderPage({
       Promise.all([
         dbg.sendCommand("Network.enable"),
         dbg.sendCommand("Runtime.enable"),
+        dbg.sendCommand("Page.enable"),
+        dbg.sendCommand("Log.enable"),
         dbg.sendCommand("Network.setCacheDisabled", { cacheDisabled: true }),
       ]),
       10_000,
@@ -325,16 +721,21 @@ export async function renderPage({
       "The page did not finish loading in time.",
     );
 
+    let settleReason = "timeout";
     const settleUntil = Date.now() + SETTLE_MAX_MS;
     while (Date.now() < settleUntil) {
-      if (inFlight === 0 && Date.now() - lastActivity >= NETWORK_IDLE_MS) break;
+      if (inFlight === 0 && Date.now() - lastActivity >= NETWORK_IDLE_MS) {
+        settleReason = "idle";
+        break;
+      }
       await new Promise((r) => setTimeout(r, 200));
     }
 
     const remaining = Math.max(2_000, PAGE_TIMEOUT_MS - (Date.now() - started));
-    const [html, mobile] = await withTimeout(
+    const [html, common, mobile] = await withTimeout(
       Promise.all([
         contents.executeJavaScript(HTML_SCRIPT, true),
+        contents.executeJavaScript(COMMON_SCRIPT, true).catch(() => null),
         device === "mobile"
           ? contents.executeJavaScript(MOBILE_SCRIPT, true).catch(() => null)
           : Promise.resolve(null),
@@ -344,14 +745,43 @@ export async function renderPage({
     );
 
     const finalUrl = normalise(contents.getURL() || url);
-    const facts = extract(String(html ?? ""), finalUrl, 200);
-    const uniqueRequests = requests.size;
+    const rendered = String(html ?? "");
+    const facts = extract(rendered, finalUrl, 200);
+
+    const preconnected = new Set();
+    for (const match of rendered.matchAll(/<link[^>]+rel=["'](?:preconnect|dns-prefetch)["'][^>]*href=["']([^"']+)["']/gi)) {
+      const h = hostOf(match[1].startsWith("//") ? `https:${match[1]}` : match[1]);
+      if (h) preconnected.add(h);
+    }
+
+    const entries = [...requests.values()];
+    const firstParty = (u) => sameSite(u, url) || preconnected.has(hostOf(u) ?? "");
+    const isFailed = (e) => e.failed || (e.status !== null && e.status >= 400);
+    const dataFailures = entries.filter(
+      (e) => DATA_TYPES.has(e.type) && isFailed(e) && firstParty(e.url) && !BEACON_PATH.test(pathOf(e.url)),
+    );
+    const scriptFailures = entries.filter((e) => e.type === "Script" && isFailed(e) && sameSite(e.url, url));
+    const sample = (e) => ({ url: e.url, ...(e.status !== null ? { status: e.status } : {}), ...(e.error ? { error: e.error } : {}) });
+    const pending = entries.filter((e) => !e.done);
+    const largest = entries
+      .filter((e) => e.type === "Script" || e.type === "Stylesheet")
+      .reduce((best, e) => (e.bytes > (best?.bytes ?? -1) ? e : best), null);
+    const mixed = (types) =>
+      pageHttps ? entries.filter((e) => types.has(e.type) && schemeOf(e.url) === "http:").length : 0;
 
     return {
       ok: true,
       device,
-      html: String(html ?? ""),
+      html: rendered,
       finalUrl,
+      status,
+      documentBytes,
+      htmlBytes: Buffer.byteLength(rendered, "utf8"),
+      settleReason,
+      pendingRequests: pending.length,
+      pendingSamples: pending.slice(0, SAMPLE_LIMIT).map((e) => ({ url: e.url, type: e.type })),
+      mainFrameNavigations,
+      exceptionCount,
       title: facts.title,
       metaDescription: facts.metaDescription,
       canonical: facts.canonical,
@@ -363,22 +793,26 @@ export async function renderPage({
       contentHash: facts.contentHash,
       consoleErrors: consoleErrors.length,
       consoleSamples: consoleErrors.slice(0, SAMPLE_LIMIT),
-      failedRequests: [...requests.values()].filter((r) => r.failed || (r.status !== null && r.status >= 400)).length,
+      failedRequests: entries.filter(isFailed).length,
       failedSamples: failed,
-      blockedAssets: [...requests.values()].filter((r) => r.blocked).length,
+      blockedAssets: entries.filter((r) => r.blocked).length,
       blockedSamples: blocked,
       jsBytes,
       totalBytes,
-      requestCount: uniqueRequests,
+      requestCount: requests.size,
       thirdPartyHosts: [...thirdParty].slice(0, 50),
-      ...(mobile && typeof mobile === "object"
-        ? {
-            hiddenWordCount: Number(mobile.hiddenWordCount ?? 0),
-            hiddenInternalLinks: Number(mobile.hiddenInternalLinks ?? 0),
-            viewportOverflowPx: Number(mobile.viewportOverflowPx ?? 0),
-            smallTapTargets: Number(mobile.smallTapTargets ?? 0),
-          }
-        : {}),
+      failedDataRequests: dataFailures.length,
+      failedDataSamples: dataFailures.slice(0, SAMPLE_LIMIT).map(sample),
+      failedScripts: scriptFailures.length,
+      failedScriptSamples: scriptFailures.slice(0, SAMPLE_LIMIT).map(sample),
+      corsErrors,
+      websocketUsed: entries.some((e) => e.type === "WebSocket"),
+      mixedContentActive: mixed(ACTIVE_TYPES),
+      mixedContentPassive: mixed(PASSIVE_TYPES),
+      largestResourceBytes: largest?.bytes ?? 0,
+      largestResourceUrl: largest?.url ?? null,
+      ...commonFacts(common),
+      ...mobileFacts(mobile),
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };

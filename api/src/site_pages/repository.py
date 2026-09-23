@@ -1,5 +1,3 @@
-import json
-import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,12 +28,14 @@ from src.site_pages.schemas import (
     ChunkCounts,
     CrawlCountsResult,
     CrawlKnownPageRecord,
+    DepthCount,
+    DiscoveryPage,
     KindCount,
-    SemanticPageMatch,
     ShallowReasonCount,
     SiteChunkRecord,
     SitemapPresenceResult,
     SitePageCrawlItem,
+    SitePageDiscoveryRecord,
     SitePageEdge,
     SitePageExportRecord,
     SitePageFilters,
@@ -111,6 +111,10 @@ EXPORT = (
     SitePage.x_robots_tag,
     SitePage.blocked_by_robots,
     SitePage.has_viewport,
+    SitePage.viewport_meta,
+    SitePage.nosnippet_count,
+    SitePage.social_meta_count,
+    SitePage.has_google_analytics,
     SitePage.word_count,
     SitePage.inlinks,
     SitePage.depth,
@@ -591,6 +595,11 @@ CRAWL_COLUMNS = (
     "x_robots_tag",
     "blocked_by_robots",
     "has_viewport",
+    "viewport_meta",
+    "nosnippet_count",
+    "social_meta_count",
+    "social_meta",
+    "has_google_analytics",
     "author",
     "schema_types",
     "schema_nodes",
@@ -608,6 +617,7 @@ CRAWL_COLUMNS = (
     "published_at",
     "modified_at",
     "word_count",
+    "external_link_density",
     "mixed_content",
     "shallow",
     "shallow_reason",
@@ -673,56 +683,115 @@ NORM_OUT_LINK = """coalesce(
   x.u)"""
 
 
-async def rebuild_graph(db: AsyncSession, site_id: str) -> None:
+REGION_WEIGHT_SQL = """case region
+  when 'body' then 1.0
+  when 'breadcrumb' then 0.4
+  when 'nav' then 0.2
+  when 'header' then 0.2
+  when 'aside' then 0.15
+  when 'pagination' then 0.15
+  when 'footer' then 0.1
+  else 1.0 end"""
+
+DST_CANONICAL_SQL = """t.status between 200 and 299
+  and not t.blocked_by_robots
+  and coalesce(t.robots_directives, '') not ilike '%noindex%'
+  and coalesce(t.x_robots_tag, '') not ilike '%noindex%'
+  and (t.canonical is null or regexp_replace(t.canonical, '/+$', '') = regexp_replace(t.url, '/+$', ''))
+  and t.redirect_to is null"""
+
+
+async def rebuild_links(db: AsyncSession, site_id: str) -> None:
+    await db.execute(
+        text("delete from site_page_links where site_id = :site_id"), {"site_id": site_id}
+    )
     await db.execute(
         text(
             f"""
-    with recursive links as (
-      select regexp_replace(p.url, '/+$', '') as src,
-             {NORM_OUT_LINK} as dst,
-             l->>'anchor' as anchor
+    with links as (
+      select p.id as src, p.user_id,
+             {NORM_OUT_LINK} as dst_url,
+             l->>'anchor' as anchor,
+             l->>'rel' as rel,
+             coalesce(nullif(l->>'region', ''), 'body') as region,
+             greatest(coalesce((l->>'count')::int, 1), 1) as count
         from site_pages p, lateral jsonb_array_elements(p.out_links) l, {OUT_LINK_URL}
        where p.site_id = :site_id
     ),
     edges as (
-      select distinct l.src, l.dst, l.anchor
+      select l.src, l.user_id, t.id as dst, l.region,
+             min(l.anchor) as anchor,
+             min(l.rel) as rel,
+             sum(l.count)::int as count,
+             bool_or(coalesce(l.rel, '') !~* 'nofollow') as followable,
+             bool_and({DST_CANONICAL_SQL}) as dst_canonical
         from links l
         join site_pages t
-          on t.site_id = :site_id and regexp_replace(t.url, '/+$', '') = l.dst
-       where l.src <> l.dst
+          on t.site_id = :site_id and regexp_replace(t.url, '/+$', '') = l.dst_url
+       where l.src <> t.id
+       group by l.src, l.user_id, t.id, l.region
+    )
+    insert into site_page_links
+      (id, user_id, site_id, src_page_id, dst_page_id, region, rel, anchor, count,
+       weight, followable, dst_canonical, created_at, updated_at)
+    select 'spl_' || substr(md5(random()::text || clock_timestamp()::text || src || dst || region), 1, 10),
+           user_id, :site_id, src, dst, region, rel, anchor, count,
+           case when followable then ({REGION_WEIGHT_SQL}) else 0 end,
+           followable, dst_canonical, now(), now()
+      from edges
+    """
+        ),
+        {"site_id": site_id},
+    )
+
+
+async def restamp_graph(db: AsyncSession, site_id: str) -> None:
+    await db.execute(
+        text(
+            """
+    with recursive edges as (
+      select e.src_page_id as src, e.dst_page_id as dst, e.region, e.anchor,
+             regexp_replace(s.url, '/+$', '') as src_url
+        from site_page_links e
+        join site_pages s on s.id = e.src_page_id
+       where e.site_id = :site_id
     ),
     inbound as (
-      select dst as url,
-             count(*)::int as inlinks,
-             jsonb_agg(jsonb_build_object('from', src, 'anchor', anchor))
+      select dst,
+             count(distinct src)::int as inlinks,
+             count(distinct src) filter (where region = 'body')::int as editorial_inlinks,
+             jsonb_agg(jsonb_build_object('from', src_url, 'anchor', anchor) order by src_url)
                filter (where rn <= 25) as anchors
-        from (select src, dst, anchor, row_number() over (partition by dst order by src) as rn
+        from (select src, dst, region, anchor, src_url,
+                     row_number() over (partition by dst order by src_url, region) as rn
                 from edges) ranked
        group by dst
     ),
     home as (
-      select regexp_replace(url, '/+$', '') as key
+      select id
         from site_pages
        where site_id = :site_id and regexp_replace(url, '^https?://[^/]+', '') in ('', '/')
        order by length(url)
        limit 1
     ),
-    reach(url, depth) as (
-      select key, 0 from home
+    reach(id, depth) as (
+      select id, 0 from home
       union
-      select e.dst, r.depth + 1 from edges e join reach r on e.src = r.url where r.depth < 50
+      select e.dst, r.depth + 1
+        from edges e join reach r on e.src = r.id
+       where r.depth < 50 and e.region <> 'pagination'
     ),
-    depths as (select url, min(depth)::int as depth from reach group by url)
+    depths as (select id, min(depth)::int as depth from reach group by id)
     update site_pages p
        set inlinks = coalesce(i.inlinks, 0),
+           editorial_inlinks = coalesce(i.editorial_inlinks, 0),
            inbound_anchors = coalesce(i.anchors, '[]'::jsonb),
            depth = d.depth,
            updated_at = now()
-      from (select id, regexp_replace(url, '/+$', '') as key from site_pages
-             where site_id = :site_id) k
-      left join inbound i on i.url = k.key
-      left join depths d on d.url = k.key
-     where p.id = k.id
+      from site_pages k
+      left join inbound i on i.dst = k.id
+      left join depths d on d.id = k.id
+     where k.site_id = :site_id and p.id = k.id
     """
         ),
         {"site_id": site_id},
@@ -752,24 +821,19 @@ async def edge_list(db: AsyncSession, site_id: str) -> list[SitePageEdge]:
         await db.execute(
             text(
                 f"""
-    with links as (
-      select p.id as src, {NORM_OUT_LINK} as dst_url
-        from site_pages p, lateral jsonb_array_elements(p.out_links) l, {OUT_LINK_URL}
-       where p.site_id = :site_id and {LIVE_PAGE}
-    )
-    select distinct l.src, t.id as dst
-      from links l
-      join site_pages t
-        on t.site_id = :site_id
-       and regexp_replace(t.url, '/+$', '') = l.dst_url
-       and t.status between 200 and 299 and not t.blocked_by_robots
-     where l.src <> t.id
+    select e.src_page_id as src, e.dst_page_id as dst, sum(e.weight)::float as weight
+      from site_page_links e
+      join site_pages p on p.id = e.src_page_id
+     where e.site_id = :site_id and e.followable and e.dst_canonical and {LIVE_PAGE}
+     group by e.src_page_id, e.dst_page_id
     """
             ),
             {"site_id": site_id},
         )
     ).mappings()
-    return [SitePageEdge(src=str(r["src"]), dst=str(r["dst"])) for r in rows]
+    return [
+        SitePageEdge(src=str(r["src"]), dst=str(r["dst"]), weight=float(r["weight"])) for r in rows
+    ]
 
 
 async def landing_seed(db: AsyncSession, site_id: str) -> SitePageLandingSeed:
@@ -790,12 +854,19 @@ async def landing_seed(db: AsyncSession, site_id: str) -> SitePageLandingSeed:
     return SitePageLandingSeed(sessions_by_path={str(r["path"]): int(r["sessions"]) for r in rows})
 
 
-async def write_link_scores(db: AsyncSession, site_id: str, scores: dict[str, float]) -> None:
+SCORE_COLUMNS = ("link_score", "editorial_score")
+
+
+async def write_scores(
+    db: AsyncSession, site_id: str, column: str, scores: dict[str, float]
+) -> None:
+    if column not in SCORE_COLUMNS:
+        raise ValueError(f"{column} is not a score column")
     await db.execute(
         text(
-            """
-    update site_pages set link_score = null
-     where site_id = :site_id and link_score is not null
+            f"""
+    update site_pages set {column} = null
+     where site_id = :site_id and {column} is not null
     """
         ),
         {"site_id": site_id},
@@ -812,7 +883,7 @@ async def write_link_scores(db: AsyncSession, site_id: str, scores: dict[str, fl
             text(
                 f"""
       update site_pages p
-         set link_score = v.score::real
+         set {column} = v.score::real
         from (values {placeholders}) as v(id, score)
        where p.site_id = :site_id and p.id = v.id
     """
@@ -962,6 +1033,88 @@ async def page_stats(db: AsyncSession, site_id: str) -> SitePageStatsRecord:
     )
 
 
+DISCOVERY_COLUMNS = (
+    SitePage.id,
+    SitePage.url,
+    SitePage.title,
+    SitePage.kind,
+    SitePage.inlinks,
+    SitePage.depth,
+    SitePage.in_sitemap,
+)
+
+LIVE = and_(SitePage.status.between(200, 299), ~SitePage.blocked_by_robots)
+ORPHAN = and_(LIVE, SitePage.inlinks == 0, SitePage.depth.is_distinct_from(0))
+UNREACHABLE = and_(LIVE, SitePage.inlinks > 0, SitePage.depth.is_(None))
+
+
+async def _discovery_pages(
+    db: AsyncSession, site_id: str, cond, order, cap: int
+) -> list[DiscoveryPage]:
+    rows = (
+        await db.execute(
+            select(*DISCOVERY_COLUMNS)
+            .where(SitePage.site_id == site_id, cond)
+            .order_by(*order)
+            .limit(cap)
+        )
+    ).mappings()
+    return [DiscoveryPage.model_validate(dict(r)) for r in rows]
+
+
+async def page_discovery(
+    db: AsyncSession, site_id: str, deep_from: int, cap: int
+) -> SitePageDiscoveryRecord:
+    deep = and_(LIVE, SitePage.depth >= deep_from)
+    row = (
+        (
+            await db.execute(
+                select(
+                    _cnt(LIVE).label("live"),
+                    _cnt(and_(LIVE, SitePage.depth == 0)).label("home"),
+                    _cnt(ORPHAN).label("orphans"),
+                    _cnt(UNREACHABLE).label("unreachable"),
+                    _cnt(deep).label("deep"),
+                )
+                .select_from(SitePage)
+                .where(SitePage.site_id == site_id)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    by_depth = (
+        await db.execute(
+            select(SitePage.depth, cast(func.count(), Integer).label("n"))
+            .where(SitePage.site_id == site_id, LIVE)
+            .group_by(SitePage.depth)
+            .order_by(SitePage.depth.asc().nulls_last())
+        )
+    ).mappings()
+    return SitePageDiscoveryRecord(
+        live=row["live"],
+        home_found=row["home"] > 0,
+        orphans=row["orphans"],
+        unreachable=row["unreachable"],
+        deep=row["deep"],
+        deep_from=deep_from,
+        by_depth=[DepthCount(depth=r["depth"], n=r["n"]) for r in by_depth],
+        orphan_pages=await _discovery_pages(
+            db, site_id, ORPHAN, [SitePage.in_sitemap.desc(), SitePage.url.asc()], cap
+        ),
+        unreachable_pages=await _discovery_pages(
+            db, site_id, UNREACHABLE, [SitePage.inlinks.asc(), SitePage.url.asc()], cap
+        ),
+        deep_pages=await _discovery_pages(
+            db,
+            site_id,
+            deep,
+            [SitePage.depth.desc(), SitePage.inlinks.asc(), SitePage.url.asc()],
+            cap,
+        ),
+    )
+
+
 CHUNK_COLUMNS = (
     SiteChunk.id,
     SiteChunk.site_id,
@@ -989,59 +1142,3 @@ async def list_chunks(db: AsyncSession, site_id: str, page_id: str) -> list[Site
         )
     ).mappings()
     return [SiteChunkRecord.model_validate(r) for r in rows]
-
-
-MIN_SIMILARITY = float(os.environ.get("MEELU_SEARCH_MIN_SIMILARITY", "0.82"))
-
-
-async def semantic_page_matches(
-    db: AsyncSession,
-    site_id: str,
-    embedding: list[float],
-    model: str | None = None,
-    pool: int | None = None,
-) -> list[SemanticPageMatch]:
-    vec = json.dumps(embedding)
-    capped = min(max(pool if pool is not None else 500, 1), 2000)
-
-    rows = (
-        await db.execute(
-            text(
-                """
-    with hits as (
-      select c.page_id, c.text, c.heading_path,
-             1 - (c.embedding <=> cast(:vec as vector)) as similarity,
-             row_number() over (
-               partition by c.page_id order by c.embedding <=> cast(:vec as vector)
-             ) as per_page
-        from site_chunks c
-       where c.site_id = :site_id
-         and c.embedding is not null
-         and c.embed_model is not distinct from cast(:model as text)
-         and 1 - (c.embedding <=> cast(:vec as vector)) >= :min_similarity
-    )
-    select page_id, text, heading_path, similarity
-      from hits where per_page = 1
-     order by similarity desc
-     limit :pool
-    """
-            ),
-            {
-                "site_id": site_id,
-                "vec": vec,
-                "model": model,
-                "min_similarity": MIN_SIMILARITY,
-                "pool": capped,
-            },
-        )
-    ).mappings()
-
-    return [
-        SemanticPageMatch(
-            page_id=str(r["page_id"]),
-            similarity=float(r["similarity"]),
-            snippet=r["text"],
-            heading_path=r["heading_path"],
-        )
-        for r in rows
-    ]

@@ -3,7 +3,6 @@ from src.content.models.content_piece_issues import ContentPieceIssue
 from src.content.models.content_pieces import ContentPiece
 from src.content.models.post_media import PostMedia
 from src.content.models.site_channels import SiteChannel
-from src.content.models.social_accounts import SocialAccount
 from src.content.tools import (
     content_reset_channel_rules,
     content_update_channel,
@@ -22,7 +21,6 @@ TABLES = desk_tables(
     ContentPieceIssue,
     SiteChannel,
     PostMedia,
-    SocialAccount,
     SitePage,
     SiteChunk,
     SiteSearchDaily,
@@ -38,7 +36,7 @@ Reshape the rules of the ONE channel named in the context. Its record arrives as
 This task belongs to "{{name}}" ({{domain}}), id {{id}}. Pass that id as `siteId` on every call. Never pick a different site.
 
 ## What you can and cannot do
-You can READ anything in the workspace. You have two writes. content_update_channel takes the FULL replacement list of rules. It can also set enabled, timezone, posting windows and the gap between posts. content_reset_channel_rules restores the shipped default. These are the user's rules. Change them only as asked, never on your own judgement.
+You can READ anything in the workspace. You have two writes. content_update_channel takes the FULL replacement list of rules. It can also set enabled. content_reset_channel_rules restores the shipped default. These are the user's rules. Change them only as asked, never on your own judgement.
 
 ## How to work
 - Read the channel's record in the site_channels table FIRST. Show the rules when the user asks to see them.
@@ -50,8 +48,7 @@ You can READ anything in the workspace. You have two writes. content_update_chan
 ## When the user asks for something else
 This task tunes this one channel's rules. If the request does not fit, say what this task can do and name where the rest lives:
 - Writing a piece for this channel → the Content desk.
-- Connecting an account → Settings.
-- Outreach, Analytics and the Site desk → their own desks in the sidebar.
+- Analytics and the Site desk → their own desks in the sidebar.
 
 ## When the task completes
 Once content_update_channel succeeds, this task is COMPLETE. Confirm in one sentence what changed and stop. No further tool calls, no offers of more work. After a reset, confirm the default is back.
@@ -71,5 +68,4 @@ scope = AgentScope(
     writes=[content_update_channel, content_reset_channel_rules],
     create_tool=content_update_channel,
     system_prompt=system_prompt,
-    providers=["social"],
 )

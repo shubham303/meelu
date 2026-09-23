@@ -43,6 +43,9 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     last_modified: Mapped[str | None]
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     inlinks: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    editorial_inlinks: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
     inbound_anchors: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
     )
@@ -69,6 +72,15 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
         Boolean, nullable=False, server_default=text("false")
     )
     has_viewport: Mapped[bool | None] = mapped_column(Boolean)
+    viewport_meta: Mapped[str | None]
+    nosnippet_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    has_google_analytics: Mapped[bool | None] = mapped_column(Boolean)
+    social_meta_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    social_meta: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=EMPTY_JSON_OBJECT
+    )
     author: Mapped[str | None]
     schema_types: Mapped[list[str]] = mapped_column(
         ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
@@ -96,6 +108,7 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     word_count: Mapped[int | None] = mapped_column(Integer)
+    external_link_density: Mapped[float | None] = mapped_column(REAL)
     mixed_content: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
@@ -106,6 +119,7 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
         ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
     )
     link_score: Mapped[float | None] = mapped_column(REAL)
+    editorial_score: Mapped[float | None] = mapped_column(REAL)
     chunked_from_hash: Mapped[str | None]
     embed_state: Mapped[str | None]
     embed_error: Mapped[str | None]

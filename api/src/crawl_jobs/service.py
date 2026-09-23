@@ -22,6 +22,8 @@ from src.crawl_jobs.schemas import (
     CrawlStatusResponse,
     CrawlTargetResponse,
 )
+from src.seo import service as seo
+from src.site_page_llm_extraction import classify as page_classification
 from src.site_pages.repository import (
     crawl_counts,
     crawl_known_pages,
@@ -245,6 +247,9 @@ async def settle_crawl(
         raise HTTPException(404, f"No crawl {job_id} for this website.")
 
     await site_repo.merge_site(db, user_id, target.id, _site_patch(body))
+    if status == "completed":
+        page_classification.start(user_id, target.id)
+        await seo.request_precompute(db, user_id, target.id)
     return settled
 
 

@@ -18,6 +18,8 @@ PAGE_COLUMNS = [
     "content_hash",
 ]
 
+SEO_KEYWORD_COLUMNS = ("id", "keyword", "embedding", "embed_model", "embed_error", "cluster_id")
+
 CHUNK_COLUMNS = [
     "id",
     "user_id",
@@ -83,12 +85,14 @@ class Db:
     def missing_columns(self):
         rows, _ = self.query(
             """select table_name, column_name from information_schema.columns
-                where table_name in ('site_pages', 'site_chunks')"""
+                where table_name in ('site_pages', 'site_chunks', 'seo_keywords')"""
         )
         have = {f"{r['table_name']}.{r['column_name']}" for r in rows}
-        wanted = [f"site_pages.{c}" for c in PAGE_COLUMNS] + [
-            f"site_chunks.{c}" for c in CHUNK_COLUMNS
-        ]
+        wanted = (
+            [f"site_pages.{c}" for c in PAGE_COLUMNS]
+            + [f"site_chunks.{c}" for c in CHUNK_COLUMNS]
+            + [f"seo_keywords.{c}" for c in SEO_KEYWORD_COLUMNS]
+        )
         return [c for c in wanted if c not in have]
 
     def pages_needing_chunks(self, limit):
@@ -185,6 +189,47 @@ class Db:
                   set embed_state = 'failed', embed_error = %s, updated_at = now()
                 where id = %s""",
             (trimmed, rows[0]["page_id"]),
+        )
+
+    def pending_query_embeddings(self, limit):
+        rows, _ = self.query(
+            """select id, text
+                 from social_listening_query
+                where embedding is null and embed_attempts < %s
+                order by embed_attempts asc, seq asc
+                limit %s""",
+            (MAX_EMBED_ATTEMPTS, limit),
+        )
+        return rows
+
+    def pending_post_embeddings(self, limit):
+        rows, _ = self.query(
+            """select id, title, text
+                 from social_listening_post
+                where embedding is null and embed_attempts < %s
+                  and query_id is not null
+                  and coalesce(title, text) is not null
+                order by embed_attempts asc, seq asc
+                limit %s""",
+            (MAX_EMBED_ATTEMPTS, limit),
+        )
+        return rows
+
+    def write_listening_embedding(self, table, id, vector, model):
+        self.query(
+            f"""update {table}
+                  set embedding = %(vector)s::vector, embed_model = %(model)s,
+                      embed_error = null, updated_at = now()
+                where id = %(id)s and embedding is null""",
+            {"vector": vector_literal(vector), "model": model, "id": id},
+        )
+
+    def mark_listening_embed_failed(self, table, id, message):
+        self.query(
+            f"""update {table}
+                  set embed_attempts = embed_attempts + 1, embed_error = %s, updated_at = now()
+                where id = %s""",
+            (message[:500], id),
         )
 
     def clear_embed_state_if_complete(self, page_id):

@@ -12,6 +12,7 @@ BLOCKED_TABLES = frozenset(
         "access_token",
         "api_keys",
         "agent_plans",
+        "provider_cache",
     }
 )
 

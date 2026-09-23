@@ -180,7 +180,7 @@ function ProfileSection() {
         <SectionHeader
           icon={UserRound}
           title="You"
-          hint="Who Meelu writes as. Your sign-off goes at the foot of every outreach email, your voice steers what it drafts, and your timezone decides when scheduled posts land."
+          hint="Who Meelu writes as. Your voice steers what it drafts."
         />
         {isApp && (
           <IconButton
@@ -200,7 +200,7 @@ function ProfileSection() {
         <>
           {blank && (
             <p className="text-sm text-sub mb-4">
-              Nothing here yet, so outreach goes out unsigned and content is written in no
+              Nothing here yet, so content is written in no
               particular voice.{" "}
               {isApp ? "Fill this in, or press ✳ and Meelu will ask." : "Fill this in below."}
             </p>
@@ -238,7 +238,7 @@ function ProfileSection() {
           </div>
 
           <div className="mt-4 space-y-4">
-            <Field label="Sign-off" hint="Used verbatim at the bottom of outreach — line breaks and all.">
+            <Field label="Sign-off" hint="Used verbatim at the bottom of emails Meelu drafts — line breaks and all.">
               <Textarea
                 rows={3}
                 value={form.signature}

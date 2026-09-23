@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Cable, Check, Cpu, ExternalLink, Mail, Plug, Trash2 } from "lucide-react";
+import { Cable, Check, Cpu, ExternalLink, Plug, Trash2 } from "lucide-react";
 import { PageEnter, Stagger } from "@/components/animate";
 import {
   Badge,
@@ -16,12 +16,9 @@ import {
   Spinner,
 } from "@/components/ui";
 import { CATEGORY_LABEL, isInstallable, MCP_CATALOG, type CatalogEntry } from "@/lib/mcp-catalog";
-import { GLOBAL } from "@/lib/current-site";
-import { api, useApi, useCurrentSite } from "@/lib/use-api";
-import { SearchDataCard, SocialPublishingCard } from "./provider-cards";
+import { CreditsCard } from "./credits-card";
 import { formatRelative } from "@/lib/utils";
-import type { ConnectorsView, LlmConfigView, LlmProvider, MailboxAccountsView } from "../agent-tasks";
-import type { SiteProfile } from "@/lib/types";
+import type { ConnectorsView, LlmConfigView, LlmProvider } from "../agent-tasks";
 
 const MODEL_PLACEHOLDER: Record<LlmProvider, string> = {
   anthropic: "claude-haiku-4-5 (default)",
@@ -190,290 +187,6 @@ function ModelProviderCard() {
   );
 }
 
-interface MailboxField {
-  key: string;
-  label: string;
-  help: string;
-  placeholder: string;
-  secret: boolean;
-  optional?: boolean;
-  url?: string;
-}
-
-const MAILBOX_FORM: { name: string; blurb: string; docsUrl: string; fields: MailboxField[] } = {
-  name: "Your mailbox",
-  blurb:
-    "Send and read email as YOU — your own address over IMAP/SMTP with an app password. Replies land in your real inbox.",
-  docsUrl: "https://support.google.com/accounts/answer/185833",
-  fields: [
-    {
-      key: "address",
-      label: "Email address",
-      help: "The mailbox to send from and read — your real address.",
-      placeholder: "you@gmail.com",
-      secret: false,
-    },
-    {
-      key: "password",
-      label: "App password",
-      help: "NOT your normal password: turn on 2-Step Verification, then create an app password. Gmail, Zoho, Fastmail, iCloud and custom IMAP mailboxes work.",
-      placeholder: "abcd efgh ijkl mnop",
-      secret: true,
-      url: "https://myaccount.google.com/apppasswords",
-    },
-    {
-      key: "imapHost",
-      label: "IMAP host",
-      help: "Leave blank to auto-detect — big providers by address, custom domains by their MX records. Set it only for a self-hosted or unusual provider.",
-      placeholder: "",
-      secret: false,
-      optional: true,
-    },
-    {
-      key: "smtpHost",
-      label: "SMTP host",
-      help: "Leave blank to auto-detect, same as the IMAP host.",
-      placeholder: "",
-      secret: false,
-      optional: true,
-    },
-  ],
-};
-
-function MailboxCard() {
-  const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
-  const selected = useCurrentSite();
-  const site = selected && selected !== GLOBAL ? selected : null;
-  const entry = MAILBOX_FORM;
-
-  const [view, setView] = useState<MailboxAccountsView | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [forgetting, setForgetting] = useState<{ id: string; address: string } | null>(null);
-
-  useEffect(() => {
-    void bridge?.getMailboxAccounts?.().then((res) => {
-      if (!("error" in res)) setView(res);
-    });
-  }, [bridge]);
-
-  const { data: siteRecord, refresh: refreshSite } = useApi<SiteProfile>(
-    site ? `/sites/${site}` : null,
-  );
-
-  if (!bridge?.getMailboxAccounts) return null;
-
-  const accounts = view?.accounts ?? [];
-  const intended = null;
-  const here = intended !== null && accounts.some((a) => a.id === intended);
-  const inUse = here ? intended : intended === null && accounts.length === 1 ? accounts[0].id : null;
-  const missing = intended !== null && !here;
-
-  const apply = (res: MailboxAccountsView | { error: string }) => {
-    if ("error" in res) {
-      setErr(res.error as string);
-      return false;
-    }
-    setView(res);
-    setErr(null);
-    return true;
-  };
-
-  const choose = async (address: string | null) => {
-    if (!site) return;
-    setBusy(true);
-    try {
-      await api(`/sites/${site}`, { method: "PATCH", body: { sendingAddress: address } });
-      await refreshSite();
-      setErr(null);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Could not set the sending address.");
-    }
-    setBusy(false);
-  };
-
-  const connect = async () => {
-    if (!bridge.connectMailbox) return;
-    for (const f of entry.fields) {
-      if (!f.optional && (values[f.key] ?? "").trim() === "") {
-        setErr(`Missing required field: ${f.label}`);
-        return;
-      }
-    }
-    setBusy(true);
-    const res = await bridge.connectMailbox(
-      values,
-      entry.fields.filter((f) => f.secret).map((f) => f.key),
-    );
-    setBusy(false);
-    if (!apply(res)) return;
-    setModalOpen(false);
-    const connectedId = "connectedId" in res ? res.connectedId : undefined;
-    if (site && connectedId) await choose(connectedId);
-  };
-
-  return (
-    <Card className="mb-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Mail size={15} className="text-sub shrink-0" />
-            <p className="font-medium text-ink truncate">{entry.name}</p>
-          </div>
-          <p className="text-xs text-faint mt-0.5">
-            One mailbox per website — this is the address its outreach is sent and read from.
-          </p>
-        </div>
-        {inUse ? <Badge tone="good">Connected</Badge> : <Badge tone="neutral">Not connected</Badge>}
-      </div>
-
-      {!site ? (
-        <p className="text-sm text-sub mt-3">
-          Pick a website above to choose the mailbox it writes from.
-        </p>
-      ) : (
-        <>
-          {missing && (
-            <p className="text-sm text-warn mt-3">
-              This website sends as <span className="text-ink">{intended}</span>, but that mailbox
-              is not connected on this device. Connect it below, or pick a different address —
-              nothing will be sent as anything else.
-            </p>
-          )}
-
-          {accounts.length === 0 ? (
-            <p className="text-sm text-sub mt-3">
-              No mailbox connected on this device yet. Connect one and this website will write
-              from it.
-            </p>
-          ) : (
-            <div className="mt-3 space-y-1.5">
-              {accounts.map((a) => {
-                const active = a.id === inUse;
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-center gap-3 rounded-md border border-line px-3 py-2"
-                  >
-                    <label className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="mailbox-account"
-                        checked={active}
-                        disabled={busy}
-                        onChange={() => void choose(a.id)}
-                        className="shrink-0"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm text-ink truncate">{a.address}</span>
-                        {a.updatedAt && (
-                          <span className="block text-xs text-faint">
-                            Connected {formatRelative(a.updatedAt)}
-                            {active && intended === null && " · used by default"}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setForgetting({ id: a.id, address: a.address })}
-                    >
-                      <Trash2 size={13} /> Forget
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 mt-4">
-            <Button
-              size="sm"
-              variant={accounts.length === 0 ? "primary" : "outline"}
-              disabled={busy}
-              onClick={() => {
-                setValues({});
-                setErr(null);
-                setModalOpen(true);
-              }}
-            >
-              <Cable size={13} /> {accounts.length === 0 ? "Connect a mailbox" : "Connect another"}
-            </Button>
-            <a
-              href={entry.docsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto inline-flex items-center gap-1 text-xs text-sub hover:text-ink transition-colors"
-            >
-              Docs <ExternalLink size={11} />
-            </a>
-          </div>
-        </>
-      )}
-
-      {err && <p className="text-sm text-bad mt-2">{err}</p>}
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Connect a mailbox">
-        <div className="space-y-4">
-          <p className="text-sm text-sub">{entry.blurb}</p>
-          {entry.fields.map((f) => (
-            <Field
-              key={f.key}
-              label={f.optional ? `${f.label} (optional)` : f.label}
-              hint={f.help}
-            >
-              <div className="space-y-1.5">
-                <Input
-                  type={f.secret ? "password" : "text"}
-                  value={values[f.key] ?? ""}
-                  onChange={(ev) => setValues((v) => ({ ...v, [f.key]: ev.target.value }))}
-                  placeholder={f.placeholder}
-                />
-                {f.url && (
-                  <a
-                    href={f.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-                  >
-                    Get your key <ExternalLink size={11} />
-                  </a>
-                )}
-              </div>
-            </Field>
-          ))}
-          {err && <p className="text-sm text-bad">{err}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button disabled={busy} onClick={connect}>
-              Connect
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <ConfirmDelete
-        open={forgetting !== null}
-        onClose={() => setForgetting(null)}
-        what={
-          forgetting
-            ? `${forgetting.address} — every website using it will be left without a mailbox`
-            : "mailbox"
-        }
-        onConfirm={async () => {
-          if (!forgetting || !bridge.forgetMailbox) return;
-          apply(await bridge.forgetMailbox(forgetting.id));
-        }}
-      />
-    </Card>
-  );
-}
-
 export default function ConnectionsPage() {
   const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
   const canConnect = !!bridge?.getConnectors;
@@ -550,13 +263,11 @@ export default function ConnectionsPage() {
     <PageEnter>
       <PageHeader
         title="Connections"
-        description="The hands. Meelu is the memory; each platform you connect here is something the agent can act through — email, publishing, code. Keys are encrypted into this device's keychain and never touch Meelu's servers."
+        description="The hands. Meelu is the memory; each platform you connect here is something the agent can act through — publishing, code, data. Keys are encrypted into this device's keychain and never touch Meelu's servers."
       />
 
       <ModelProviderCard />
-      <SocialPublishingCard />
-      <SearchDataCard />
-      <MailboxCard />
+      <CreditsCard />
 
       {!canConnect && (
         <p className="text-sm text-sub mb-4">

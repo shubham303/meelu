@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     template: "%s · Meelu",
   },
   description:
-    "Meelu is the desk where your AI coworker's work lands: keyword research, content, outreach, and reviews for your website — reviewed and approved by you, then shipped.",
+    "Meelu is the desk where your AI coworker's work lands: keyword research, content, and reviews for your website — reviewed and approved by you, then shipped.",
 };
 
 export default function RootLayout({

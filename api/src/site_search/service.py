@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.seo import service as seo
 from src.site_search import repository as repo
 from src.site_search.schemas import (
     SearchChangesResponse,
@@ -211,6 +212,8 @@ async def patch_sync(
     updated = await repo.patch_sync(db, site_id, id, patch)
     if updated is None:
         raise _not_found()
+    if body.status == "completed":
+        await seo.run_rollup(db, user_id, site_id)
     return updated
 
 

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Plus, SlidersHorizontal, Sparkles } from "lucide-react";
+import { Plus, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useAgentTasks } from "../agent-tasks";
 import * as chips from "@/features/prompt-chips/content";
 import { PageEnter } from "@/components/animate";
@@ -22,11 +22,9 @@ import {
 } from "@/components/ui";
 import { api, useApi } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
-import { providerCall, useProviderConnected } from "@/lib/providers";
 import { formatRelative } from "@/lib/utils";
 import type { SiteChannel } from "@/lib/types";
 import { ChannelDot } from "./channel-dot";
-import { dateTimeLabel } from "./calendar/time";
 import {
   channelLabel,
   STATUS_LABEL,
@@ -67,27 +65,14 @@ export default function ContentPage() {
   const pieces = useMemo(() => data ?? [], [data]);
   const enabled = useMemo(() => (channels ?? []).filter((c) => c.enabled), [channels]);
 
-  const socialReady = useProviderConnected("social");
-  useEffect(() => {
-    if (!isApp || !socialReady) return;
-    void providerCall<{ reconciled: number }>("social_reconcile")
-      .then((r) => (r.reconciled > 0 ? Promise.all([refresh(), refreshCounts()]) : undefined))
-      .catch(() => {});
-  }, [isApp, socialReady, refresh, refreshCounts]);
-  const timezoneOf = (key: string) => channels?.find((c) => c.channelKey === key)?.timezone ?? "UTC";
 
   return (
     <PageEnter>
       <PageHeader
         title="Content"
-        description="Everything you write. Each piece is written for one channel — the website or a social platform — and goes out from its editor."
+        description="Everything you write. Each piece is written for one channel — the website or a social platform. You post it yourself; Meelu keeps the text and checks it against the channel's limits."
         actions={
           <>
-            <Link href="/dashboard/content/calendar">
-              <Button variant="outline">
-                <CalendarDays size={14} /> Calendar
-              </Button>
-            </Link>
             <Link href="/dashboard/content/channels">
               <Button variant="outline">
                 <SlidersHorizontal size={14} /> Channels
@@ -126,15 +111,9 @@ export default function ContentPage() {
       {error && <p className="mb-4 text-sm text-bad">{error}</p>}
       {launchErr && <p className="mb-4 text-sm text-bad">{launchErr}</p>}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3">
         <Stat label="Drafts" value={counts?.byStatus.draft ?? 0} />
-        <Stat label="Scheduled" value={counts?.byStatus.scheduled ?? 0} />
-        <Stat label="Sent out" value={counts?.byStatus.posted ?? 0} />
-        <Stat
-          label="Failed or blocked"
-          value={(counts?.byStatus.failed ?? 0) + (counts?.byStatus.blocked ?? 0)}
-          tone="warn"
-        />
+        <Stat label="Blocked by channel limits" value={counts?.byStatus.blocked ?? 0} tone="warn" />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -168,18 +147,17 @@ export default function ContentPage() {
 
       {pieces.length > 0 && (
         <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-[minmax(0,1fr)_150px_110px_170px_80px] items-center gap-5 px-5 py-2.5 text-xs text-faint">
+          <div className="grid grid-cols-[minmax(0,1fr)_150px_110px_80px] items-center gap-5 px-5 py-2.5 text-xs text-faint">
             <span>Piece</span>
             <span>Channel</span>
             <span>Status</span>
-            <span>Slot</span>
             <span className="text-right">Updated</span>
           </div>
           {pieces.map((row) => (
             <Link
               key={row.id}
               href={`/dashboard/content/${row.id}`}
-              className="grid grid-cols-[minmax(0,1fr)_150px_110px_170px_80px] items-center gap-5 border-t border-edge px-5 py-3.5 transition-colors hover:bg-panel2/60"
+              className="grid grid-cols-[minmax(0,1fr)_150px_110px_80px] items-center gap-5 border-t border-edge px-5 py-3.5 transition-colors hover:bg-panel2/60"
             >
               <div className="min-w-0">
                 <p className="truncate font-medium text-ink">{row.title}</p>
@@ -195,9 +173,6 @@ export default function ContentPage() {
               <Badge tone={STATUS_TONE[row.status]} className="w-fit">
                 {STATUS_LABEL[row.status]}
               </Badge>
-              <span className="text-xs text-sub">
-                {row.scheduledAt ? dateTimeLabel(row.scheduledAt, timezoneOf(row.channelKey)) : "—"}
-              </span>
               <span className="text-right text-xs text-faint">{formatRelative(row.updatedAt)}</span>
             </Link>
           ))}

@@ -9,9 +9,6 @@ from src.analytics.models.analytics_reports import AnalyticsReport
 from src.analytics.models.analytics_sessions import AnalyticsSession
 from src.analytics.models.analytics_sources import AnalyticsSource
 from src.content.models.content_pieces import ContentPiece
-from src.content.models.social_accounts import SocialAccount
-from src.outreach.models.campaigns import Campaign
-from src.outreach.models.prospects import Prospect
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_index_status import SitePageIndexStatus
 from src.site_search.models.site_search_daily import SiteSearchDaily
@@ -86,9 +83,6 @@ TABLES = desk_tables(
     SiteIssue,
     SitePageIssue,
     ContentPiece,
-    SocialAccount,
-    Campaign,
-    Prospect,
 )
 GUIDES = desk_guides("workflow", "search-data")
 

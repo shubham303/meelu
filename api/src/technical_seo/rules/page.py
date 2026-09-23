@@ -316,6 +316,20 @@ PAGE_RULES: list[PageRule] = [
       )""",
     ),
     PageRule(
+        kind="external-links-dense",
+        severity="p3",
+        issue=(
+            "The body links out to other sites far more often than its length supports: more than "
+            "two external links per hundred words, and at least five in all. Readers are pushed off "
+            "the page before it has said anything, and search engines read a link-heavy body as a "
+            "directory or a paid-link page rather than an article. Keep the references that earn "
+            "their place and cut the rest, or write enough around them to carry the count."
+        ),
+        where=f"""{INDEXABLE} and site_pages.external_link_density > 2
+        and (select count(*) from jsonb_array_elements(site_pages.external_links) l
+              where l->>'region' = 'body') >= 5""",
+    ),
+    PageRule(
         kind="orphan-page",
         severity="p2",
         issue=(
@@ -349,7 +363,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="soft-404",
-        llm_check=True,
         severity="p2",
         issue=(
             "Answers 200 but reads like an error page — almost no content, and wording that says the "
@@ -365,7 +378,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="thin-content",
-        llm_check=True,
         severity="p2",
         issue=(
             "Very little text for the kind of page it is. A short article or product page rarely has "
@@ -466,7 +478,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="home-missing-contact-link",
-        llm_check=True,
         severity="p2",
         issue=(
             "The home page does not link to a contact page. A way to reach the business is one of the first things a search engine's quality "
@@ -478,7 +489,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="home-missing-terms-link",
-        llm_check=True,
         severity="p3",
         issue=(
             "The home page does not link to terms and conditions. Nothing ranks a site for having "
@@ -491,7 +501,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="home-missing-social-links",
-        llm_check=True,
         severity="p3",
         issue=(
             "The home page links to no social media profile — no Facebook, Instagram, LinkedIn, X, "
@@ -503,8 +512,22 @@ PAGE_RULES: list[PageRule] = [
         where=home_links_none("external_links", SOCIAL_LINK),
     ),
     PageRule(
+        kind="home-missing-google-analytics",
+        severity="p3",
+        issue=(
+            "No Google Analytics tag was found on the home page — no gtag.js or Tag Manager script "
+            "and no inline measurement snippet. Analytics changes nothing about how the site ranks, "
+            "but without it there is no record of what visitors do once they arrive, so every other "
+            "fix here is flying blind: you cannot see which pages earn traffic, where people land or "
+            "what they leave from. Install the GA4 tag (directly or through Google Tag Manager) on "
+            "every page. If analytics is loaded through a consent manager or another product "
+            "entirely, this can be ignored."
+        ),
+        where="""site_pages.status = 200 and site_pages.kind = 'home'
+      and site_pages.has_google_analytics = false""",
+    ),
+    PageRule(
         kind="schema-article-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The article markup on this page is missing properties Google treats as required — a "
@@ -521,7 +544,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-product-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The product markup on this page has no name, or nothing to price or rate it by. Google "
@@ -539,7 +561,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-faq-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The page declares FAQ markup with no questions inside it. An FAQPage carries its content "
@@ -551,7 +572,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-howto-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The how-to markup on this page has no steps, or no name. The steps are the whole of it — "
@@ -567,7 +587,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-breadcrumb-incomplete",
-        llm_check=True,
         severity="p3",
         issue=(
             "The breadcrumb markup on this page lists no items. A BreadcrumbList exists to name the "
@@ -578,7 +597,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-organization-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The organisation markup on this page does not name the organisation or give its URL. "
@@ -595,7 +613,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="schema-localbusiness-incomplete",
-        llm_check=True,
         severity="p2",
         issue=(
             "The local business markup on this page has no name, postal address or telephone number. "
@@ -612,7 +629,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="restrictive-snippet",
-        llm_check=True,
         severity="p2",
         issue=(
             "Tells search engines not to show a snippet of this page. Without a snippet the result is "
@@ -677,7 +693,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="heading-hierarchy-skip",
-        llm_check=True,
         severity="p3",
         issue=(
             "The headings skip a level — an H2 followed by an H4, for instance. Headings are the "
@@ -694,7 +709,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="image-missing-alt",
-        llm_check=True,
         severity="p3",
         issue=(
             "Has images with no alt attribute at all. Alt text is what a screen reader announces and "
@@ -760,7 +774,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="url-hygiene",
-        llm_check=True,
         severity="p3",
         issue=(
             "The URL has capitals, underscores or tracking parameters in it. Servers treat upper and "
@@ -784,7 +797,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="url-dated",
-        llm_check=True,
         severity="p3",
         issue=(
             "The URL has a year and month baked into the path. That is a CMS default rather than a "
@@ -797,7 +809,6 @@ PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="url-stop-words",
-        llm_check=True,
         severity="p3",
         issue=(
             "The slug carries several function words — and, the, for, to, of. They take up room in a "

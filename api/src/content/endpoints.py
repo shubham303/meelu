@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -18,9 +16,7 @@ from src.content.channels import service as channels_service
 from src.content.media import service as media_service
 from src.content.piece_issues import service as issues_service
 from src.content.pieces import service as pieces_service
-from src.content.publishing.endpoints import router as publishing_router
 from src.content.schemas import (
-    ContentFreeSlotsResponse,
     ContentPieceCountsResponse,
     ContentPieceCreateRequest,
     ContentPieceDeleteResponse,
@@ -47,16 +43,12 @@ from src.integrations.base import IntegrationError
 from src.integrations.unsplash import unsplash
 
 router = APIRouter()
-router.include_router(publishing_router)
 
 
 def actor_of(request: Request) -> str:
     if not request.headers.get("x-api-key"):
         return "user"
-    actor = request.headers.get("x-meelu-actor")
-    if actor in ("user", "system"):
-        return actor
-    return "agent"
+    return "user" if request.headers.get("x-meelu-actor") == "user" else "agent"
 
 
 @router.get("/content/channels")
@@ -99,25 +91,12 @@ async def reset_channel_rules(
     return SiteChannelResponse.model_validate(channel)
 
 
-@router.get("/content/channels/{channel_key}/free-slots")
-async def free_slots(
-    channel_key: str,
-    since: str | None = Query(None, alias="from"),
-    until: str | None = Query(None, alias="to"),
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> ContentFreeSlotsResponse:
-    return await pieces_service.free_slots(db, ctx.user_id, ctx.site_id, channel_key, since, until)
-
-
 @router.get("/content/pieces")
 async def list_pieces(
     counts: bool = Query(False),
     status: str | None = Query(None),
     channel: str | None = Query(None),
     search: str | None = Query(None),
-    since: datetime | None = Query(None, alias="from"),
-    until: datetime | None = Query(None, alias="to"),
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
@@ -131,8 +110,6 @@ async def list_pieces(
         status=status,
         channel_key=channel,
         search=search,
-        since=since,
-        until=until,
     )
     return PaginatedApiResponse[ContentPieceListItemResponse](
         data=[ContentPieceListItemResponse.model_validate(p) for p in page.data],
@@ -179,11 +156,8 @@ async def update_piece(
     body: ContentPieceUpdateRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-    actor: str = Depends(actor_of),
 ) -> ContentPieceResponse:
-    piece = await pieces_service.update_piece(
-        db, ctx.user_id, ctx.site_id, piece_id, body, actor=actor
-    )
+    piece = await pieces_service.update_piece(db, ctx.user_id, ctx.site_id, piece_id, body)
     return ContentPieceResponse.model_validate(piece)
 
 
@@ -192,9 +166,8 @@ async def delete_piece(
     piece_id: str,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-    actor: str = Depends(actor_of),
 ) -> ContentPieceDeleteResponse:
-    piece = await pieces_service.delete_piece(db, ctx.user_id, ctx.site_id, piece_id, actor=actor)
+    piece = await pieces_service.delete_piece(db, ctx.site_id, piece_id)
     return ContentPieceDeleteResponse(id=piece.id)
 
 

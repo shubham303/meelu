@@ -24,8 +24,6 @@ from src.technical_seo.schemas import (
     IssueDecision,
     IssueGroupResponse,
     IssueUpdateRequest,
-    LlmCheckRequest,
-    LlmCheckResult,
     NewPageIssue,
     NewSiteIssue,
     PageIssueBulkUpdateRequest,
@@ -209,28 +207,6 @@ async def update_page_issues_by(
     return IssueBulkUpdateResult(run_id=run.id, updated=updated)
 
 
-async def llm_check_site_issue(
-    db: AsyncSession, site_id: str, issue_id: str, body: LlmCheckRequest
-) -> LlmCheckResult:
-    issue = await get_site_issue(db, site_id, issue_id)
-    if body.verdict == "delete":
-        await repo.delete_site_issue(db, site_id, issue.id)
-        return LlmCheckResult(id=issue.id, verdict=body.verdict, deleted=True)
-    await repo.update_site_issue(db, site_id, issue.id, body.to_changes())
-    return LlmCheckResult(id=issue.id, verdict=body.verdict)
-
-
-async def llm_check_page_issue(
-    db: AsyncSession, site_id: str, issue_id: str, body: LlmCheckRequest
-) -> LlmCheckResult:
-    issue = await get_page_issue(db, site_id, issue_id)
-    if body.verdict == "delete":
-        await repo.delete_page_issue(db, site_id, issue.id)
-        return LlmCheckResult(id=issue.id, verdict=body.verdict, deleted=True)
-    await repo.update_page_issue(db, site_id, issue.id, body.to_changes())
-    return LlmCheckResult(id=issue.id, verdict=body.verdict)
-
-
 async def run_audit(
     db: AsyncSession, user_id: str, site_id: str, body: AuditStartRequest
 ) -> AuditResultResponse:
@@ -279,7 +255,6 @@ async def audit(
                 severity=rule.severity,
                 page_id=page_id,
                 matched_pages=matched,
-                llm_check_required=rule.llm_check,
                 issue_type=rule.issue_type,
             )
             for page_id in ids
@@ -291,7 +266,6 @@ async def audit(
             kind=r.kind,
             issue=r.issue,
             severity=r.severity,
-            llm_check_required=r.llm_check,
             issue_type=r.issue_type,
         )
         for r in rules

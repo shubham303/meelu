@@ -16,8 +16,6 @@ def _query(
     status: str | None = None,
     channel_key: str | None = None,
     search: str | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
 ):
     where = [ContentPiece.site_id == site_id]
     if status:
@@ -27,10 +25,6 @@ def _query(
     if search:
         like = f"%{search}%"
         where.append(or_(ContentPiece.title.ilike(like), ContentPiece.body_markdown.ilike(like)))
-    if since:
-        where.append(ContentPiece.scheduled_at >= since)
-    if until:
-        where.append(ContentPiece.scheduled_at < until)
     return select(ContentPiece).where(*where)
 
 
@@ -42,26 +36,13 @@ async def list_pieces(
     status: str | None = None,
     channel_key: str | None = None,
     search: str | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
 ) -> PaginatedApiResponse[ContentPieceRecord]:
-    query = _query(
-        site_id, status=status, channel_key=channel_key, search=search, since=since, until=until
-    ).order_by(ContentPiece.updated_at.desc())
+    query = _query(site_id, status=status, channel_key=channel_key, search=search).order_by(
+        ContentPiece.updated_at.desc()
+    )
     return await PaginationService.paginate_query(
         db, query, paging.page, paging.page_size, ContentPieceRecord
     )
-
-
-async def list_on_channel(
-    db: AsyncSession, site_id: str, channel_key: str
-) -> list[ContentPieceRecord]:
-    rows = await db.execute(
-        _query(site_id, channel_key=channel_key).order_by(
-            ContentPiece.scheduled_at.asc().nulls_last(), ContentPiece.seq.asc()
-        )
-    )
-    return [ContentPieceRecord.model_validate(row) for row in rows.scalars().all()]
 
 
 async def counts_by_status(db: AsyncSession, site_id: str) -> ContentPieceCountsResponse:

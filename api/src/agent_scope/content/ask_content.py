@@ -4,7 +4,6 @@ from src.content.models.content_piece_issues import ContentPieceIssue
 from src.content.models.content_pieces import ContentPiece
 from src.content.models.post_media import PostMedia
 from src.content.models.site_channels import SiteChannel
-from src.content.models.social_accounts import SocialAccount
 from src.content.tools import content_create_piece, content_update_piece
 from src.profile.models.profile import Profile
 from src.site_pages.models.site_chunk import SiteChunk
@@ -20,7 +19,6 @@ TABLES = desk_tables(
     ContentPieceIssue,
     SiteChannel,
     PostMedia,
-    SocialAccount,
     SitePage,
     SiteChunk,
     SiteSearchDaily,
@@ -29,19 +27,16 @@ GUIDES = desk_guides("workflow", "pages", "content")
 
 ASK = AskDesk(
     title="Content",
-    produces="pieces, each written for one channel, on the calendar",
-    pen="""Write and revise pieces. A piece is one text for ONE channel, with its own status and slot. Use content_create_piece for a new one and content_update_piece to change one. Everything lands as a draft for the user to review.""",
+    produces="pieces, each written for one channel",
+    pen="""Write and revise pieces. A piece is one text for ONE channel, with its own status. Use content_create_piece for a new one and content_update_piece to change one. Everything lands as a draft for the user to review.""",
     extra=[
-        "**Nothing here sends.** You can set a planned time on a piece. It leaves only when the user publishes it from the editor.",
+        "**Nothing here sends.** Meelu holds the text; the user posts it themselves wherever it goes.",
         "Read the site's own copy of each channel's rules in the site_channels table. The user's version beats any assumption about the platform. A disabled channel cannot take a piece.",
         "The same idea for two channels is two pieces. Clone the first with cloneFromPieceId and rewrite it for the second channel's rules.",
-        "Every scheduledAt must come from content_free_slots. The server refuses a guessed hour.",
     ],
     elsewhere=[
-        "Sending or scheduling → the **Publish** step in the piece's editor.",
-        "Connecting an account, or a used-up quota → **Settings**.",
-        "An email to a person → **Outreach**.",
         "Whether a piece brought anything → **Analytics**.",
+        "Finding the people a piece should reach → **Lead Management**.",
     ],
 )
 

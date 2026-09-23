@@ -21,8 +21,6 @@ class SiteIssueRecord(IssueHead):
     state: str
     rejection_reason: str | None = None
     reviewed_at: JsDateTime | None = None
-    llm_check_required: bool = False
-    llm_check_done_at: JsDateTime | None = None
     created_at: JsDateTime
     updated_at: JsDateTime
 
@@ -73,7 +71,6 @@ class SiteIssueFilter(BaseModel):
     state: str | None = None
     severity: str | None = None
     kinds: list[str] | None = None
-    llm_check_pending: bool | None = None
     issue_type: str | None = None
 
 
@@ -87,7 +84,6 @@ class NewSiteIssue(BaseModel):
     issue: str
     severity: str = "p2"
     state: str = "open"
-    llm_check_required: bool = False
     issue_type: str = "static"
 
 
@@ -102,7 +98,6 @@ class IssueChanges(BaseModel):
     state: str | None = None
     rejection_reason: str | None = None
     reviewed_at: datetime | None = None
-    llm_check_done_at: datetime | None = None
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
@@ -301,42 +296,3 @@ class IssueChangeResult(EntityModel):
     severity: str | None = None
     state: str | None = None
     rejection_reason: str | None = None
-
-
-LLM_VERDICTS = ("keep", "update", "delete")
-
-
-class LlmCheckRequest(RequestModel):
-    verdict: str
-    issue: str | None = None
-
-    @field_validator("verdict", mode="before")
-    @classmethod
-    def _verdict(cls, value: Any) -> str:
-        verdict = str(value or "").strip().lower()
-        if verdict not in LLM_VERDICTS:
-            raise ValueError("verdict must be keep, update or delete.")
-        return verdict
-
-    @field_validator("issue", mode="before")
-    @classmethod
-    def _issue(cls, value: Any) -> str | None:
-        return None if fields.blank(value) else fields.issue_text(value)
-
-    @model_validator(mode="after")
-    def _update_needs_text(self) -> Self:
-        if self.verdict == "update" and not self.issue:
-            raise ValueError("An update verdict needs the new issue text.")
-        return self
-
-    def to_changes(self) -> IssueChanges:
-        changes = IssueChanges(llm_check_done_at=datetime.now(UTC))
-        if self.verdict == "update":
-            changes.issue = self.issue
-        return changes
-
-
-class LlmCheckResult(EntityModel):
-    id: str
-    verdict: str
-    deleted: bool = False

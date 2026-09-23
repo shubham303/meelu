@@ -354,7 +354,6 @@ def ai_permission_rules(site: SiteRecord) -> list[SiteRule]:
         ),
         SiteRule(
             kind="ai-permissions-inconsistent",
-            llm_check=True,
             severity="p1",
             issue=(
                 "robots.txt draws the AI line in the wrong place. "

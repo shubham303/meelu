@@ -8,7 +8,6 @@ OPTIMISABLE = """site_pages.status = 200 and not site_pages.shallow and not site
 CONTENT_PAGE_RULES: list[PageRule] = [
     PageRule(
         kind="stale-content",
-        llm_check=True,
         severity="p2",
         issue=(
             "Nothing in the text of this page has changed in over a year. That is measured rather than "
@@ -25,7 +24,6 @@ CONTENT_PAGE_RULES: list[PageRule] = [
     ),
     PageRule(
         kind="date-inflation",
-        llm_check=True,
         severity="p2",
         issue=(
             "This page says it was modified more recently than its text actually changed. The declared "

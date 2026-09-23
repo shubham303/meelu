@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.embed_worker.models import embed_model, embed_passage, embed_query
 from src.notes import repository as repo
-from src.notes.embedder import EMBED_MODEL, embed_passage, embed_query
 from src.notes.schemas import (
     SEARCH_MODES,
     NoteCreateRequest,
@@ -20,7 +20,7 @@ MAX_SEARCH_LIMIT = 50
 async def _embedded(note: str) -> tuple[list[float] | None, str | None]:
     vector = await embed_passage(note)
     if vector:
-        return vector, EMBED_MODEL
+        return vector, embed_model()
     return None, None
 
 
@@ -96,7 +96,7 @@ async def search(
         mode=requested,
         kind=kind,
         limit=min(limit if limit is not None else DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT),
-        model=EMBED_MODEL,
+        model=embed_model(),
     )
 
     note: str | None = None

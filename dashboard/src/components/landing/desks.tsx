@@ -5,7 +5,6 @@ import {
   BarChart3,
   PenLine,
   RefreshCw,
-  Send,
   Star,
   type LucideIcon,
 } from "lucide-react";
@@ -45,17 +44,6 @@ const DESKS: Array<{
       "Drafts → revisions → approval, with full version history",
       "Blog posts published via GitHub PR or your CMS",
       "Social and community drafts queued for review",
-    ],
-  },
-  {
-    icon: Send,
-    name: "Outreach",
-    pitch:
-      "A partnerships and link-building CRM. Finds the sites and people worth your time, drafts every email in your voice.",
-    outputs: [
-      "Prospect lists with a reason for every fit",
-      "Drafts you approve before anything sends",
-      "An inbox with reply sentiment",
     ],
   },
   {

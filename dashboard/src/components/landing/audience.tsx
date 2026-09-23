@@ -13,7 +13,7 @@ const AUDIENCES: Array<{ icon: LucideIcon; title: string; body: string }> = [
   {
     icon: Rocket,
     title: "For builders: your whole marketing team",
-    body: "You keep shipping product; your coworker keeps shipping the marketing — keywords, content, outreach, reviews — and asks before it touches anything.",
+    body: "You keep shipping product; your coworker keeps shipping the marketing — keywords, content, reviews — and asks before it touches anything.",
   },
 ];
 

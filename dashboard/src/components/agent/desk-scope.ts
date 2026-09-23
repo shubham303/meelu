@@ -5,7 +5,7 @@ export type DeskId =
   | "site"
   | "pages"
   | "content"
-  | "outreach"
+  | "leads"
   | "analytics";
 
 export function deskLabel(deskId: string): string {

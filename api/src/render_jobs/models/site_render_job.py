@@ -21,6 +21,8 @@ class SiteRenderJob(EntityMixin, SiteScopedMixin, Base):
     status: Mapped[str] = mapped_column(nullable=False, server_default=text("'queued'"))
     trigger: Mapped[str] = mapped_column(nullable=False, server_default=text("'user'"))
     scope: Mapped[str] = mapped_column(nullable=False, server_default=text("'sample'"))
+    page_limit: Mapped[int | None] = mapped_column(Integer)
+    page_url: Mapped[str | None]
     device: Mapped[str] = mapped_column(nullable=False, server_default=text("'desktop'"))
     user_agent_profile: Mapped[str] = mapped_column(
         nullable=False, server_default=text("'googlebot'")

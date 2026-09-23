@@ -22,6 +22,17 @@ class Settings(EnvSettings):
 
     unsplash_access_key: str = ""
 
+    dataforseo_login: str = ""
+    dataforseo_password: str = ""
+    dataforseo_base_url: str = "https://api.dataforseo.com"
+    apify_token: str = ""
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api"
+    openrouter_jev_model: str = "~typesafe/jev-latest"
+    openrouter_review_model: str = "anthropic/claude-sonnet-4.5"
+    credits_signup_grant_usd: float = 5.0
+    seo_job_vendor_ceiling_micros: int = 2_000_000
+
     log_level: str = "INFO"
 
     agent_data_dir: Path = Path.home() / ".meelu" / "agent-data"

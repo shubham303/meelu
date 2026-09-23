@@ -2,9 +2,11 @@ import signal
 import sys
 import time
 
+from src.seo.precompute.clusters import run_seo_pass
+
 from .chunking import chunk_body, page_chunk
 from .db import Db
-from .embedding import Embedder, passage_input
+from .embedding import Embedder, passage_input, post_input, query_input
 from .settings import WorkerSettings
 
 stopping = False
@@ -68,6 +70,35 @@ def run_embed_pass(db, embedder, model, batch=32, max_batches=4):
     return done
 
 
+def run_listening_pass(db, embedder, model, batch=4, max_batches=16):
+    done = 0
+    for table, fetch, to_input in (
+        ("social_listening_query", db.pending_query_embeddings, lambda r: query_input(r["text"])),
+        (
+            "social_listening_post",
+            db.pending_post_embeddings,
+            lambda r: post_input(r["title"], r["text"]),
+        ),
+    ):
+        for _ in range(max_batches):
+            rows = fetch(batch)
+            if not rows:
+                break
+            try:
+                vectors = embedder.embed([to_input(r) for r in rows])
+            except Exception as e:
+                for r in rows:
+                    db.mark_listening_embed_failed(table, r["id"], str(e))
+                break
+            for row, vector in zip(rows, vectors):
+                try:
+                    db.write_listening_embedding(table, row["id"], vector, model)
+                    done += 1
+                except Exception as e:
+                    db.mark_listening_embed_failed(table, row["id"], str(e))
+    return done
+
+
 def main():
     settings = WorkerSettings()
 
@@ -109,9 +140,15 @@ def main():
             embedded = run_embed_pass(db, embedder, settings.meelu_embed_model)
             if embedded > 0:
                 print(f"embed-worker: embedded {embedded} chunk(s)")
+            listening = run_listening_pass(db, embedder, settings.meelu_embed_model)
+            if listening > 0:
+                print(f"embed-worker: embedded {listening} listening row(s)")
+            seo_sites = run_seo_pass(db, embedder, settings.meelu_embed_model)
+            if seo_sites > 0:
+                print(f"embed-worker: rebuilt keyword clusters for {seo_sites} site(s)")
             if once:
                 break
-            if pages == 0 and embedded == 0:
+            if pages == 0 and embedded == 0 and listening == 0 and seo_sites == 0:
                 time.sleep(interval)
         except Exception as e:
             print(f"embed-worker: pass failed — {e}", file=sys.stderr)

@@ -84,7 +84,7 @@ export default function MeeluInstallPage() {
           <code className="font-mono text-xs text-accent">/mcp</code> and look for{" "}
           <span className="text-ink">meelu</span> as connected. Then ask your assistant
           something only Meelu would know, like{" "}
-          <span className="text-ink">&ldquo;what outreach projects do I have?&rdquo;</span>
+          <span className="text-ink">&ldquo;what content is on my calendar?&rdquo;</span>
         </p>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-sub">
           If it fails to connect, it&apos;s almost always one of three things: the agent server
@@ -97,7 +97,7 @@ export default function MeeluInstallPage() {
       <section className="rounded-2xl border border-edge bg-panel p-6">
         <h2 className="font-display text-lg text-ink">Next: connect your other tools</h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sub">
-          Meelu drafts outreach emails and posts; sending and publishing happen through the
+          Meelu drafts posts; sending and publishing happen through the
           providers you connect in the Meelu app. Adding the right server closes other gaps
           in the same conversation.
         </p>

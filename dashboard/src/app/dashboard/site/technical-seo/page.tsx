@@ -26,7 +26,6 @@ import {
   Button,
   EmptyState,
   PageHeader,
-  Select,
   Spinner,
 } from "@/components/ui";
 import { siteHeader } from "@/lib/current-site";
@@ -36,7 +35,6 @@ import { CrawlProgress } from "../crawl-progress";
 import { RenderProgress } from "../render-progress";
 import { SiteAskButton } from "../site-ask";
 import { useCrawl } from "../tracked";
-import { useIssueCheck } from "../tracked-issue-check";
 import { type Render, useRender } from "../tracked-render";
 import * as chips from "@/features/prompt-chips/site";
 import {
@@ -89,12 +87,11 @@ const SEVERITY_HINT: Record<SiteIssueSeverity, string> = {
   p3: "Small, cheap corrections. Do not let a long list of these hide anything above.",
 };
 
-type Phase = "idle" | "crawling" | "rendering" | "checking" | "verifying";
+type Phase = "idle" | "crawling" | "rendering" | "checking";
 
 export default function SiteTechnicalSeoPage() {
   const [state, setState] = useState<SiteIssueState>("open");
   const [tab, setTab] = useState<SiteIssueType>("static");
-  const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
   const [severity, setSeverity] = useState<SiteIssueSeverity | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -105,14 +102,22 @@ export default function SiteTechnicalSeoPage() {
   const waiting = useRef(false);
   const running = phase !== "idle";
 
-  const { data: summary, refresh: refreshSummary } = useApi<SiteIssueSummary>("/api/v1/site/technical-seo/summary");
+  const { refresh: refreshSummary } = useApi<SiteIssueSummary>("/api/v1/site/technical-seo/summary");
   const {
-    data: groups,
+    data: openGroups,
     loading,
     error,
-    refresh: refreshGroups,
-  } = useApi<SiteIssueGroup[]>(`/api/v1/site/technical-seo/groups?state=${state}`);
+    refresh: refreshOpen,
+  } = useApi<SiteIssueGroup[]>("/api/v1/site/technical-seo/groups?state=open");
+  const { data: rejectedGroups, refresh: refreshRejected } = useApi<SiteIssueGroup[]>(
+    "/api/v1/site/technical-seo/groups?state=rejected",
+  );
+  const refreshGroups = useCallback(() => {
+    void refreshOpen();
+    void refreshRejected();
+  }, [refreshOpen, refreshRejected]);
 
+  const groups = state === "open" ? openGroups : rejectedGroups;
   const allRows = useMemo(() => groups ?? [], [groups]);
   const rows = useMemo(() => allRows.filter((r) => r.issueType === tab), [allRows, tab]);
   const tabCounts = useMemo(() => {
@@ -121,27 +126,24 @@ export default function SiteTechnicalSeoPage() {
     return counts;
   }, [allRows]);
 
-  const kinds = useMemo(() => [...new Set(rows.map((r) => r.kind))].sort(), [rows]);
-
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter(
       (r) =>
-        (!kind || r.kind === kind) &&
         (!severity || r.severity === severity) &&
         (!needle ||
           r.kind.includes(needle) ||
           r.issue.toLowerCase().includes(needle) ||
           r.examples.some((u) => u.toLowerCase().includes(needle))),
     );
-  }, [rows, kind, severity, q]);
+  }, [rows, severity, q]);
 
   const narrowed = visible.length < rows.length;
   const affected = visible.reduce((n, r) => n + (r.scope === "site" ? 1 : r.pages), 0);
 
   const counts = {
-    open: (summary?.site.open ?? 0) + (summary?.pages.open ?? 0),
-    rejected: (summary?.site.rejected ?? 0) + (summary?.pages.rejected ?? 0),
+    open: (openGroups ?? []).filter((r) => r.issueType === tab).length,
+    rejected: (rejectedGroups ?? []).filter((r) => r.issueType === tab).length,
   };
 
   const reload = useCallback(() => {
@@ -151,23 +153,14 @@ export default function SiteTechnicalSeoPage() {
 
   const pickState = (next: SiteIssueState) => {
     setState(next);
-    setKind("");
     setSeverity(null);
   };
 
   const pickTab = (next: SiteIssueType) => {
     setTab(next);
-    setKind("");
     setSeverity(null);
     setAsking(false);
   };
-
-  const verified = useCallback(() => {
-    setPhase("idle");
-    reload();
-  }, [reload]);
-
-  const verify = useIssueCheck(siteId, verified);
 
   const check = useCallback(
     async () => {
@@ -176,16 +169,12 @@ export default function SiteTechnicalSeoPage() {
         await api("/api/v1/site/technical-seo/run-audit", { method: "POST", body: {} });
         setProblem(null);
         reload();
-        if (verify.canCheck && (await verify.start())) {
-          setPhase("verifying");
-          return;
-        }
       } catch (e) {
         setProblem(e instanceof Error ? e.message : "The checks could not run.");
       }
       setPhase("idle");
     },
-    [reload, verify],
+    [reload],
   );
 
   const settle = useCallback(() => {
@@ -226,11 +215,11 @@ export default function SiteTechnicalSeoPage() {
     }
   };
 
-  const renderThenCheck = async () => {
+  const renderThenCheck = async (opts: { limit?: number; url?: string } = {}) => {
     setAsking(false);
     setPhase("rendering");
     waiting.current = true;
-    const started = await render.start();
+    const started = await render.start(opts);
     if (!started) {
       waiting.current = false;
       setPhase("idle");
@@ -240,14 +229,11 @@ export default function SiteTechnicalSeoPage() {
   const stopCurrent = () => {
     if (phase === "crawling") void crawl.stop();
     if (phase === "rendering") void render.stop();
-    if (phase === "verifying") void verify.stop();
   };
 
-  const stopping =
-    phase === "crawling" ? crawl.stopping : phase === "rendering" ? render.stopping : verify.stopping;
+  const stopping = phase === "crawling" ? crawl.stopping : render.stopping;
 
-  const stopLabel =
-    phase === "crawling" ? "Stop reading" : phase === "rendering" ? "Stop rendering" : "Stop verifying";
+  const stoppable = phase === "crawling" || phase === "rendering";
 
   const runLabel =
     phase === "crawling"
@@ -256,9 +242,7 @@ export default function SiteTechnicalSeoPage() {
         ? `Rendering ${(render.status?.rendered ?? 0) + (render.status?.skipped ?? 0) + (render.status?.failed ?? 0)}/${render.status?.total ?? 0}…`
         : phase === "checking"
           ? "Checking…"
-          : phase === "verifying"
-            ? `Verifying ${verify.status.checked + verify.status.failed}/${verify.status.total}…`
-            : RUN_LABEL[tab];
+          : RUN_LABEL[tab];
 
   const download = async () => {
     setDownloading(true);
@@ -311,24 +295,25 @@ export default function SiteTechnicalSeoPage() {
               <Download size={14} />
               {downloading ? "Building…" : `Download ${affected} row${affected === 1 ? "" : "s"}`}
             </Button>
-            {(phase === "crawling" || phase === "rendering" || phase === "verifying") && (
-              <Button variant="ghost" onClick={stopCurrent} disabled={stopping}>
+            {stoppable ? (
+              <Button onClick={stopCurrent} disabled={stopping} title="Stop">
                 <Square size={14} />
-                {stopping ? "Stopping…" : stopLabel}
+                {stopping ? "Stopping…" : runLabel}
+              </Button>
+            ) : (
+              <Button
+                onClick={ask}
+                disabled={running || asking || !canRun}
+                title={canRun ? undefined : "Rendering runs in the Meelu app."}
+              >
+                {runLabel}
               </Button>
             )}
-            <Button
-              onClick={ask}
-              disabled={running || asking || !canRun}
-              title={canRun ? undefined : "Rendering runs in the Meelu app."}
-            >
-              {runLabel}
-            </Button>
             <SiteAskButton
               title="Ask — Technical SEO"
               hint="Ask which of these checks matter, what one of them means, or what a fix would look like on the pages it flagged."
               suggestions={chips.technicalSeo()}
-              draft={{ showing: `${STATE_LABEL[state]} ${TAB_LABEL[tab].toLowerCase()}`, check: kind || "every check" }}
+              draft={{ showing: `${STATE_LABEL[state]} ${TAB_LABEL[tab].toLowerCase()}`, check: "every check" }}
               onRan={reload}
             />
           </div>
@@ -382,7 +367,7 @@ export default function SiteTechnicalSeoPage() {
         {asking && renderTab && (
           <RerenderAsk
             render={render}
-            onRender={() => void renderThenCheck()}
+            onRender={(opts) => void renderThenCheck(opts)}
             onSkip={() => void checkOnly()}
             onCancel={() => setAsking(false)}
           />
@@ -433,26 +418,12 @@ export default function SiteTechnicalSeoPage() {
               className="w-full rounded-lg border border-edge2 bg-panel2 py-2 pl-9 pr-3 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none"
             />
           </div>
-          <Select
-            value={kind}
-            onChange={(e) => setKind(e.target.value)}
-            className="w-56 shrink-0"
-            aria-label="Which check"
-          >
-            <option value="">Every check</option>
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </Select>
           <span className="shrink-0 text-xs tabular-nums text-faint">
             {narrowed ? `${visible.length} of ${rows.length} checks` : `${rows.length} checks`}
           </span>
         </div>
 
         {(problem || error) && <p className="text-sm text-bad">{problem ?? error}</p>}
-        {verify.note && !problem && <p className="text-sm text-sub">{verify.note}</p>}
         {crawl.note && !running && !renderTab && <p className="text-xs text-faint">{crawl.note}</p>}
         {render.note && !running && renderTab && <p className="text-xs text-faint">{render.note}</p>}
 
@@ -543,12 +514,25 @@ function RerenderAsk({
   onCancel,
 }: {
   render: Render;
-  onRender: () => void;
+  onRender: (opts: { limit?: number; url?: string }) => void;
   onSkip: () => void;
   onCancel: () => void;
 }) {
+  const [limit, setLimit] = useState("");
+  const [url, setUrl] = useState("");
   const s = render.status;
   const device = render.device === "mobile" ? "Googlebot smartphone" : "Googlebot";
+  const onlyUrl = url.trim();
+  const cap = Number(limit);
+  const opts = {
+    ...(onlyUrl ? { url: onlyUrl } : {}),
+    ...(!onlyUrl && Number.isFinite(cap) && cap > 0 ? { limit: Math.floor(cap) } : {}),
+  };
+  const yes = onlyUrl
+    ? "Yes — render that page, then check"
+    : opts.limit
+      ? `Yes — render up to ${opts.limit} pages, then check`
+      : "Yes — render again, then check";
   const rendered = s?.renderedPages ?? 0;
   const meta = rendered
     ? `${rendered} page${rendered === 1 ? "" : "s"} rendered${s?.lastRenderedAt ? ` ${formatRelative(s.lastRenderedAt)}` : ""}` +
@@ -566,9 +550,25 @@ function RerenderAsk({
         Use the last render if the website has not changed since.
       </p>
       <p className="text-xs text-faint">{meta}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Only this page (paste a URL)"
+          className="min-w-64 flex-1 rounded-lg border border-edge2 bg-panel py-1.5 px-3 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none"
+        />
+        <input
+          value={limit}
+          onChange={(e) => setLimit(e.target.value.replace(/\D/g, ""))}
+          inputMode="numeric"
+          placeholder="Up to N pages"
+          disabled={!!onlyUrl}
+          className="w-36 rounded-lg border border-edge2 bg-panel py-1.5 px-3 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none disabled:opacity-50"
+        />
+      </div>
       <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" onClick={onRender}>
-          Yes — render again, then check
+        <Button size="sm" onClick={() => onRender(opts)}>
+          {yes}
         </Button>
         <Button size="sm" variant="outline" onClick={onSkip} disabled={!rendered}>
           No — check the pages already rendered

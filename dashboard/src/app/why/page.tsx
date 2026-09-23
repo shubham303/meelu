@@ -249,7 +249,7 @@ export default function WhyPage() {
                 The servers you install are the hands
               </h3>
               <p className="mt-1.5 text-sm leading-relaxed text-sub">
-                Sending an outreach email means you connected your own email provider and your
+                Sending an email means you connected your own email provider and your
                 assistant used both in one conversation: draft here, get your yes on the exact
                 text, send there, record the outcome here.
               </p>

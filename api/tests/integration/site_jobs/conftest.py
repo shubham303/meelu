@@ -6,15 +6,12 @@ from tests.conftest import signup
 
 
 def _mount() -> None:
-    from src.analysis_jobs.endpoints import router as analysis_router
     from src.app import app
     from src.crawl_jobs.endpoints import router as crawl_router
 
     mounted = {getattr(route, "path", "") for route in app.routes}
     if "/api/v1/site/crawl-jobs" not in mounted:
         app.include_router(crawl_router, prefix="/api/v1")
-    if "/api/v1/site/analysis-jobs" not in mounted:
-        app.include_router(analysis_router, prefix="/api/v1")
 
 
 @pytest.fixture(autouse=True)

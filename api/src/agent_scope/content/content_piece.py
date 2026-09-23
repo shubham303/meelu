@@ -3,7 +3,6 @@ from src.content.models.content_piece_issues import ContentPieceIssue
 from src.content.models.content_pieces import ContentPiece
 from src.content.models.post_media import PostMedia
 from src.content.models.site_channels import SiteChannel
-from src.content.models.social_accounts import SocialAccount
 from src.content.tools import content_create_piece
 from src.profile.models.profile import Profile
 from src.site_pages.models.site_chunk import SiteChunk
@@ -19,7 +18,6 @@ TABLES = desk_tables(
     ContentPieceIssue,
     SiteChannel,
     PostMedia,
-    SocialAccount,
     SitePage,
     SiteChunk,
     SiteSearchDaily,
@@ -37,14 +35,13 @@ The form draft may name the channel. If not, ask which one first. Read that chan
 ## How to work
 - Propose before you interview. Suggest the angle, the reader and a working title from what the user typed and what the site says. Ask only what you cannot infer, one question at a time.
 - Show the full draft in the chat in one ```markdown fence. Take corrections until the user is happy. For a social channel the body is the post exactly as pasted, inside its hard limits.
-- If the user wants a planned time, call content_free_slots and pick from its free list. Never guess an hour.
 - Save ONLY on a clear go-ahead. Then call content_create_piece once with the approved text and the channel. If the save comes back blocked, fix the reason and save again.
 
 ## When the task completes
 Once content_create_piece succeeds, this task is COMPLETE. Say in one sentence that the piece is on the Content desk and opens in the editor. No further tool calls, no offers of more work.
 
 ## What you cannot do
-Nothing here publishes or edits an existing piece. Both happen from the editor. The same idea for another channel is a new piece, cloned from this one on the Content desk.
+Nothing here publishes. Meelu holds the text and the user posts it themselves. Editing an existing piece happens from the editor. The same idea for another channel is a new piece, cloned from this one on the Content desk.
 
 ## Voice
 Plain and brief in the chat. The piece itself reads in the SITE's voice, not yours."""
@@ -62,5 +59,4 @@ scope = AgentScope(
     create_tool=content_create_piece,
     limits={"maxTurns": 40, "maxBudgetUsd": 2},
     system_prompt=system_prompt,
-    providers=["social"],
 )

@@ -76,11 +76,22 @@ def test_desk_writes_union_the_desks_actions():
         "create_site_issue",
         "reject_issue",
         "restore_issue",
+        "start_structure_job",
+        "propose_hierarchy_links",
+        "propose_unlinked_mentions",
+        "propose_link_removals",
+        "screen_link_suggestions",
+        "review_link_suggestions",
+        "rank_link_suggestions",
+        "propose_pillar_pages",
+        "screen_pillar_suggestions",
+        "review_pillar_suggestions",
+        "rank_pillar_suggestions",
+        "finish_structure_job",
         "save_note",
         "update_note",
         "delete_note",
     }
-    assert desk_writes("outreach") == {"save_note", "update_note", "delete_note"}
 
 
 def test_scope_response_merges_added_desks():
@@ -88,16 +99,25 @@ def test_scope_response_merges_added_desks():
     assert [d.name for d in base.desks] == [
         "analytics",
         "content",
-        "outreach",
+        "leads",
         "pages",
         "profile",
+        "seo",
         "site",
+        "social-listening",
     ]
     merged = scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE, "content,analytics")
     assert "content_create_piece" in merged.writes
     assert "analytics" in merged.mcp_servers
     assert "content_pieces" in merged.system_prompt
-    assert [d.name for d in merged.desks] == ["outreach", "pages", "profile", "site"]
+    assert [d.name for d in merged.desks] == [
+        "leads",
+        "pages",
+        "profile",
+        "seo",
+        "site",
+        "social-listening",
+    ]
     with pytest.raises(HTTPException):
         scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE, "nope")
 

@@ -9,13 +9,7 @@ from src.content.schemas.channels import SiteChannelRecord, SiteChannelUpdateReq
 
 
 def seed_values(seed: PlatformSeed) -> dict[str, Any]:
-    return {
-        "enabled": True,
-        "rules": seed.rules(),
-        "timezone": "UTC",
-        "posting_windows": [],
-        "min_gap_hours": 0 if seed.key == "website" else 24,
-    }
+    return {"enabled": True, "rules": seed.rules()}
 
 
 def require_seed(channel_key: str) -> PlatformSeed:
@@ -54,15 +48,6 @@ async def require_enabled(
     if not channel.enabled:
         raise HTTPException(400, f"{SEEDS_BY_KEY[channel_key].label} is turned off for this site.")
     return channel
-
-
-async def sync_enabled(db: AsyncSession, user_id: str, site_id: str, connected: set[str]) -> None:
-    for channel in await list_channels(db, user_id, site_id):
-        if channel.channel_key == "website":
-            continue
-        enabled = channel.channel_key in connected
-        if channel.enabled != enabled:
-            await repo.update_channel(db, channel.id, {"enabled": enabled})
 
 
 async def update_channel(

@@ -71,7 +71,6 @@ def well_known_rules(site: SiteRecord) -> list[SiteRule]:
         ),
         SiteRule(
             kind="robots-blocks-assets",
-            llm_check=True,
             severity="p1",
             issue=(
                 "robots.txt disallows paths that hold CSS, JavaScript or images. Google renders a page "

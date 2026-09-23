@@ -35,42 +35,6 @@ export interface TurnPayload {
   params?: Record<string, string>;
 }
 
-export type ProviderDomain = "seo-data" | "social";
-
-export interface ProviderCatalogField {
-  key: string;
-  label: string;
-  secret: boolean;
-  help?: string;
-  url?: string;
-}
-
-export interface ProviderCatalogEntry {
-  id: string;
-  domain: ProviderDomain;
-  name: string;
-  fields: ProviderCatalogField[];
-}
-
-export interface ProviderFacadeStatus {
-  domain: ProviderDomain;
-  connected: string[];
-  default: string | null;
-  adapters: Array<{ id: string; name: string; capabilities: string[]; connected: boolean }>;
-}
-
-export type ProvidersStatus = Record<ProviderDomain, ProviderFacadeStatus>;
-
-export interface ProviderCallFailure {
-  code: string;
-  message: string;
-  [extra: string]: unknown;
-}
-
-export type ProviderCallResult<T = unknown> =
-  | { ok: true; result: T }
-  | { ok: false; error: ProviderCallFailure };
-
 export interface AgentBridge {
   runTurn: (payload: TurnPayload) => Promise<{ turnId?: string; error?: string }>;
   onEvent: (cb: (m: AgentEvent) => void) => () => void;
@@ -80,13 +44,6 @@ export interface AgentBridge {
     requestId: string,
     decision: "allow" | "always" | "full" | "deny",
   ) => Promise<{ ok?: boolean; error?: string }>;
-  providersCatalog?: () => Promise<{
-    catalog: ProviderCatalogEntry[];
-    domains: Record<string, unknown>;
-  }>;
-  providersStatus?: () => Promise<ProvidersStatus>;
-  setProviderDefault?: (domain: ProviderDomain, providerId: string | null) => Promise<ProvidersStatus>;
-  providerCall?: (toolName: string, input: Record<string, unknown>) => Promise<ProviderCallResult>;
 }
 
 declare global {

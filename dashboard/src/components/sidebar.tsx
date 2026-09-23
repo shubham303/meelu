@@ -6,7 +6,6 @@ import {
   Cable,
   FileText,
   Globe,
-  Inbox,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -22,17 +21,6 @@ import { Logo } from "./logo";
 import { SessionUsage } from "./session-usage";
 import { SiteSwitcher } from "./site-switcher";
 import { APP_DESKS, GLOBAL_HOME, WEBSITE_DESKS, type Desk } from "./desks";
-
-const APP_ONLY: Desk[] = [
-  {
-    id: "inbox",
-    href: "/dashboard/inbox",
-    label: "Inbox",
-    icon: Inbox,
-    blurb: "Replies, read from the mailbox on this device.",
-    scope: "global",
-  },
-];
 
 const COLLAPSED_KEY = "meelu.sidebar.collapsed";
 
@@ -67,7 +55,7 @@ export function Sidebar() {
   };
 
   const website = global ? [] : WEBSITE_DESKS;
-  const appGroup = [...(isApp ? APP_ONLY : []), ...APP_DESKS];
+  const appGroup = APP_DESKS;
 
   useEffect(() => {
     if (!global) return;

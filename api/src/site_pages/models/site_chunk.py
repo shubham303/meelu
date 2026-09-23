@@ -18,6 +18,11 @@ class SiteChunk(EntityMixin, SiteScopedMixin, Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         Index(
+            "site_chunks_tsv_idx",
+            sql_text("to_tsvector('simple', coalesce(heading_path, '') || ' ' || text)"),
+            postgresql_using="gin",
+        ),
+        Index(
             "site_chunks_pending_idx",
             "site_id",
             postgresql_where=sql_text("embedding IS NULL"),

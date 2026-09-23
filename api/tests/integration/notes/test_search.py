@@ -95,7 +95,7 @@ async def test_search_without_notes_reports_empty_coverage(client, email, monkey
 
 
 async def test_hybrid_search(client, email):
-    from src.notes import embedder
+    from src.embed_worker import models as embedder
 
     if await embedder.embed_query("probe") is None:
         pytest.skip("embedding model unavailable offline")

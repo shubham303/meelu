@@ -139,7 +139,7 @@ export default function OnboardingPage() {
 
               <Field
                 label="How you sign off"
-                hint="Used word for word at the bottom of every outreach email."
+                hint="Used word for word at the bottom of every email Meelu drafts."
               >
                 <Textarea
                   rows={3}

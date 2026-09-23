@@ -17,15 +17,6 @@ from src.core.orm import Base
 SITE = SiteRef(id="site_test_0001", name="Acme", domain="acme.example")
 SHARED_READS = {"run_sql", "find_plans", "get_plan"}
 PENDING_TOOL_NAMES = {
-    "outreach_get_project",
-    "outreach_list_conversation",
-    "outreach_list_prospects",
-    "outreach_get_prospect",
-    "outreach_update_prospect",
-    "outreach_update_project",
-    "outreach_send_email",
-    "outreach_create_campaign",
-    "outreach_start_campaign",
     "analytics_update_session",
     "analytics_add_source",
     "analytics_save_report",
@@ -40,11 +31,16 @@ def catalog() -> dict[str, dict]:
     return {info.name: dict(info.meta or {}) for info in server.mcp._tool_manager.list_tools()}
 
 
-def allowed_for(desks: set[str], writes: list[str]) -> set[str]:
+def allowed_for(desks: set[str], writes: list[str], providers: set[str] = frozenset()) -> set[str]:
     cat = catalog()
     allowed = set(writes)
     for name, meta in cat.items():
         if meta.get("meelu/writes"):
+            continue
+        provider = meta.get("meelu/provider")
+        if provider is not None:
+            if provider in providers:
+                allowed.add(name)
             continue
         desk = meta.get("meelu/desk")
         if desk is None or desk in desks:
@@ -58,6 +54,9 @@ def test_every_tool_carries_meta_tags():
         assert isinstance(meta["meelu/writes"], bool), name
         if "meelu/desk" in meta:
             assert isinstance(meta["meelu/desk"], str) and meta["meelu/desk"], name
+        if "meelu/provider" in meta:
+            assert "meelu/desk" not in meta, name
+            assert not meta["meelu/writes"], name
 
 
 def test_all_engine_tools_belong_to_the_analytics_desk():
@@ -77,9 +76,15 @@ def test_only_the_shared_reads_are_untagged():
     untagged = {
         name
         for name, meta in catalog().items()
-        if "meelu/desk" not in meta and not meta["meelu/writes"]
+        if "meelu/desk" not in meta and "meelu/provider" not in meta and not meta["meelu/writes"]
     }
     assert untagged == SHARED_READS
+
+
+def test_provider_tools_hide_until_the_scope_lists_their_domain():
+    body = scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
+    assert "seo_serp_snapshot" not in allowed_for({"pages"}, body.writes)
+    assert "seo_serp_snapshot" in allowed_for({"pages"}, body.writes, {"seo-data"})
 
 
 def test_untagged_writes_are_only_the_note_tools():

@@ -14,6 +14,7 @@ from src.core.database import get_db
 from src.core.ids import uid
 from src.core.logging import get_logger
 from src.core.schemas import EntityModel, RequestModel
+from src.credits import service as credits_service
 from src.keys.repository import create_key, find_user_by_api_key
 from src.profile.models.user import AccessToken, User
 from src.profile.repository import create_profile
@@ -117,6 +118,7 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
     await db.flush()
 
     await create_key(db, user.id, "Default MCP key")
+    await credits_service.signup_grant(db, user.id)
     try:
         await create_profile(db, user.id, {"full_name": user.name})
     except Exception as e:

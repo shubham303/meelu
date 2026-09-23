@@ -408,7 +408,7 @@ def test_rule_set_is_complete_and_kinds_are_known():
 
     NO_RENDERS = RenderCounts(0, 0, 0, 0)
 
-    assert len(PAGE_RULES) == 82
+    assert len(PAGE_RULES) == 194
     assert len(site_rules(_site(), NO_RENDERS)) == 25
 
     for rule in PAGE_RULES:

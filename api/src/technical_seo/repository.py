@@ -137,7 +137,6 @@ def _site_issue(user_id: str, site_id: str, run_id: str, row: NewSiteIssue) -> S
         issue=row.issue,
         severity=row.severity,
         state=row.state,
-        llm_check_required=row.llm_check_required,
         issue_type=row.issue_type,
         created_at=now,
         updated_at=now,
@@ -157,7 +156,6 @@ def _page_issue(user_id: str, site_id: str, run_id: str, row: NewPageIssue) -> S
         severity=row.severity,
         state=row.state,
         matched_pages=row.matched_pages,
-        llm_check_required=row.llm_check_required,
         issue_type=row.issue_type,
         created_at=now,
         updated_at=now,
@@ -243,12 +241,6 @@ def _site_issue_query(run_id: str, filters: SiteIssueFilter) -> Select:
         conds.append(SiteIssue.severity == filters.severity)
     if filters.kinds:
         conds.append(SiteIssue.kind.in_(filters.kinds))
-    if filters.llm_check_pending is True:
-        conds.extend(
-            [SiteIssue.llm_check_required.is_(True), SiteIssue.llm_check_done_at.is_(None)]
-        )
-    if filters.llm_check_pending is False:
-        conds.append(SiteIssue.llm_check_done_at.is_not(None))
     if filters.issue_type:
         conds.append(SiteIssue.issue_type == filters.issue_type)
     return select(SiteIssue).where(*conds).order_by(SiteIssue.severity, SiteIssue.kind)
@@ -285,12 +277,6 @@ def _page_issue_query(run_id: str, filters: PageIssueFilter) -> Select:
         conds.append(SitePageIssue.severity == filters.severity)
     if filters.kinds:
         conds.append(SitePageIssue.kind.in_(filters.kinds))
-    if filters.llm_check_pending is True:
-        conds.extend(
-            [SitePageIssue.llm_check_required.is_(True), SitePageIssue.llm_check_done_at.is_(None)]
-        )
-    if filters.llm_check_pending is False:
-        conds.append(SitePageIssue.llm_check_done_at.is_not(None))
     if filters.issue_type:
         conds.append(SitePageIssue.issue_type == filters.issue_type)
     if filters.page_id:

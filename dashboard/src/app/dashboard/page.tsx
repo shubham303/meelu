@@ -12,18 +12,8 @@ import type { SiteProfile } from "@/lib/types";
 interface Stats {
   site?: { pages?: number; needsReading?: number };
   pages?: { open?: number; verified?: number; rejected?: number };
-  contentPages?: { drafting?: number; ready?: number; published?: number };
-  social?: { scheduled?: number; drafts?: number; posted?: number };
-  outreach?: {
-    campaigns?: number;
-    activeCampaigns?: number;
-    prospects?: number;
-    emailsDrafted?: number;
-    emailsFailed?: number;
-    replies?: number;
-  };
   analytics?: { sources?: number; reports?: number };
-  content?: { drafts?: number; scheduled?: number; posted?: number; attention?: number };
+  content?: { drafts?: number; blocked?: number };
 }
 
 function num(n: number | undefined): string {
@@ -49,24 +39,14 @@ export default function OverviewPage() {
     );
   }
 
-  const social = stats?.social ?? {
-    scheduled: stats?.content?.scheduled,
-    drafts: stats?.content?.drafts,
-    posted: stats?.content?.posted,
-  };
+  const content = stats?.content ?? {};
   const pages = stats?.pages ?? {};
-  const outreach = stats?.outreach;
 
   const waiting = [
     {
-      label: "Drafts to send",
-      value: outreach?.emailsDrafted,
-      hint: outreach?.emailsFailed ? `${outreach.emailsFailed} failed to send` : undefined,
-    },
-    {
-      label: "Posts to publish",
-      value: social.scheduled,
-      hint: social.drafts ? `${social.drafts} still in draft` : undefined,
+      label: "Pieces in draft",
+      value: content.drafts,
+      hint: content.blocked ? `${content.blocked} blocked by channel limits` : undefined,
     },
     {
       label: "Page issues open",
@@ -77,9 +57,7 @@ export default function OverviewPage() {
   const line: Record<string, string> = {
     site: `${count(stats?.site?.pages, "page")} · ${num(stats?.site?.needsReading)} need reading`,
     pages: `${num(pages.open)} open · ${num(pages.verified)} verified fixed`,
-    content: `${num(stats?.contentPages?.drafting)} drafting · ${num(stats?.contentPages?.published)} published`,
-    social: `${num(social.scheduled)} scheduled · ${num(social.posted)} posted`,
-    outreach: `${num(outreach?.activeCampaigns)} running · ${count(outreach?.prospects, "prospect")}`,
+    content: `${num(content.drafts)} in draft · ${num(content.blocked)} blocked`,
     analytics: `${count(stats?.analytics?.sources, "source")} · ${num(stats?.analytics?.reports)} saved`,
   };
 

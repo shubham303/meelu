@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, UniqueConstraint, text
+from sqlalchemy import DateTime, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.orm import Base, EntityMixin, SiteScopedMixin
@@ -23,7 +23,3 @@ class SiteIssue(EntityMixin, SiteScopedMixin, Base):
     rejection_reason: Mapped[str | None]
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     issue_type: Mapped[str] = mapped_column(nullable=False, server_default=text("'static'"))
-    llm_check_required: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
-    llm_check_done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

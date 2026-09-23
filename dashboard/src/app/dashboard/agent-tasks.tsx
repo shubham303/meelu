@@ -31,12 +31,6 @@ import { formatRelative } from "@/lib/utils";
 import type { PromptChip } from "@/features/prompt-chips/lib";
 import { RunRail, useAgentRunsOptional } from "@/components/agent/run-rail";
 import { AgentChat, type AgentChatItem } from "@/components/agent/agent-chat";
-import type {
-  ProviderCallResult,
-  ProviderCatalogEntry,
-  ProviderDomain,
-  ProvidersStatus,
-} from "@/components/agent/bridge";
 
 declare global {
   interface Window {
@@ -82,52 +76,6 @@ declare global {
       removeConnector?: (provider: string) => Promise<ConnectorsView | { error: string }>;
       connectGsc?: () => Promise<ConnectorsView | { error: string }>;
       connectGa4?: () => Promise<ConnectorsView | { error: string }>;
-      mailboxList?: (params: {
-        page?: number;
-        pageSize?: number;
-        siteId?: string | null;
-      }) => Promise<MailboxPage | { error: string }>;
-      mailboxRead?: (params: {
-        uid: number;
-        siteId?: string | null;
-      }) => Promise<MailboxMessage | { error: string }>;
-      getMailboxAccounts?: () => Promise<MailboxAccountsView | { error: string }>;
-      connectMailbox?: (
-        values: Record<string, string>,
-        secretKeys: string[],
-      ) => Promise<(MailboxAccountsView & { connectedId?: string }) | { error: string }>;
-      forgetMailbox?: (accountId: string) => Promise<MailboxAccountsView | { error: string }>;
-      mailboxSyncProspects?: (params: {
-        since: string;
-        prospects: Array<{ id: string; email: string }>;
-        siteId?: string | null;
-      }) => Promise<
-        | {
-            messages: Array<{
-              prospectId: string;
-              messageId: string;
-              threadRef: string | null;
-              from: string | null;
-              to: string | null;
-              subject: string | null;
-              body: string;
-              occurredAt: string;
-            }>;
-            scanned: number;
-            since: string;
-          }
-        | { error: string }
-      >;
-      mailboxSend?: (params: {
-        to: string[];
-        subject: string;
-        body: string;
-        replyToMessageId?: string;
-        siteId?: string | null;
-      }) => Promise<
-        | { messageId: string; from: string; accepted: string[]; sentAt: string }
-        | { error: string }
-      >;
       analyticsSaveSource?: (params: {
         sessionId: string;
         sourceId: string;
@@ -175,61 +123,47 @@ declare global {
         name: string;
         content: string;
       }) => Promise<{ ok?: true; canceled?: true; path?: string } | { error: string }>;
-      providersCatalog?: () => Promise<{
-        catalog: ProviderCatalogEntry[];
-        domains: Record<string, unknown>;
-      }>;
-      providersStatus?: () => Promise<ProvidersStatus>;
-      setProviderDefault?: (
-        domain: ProviderDomain,
-        providerId: string | null,
-      ) => Promise<ProvidersStatus>;
-      providerCall?: (
-        toolName: string,
-        input: Record<string, unknown>,
-      ) => Promise<ProviderCallResult>;
+      socialSignalsSearch?: (payload: {
+        siteId: string;
+        platforms?: string[];
+      }) => Promise<{ jobId?: string; error?: string }>;
+      socialSignalsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
+      socialSignalsPlatforms?: () => Promise<
+        | { platforms: Array<{ id: string; label: string; access: "direct" | "apify"; available: boolean }> }
+        | { error: string }
+      >;
+      onSocialSignalsEvent?: (
+        cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
+      ) => () => void;
+      leadsRun?: (payload: {
+        campaignId?: string;
+      }) => Promise<{ jobId?: string; error?: string }>;
+      leadsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
+      onLeadsEvent?: (
+        cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
+      ) => () => void;
+      prospectSources?: () => Promise<
+        | {
+            sources: Array<{
+              id: string;
+              label: string;
+              access: "free" | "apify";
+              available: boolean;
+            }>;
+          }
+        | { error: string }
+      >;
     };
   }
 }
 
-export interface MailboxPage {
-  address: string;
-  total: number;
-  page: number;
-  pageSize: number;
-  pages: number;
-  messages: Array<{
-    uid: number;
-    date: string | null;
-    from: string | null;
-    subject: string | null;
-    seen: boolean;
-  }>;
-}
 
-export interface MailboxMessage {
-  uid: number;
-  date: string | null;
-  from: string | null;
-  to: string | null;
-  subject: string | null;
-  attachments: Array<{ filename: string; size: number }>;
-  body: string;
-}
 
 export type ConnectorsView = Record<
   string,
   { fields: Record<string, string>; updatedAt: string | null }
 >;
 
-export interface MailboxAccountsView {
-  accounts: Array<{
-    id: string;
-    address: string;
-    fields: Record<string, string>;
-    updatedAt: string | null;
-  }>;
-}
 
 export type LlmProvider = "anthropic" | "openrouter" | "llamacpp" | "custom";
 

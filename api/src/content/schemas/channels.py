@@ -1,6 +1,4 @@
-import math
 from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import computed_field, field_validator
 
@@ -9,52 +7,11 @@ from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
 MAX_RULES = 60
 MAX_RULE_LENGTH = 500
-MAX_GAP_HOURS = 24 * 30
-
-
-class PostingWindow(RequestModel):
-    days: list[int]
-    time: str
-
-    @field_validator("days")
-    @classmethod
-    def _validate_days(cls, v: list[int]) -> list[int]:
-        if not v or any(d < 0 or d > 6 for d in v):
-            raise ValueError("Each posting window needs days as weekday numbers 0–6.")
-        return sorted(set(v))
-
-    @field_validator("time")
-    @classmethod
-    def _validate_time(cls, v: str) -> str:
-        bad = ValueError("Each posting window needs a time like 09:00.")
-        if len(v) != 5 or v[2] != ":":
-            raise bad
-        try:
-            hour, minute = int(v[:2]), int(v[3:])
-        except ValueError:
-            raise bad
-        if not (0 <= hour < 24 and 0 <= minute < 60):
-            raise bad
-        return v
-
-
-def valid_timezone(value: Any) -> str:
-    if value is None or value == "":
-        return "UTC"
-    name = str(value)
-    try:
-        ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError, KeyError):
-        raise ValueError(f'"{name}" is not a valid IANA timezone.')
-    return name
 
 
 class SiteChannelUpdateRequest(RequestModel):
     enabled: bool | None = None
     rules: list[str] | None = None
-    timezone: str | None = None
-    posting_windows: list[PostingWindow] | None = None
-    min_gap_hours: int | None = None
 
     @field_validator("rules")
     @classmethod
@@ -73,24 +30,6 @@ class SiteChannelUpdateRequest(RequestModel):
             raise ValueError(f"At most {MAX_RULES} rules per channel.")
         return rules
 
-    @field_validator("timezone", mode="before")
-    @classmethod
-    def _validate_timezone(cls, v: Any) -> str | None:
-        return None if v is None else valid_timezone(v)
-
-    @field_validator("min_gap_hours", mode="before")
-    @classmethod
-    def _validate_gap(cls, v: Any) -> int | None:
-        if v is None or v == "":
-            return None
-        try:
-            n = float(v)
-        except (TypeError, ValueError):
-            raise ValueError(f"minGapHours must be a number between 0 and {MAX_GAP_HOURS}.")
-        if not math.isfinite(n) or n < 0 or n > MAX_GAP_HOURS:
-            raise ValueError(f"minGapHours must be a number between 0 and {MAX_GAP_HOURS}.")
-        return int(n + 0.5)
-
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
 
@@ -101,9 +40,6 @@ class SiteChannelRecord(EntityModel):
     channel_key: str
     enabled: bool
     rules: list[str]
-    timezone: str
-    posting_windows: list[PostingWindow]
-    min_gap_hours: int
     created_at: JsDateTime
     updated_at: JsDateTime
 
@@ -149,9 +85,6 @@ class SiteChannelResponse(EntityModel):
     channel_key: str
     enabled: bool
     rules: list[str]
-    timezone: str
-    posting_windows: list[PostingWindow]
-    min_gap_hours: int
     created_at: JsDateTime
     updated_at: JsDateTime
     label: str

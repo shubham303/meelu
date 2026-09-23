@@ -60,10 +60,9 @@ async def search_page(
     page: int = 1,
     page_size: int = 10,
 ) -> SitePageListResult:
-    """Semantic search over the crawled page corpus: search_text is embedded and
-    matched against page passages, returning pages ranked by similarity with the
-    matching snippet. Use it to find pages by meaning; plain crawl-fact filters
-    are cheaper as SQL over site_pages."""
+    """Hybrid search over the crawled page corpus: search_text is matched against
+    page passages by keyword and by meaning, reranked, and returned with the
+    matching snippet. Plain crawl-fact filters are cheaper as SQL over site_pages."""
     filters = SitePageFilters(
         url=url,
         urls=urls,

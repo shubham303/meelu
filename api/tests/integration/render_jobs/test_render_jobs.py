@@ -249,6 +249,13 @@ async def test_page_render_upsert_read_and_delete(client, email):
         "totalBytes": 3_000_000,
         "requestCount": 88,
         "thirdPartyHosts": ["cdn.example.net"],
+        "status": 200,
+        "settleReason": "idle",
+        "internalLinkUrls": [f"{ORIGIN}/", f"{ORIGIN}/docs"],
+        "images": [{"src": f"{ORIGIN}/hero.png", "alt": "Hero"}, {"src": f"{ORIGIN}/b.png"}],
+        "hreflang": {"en": f"{ORIGIN}/app", "x-default": f"{ORIGIN}/app"},
+        "overlayCoverage": 0.62,
+        "serviceWorker": True,
         "htmlPath": "/tmp/render.html",
     }
     r = await client.post("/api/v1/site/page-renders", json=body)
@@ -262,6 +269,17 @@ async def test_page_render_upsert_read_and_delete(client, email):
     assert saved["userAgentProfile"] == "googlebot"
     assert saved["device"] == "desktop"
     assert saved["hiddenWordCount"] is None
+    assert saved["status"] == 200
+    assert saved["settleReason"] == "idle"
+    assert saved["internalLinkUrls"] == [f"{ORIGIN}/", f"{ORIGIN}/docs"]
+    assert saved["images"] == [
+        {"src": f"{ORIGIN}/hero.png", "alt": "Hero"},
+        {"src": f"{ORIGIN}/b.png"},
+    ]
+    assert saved["hreflang"] == {"en": f"{ORIGIN}/app", "x-default": f"{ORIGIN}/app"}
+    assert saved["overlayCoverage"] == pytest.approx(0.62)
+    assert saved["serviceWorker"] is True
+    assert saved["mixedContentActive"] == 0
     first_id = saved["id"]
 
     r = await client.post(
@@ -322,3 +340,30 @@ async def test_page_render_upsert_read_and_delete(client, email):
         "/api/v1/site/page-renders", params={"pageId": page_id, "device": "mobile"}
     )
     assert r.status_code == 204
+
+
+async def test_render_job_can_target_one_page_or_cap_the_count(client, email):
+    site, pages = await prepare(client, email)
+
+    r = await client.post("/api/v1/site/render-jobs", json={"scope": "all", "limit": 2})
+    assert r.status_code == 202, r.text
+    job = r.json()["data"]["job"]
+    assert job["pageLimit"] == 2
+    r = await client.post(f"/api/v1/site/render-jobs/{job['id']}/claim")
+    assert r.status_code == 200, r.text
+    assert len(r.json()["data"]["pages"]) == 2
+    await client.patch(f"/api/v1/site/render-jobs/{job['id']}", json={"status": "completed"})
+
+    r = await client.post("/api/v1/site/render-jobs", json={"url": f"{ORIGIN}/docs"})
+    assert r.status_code == 202, r.text
+    job = r.json()["data"]["job"]
+    assert job["pageUrl"] == f"{ORIGIN}/docs"
+    r = await client.post(f"/api/v1/site/render-jobs/{job['id']}/claim")
+    assert [p["url"] for p in r.json()["data"]["pages"]] == [f"{ORIGIN}/docs"]
+    await client.patch(f"/api/v1/site/render-jobs/{job['id']}", json={"status": "completed"})
+
+    r = await client.post("/api/v1/site/render-jobs", json={"url": "not a url", "limit": 0})
+    assert r.status_code == 202, r.text
+    job = r.json()["data"]["job"]
+    assert job["pageUrl"] is None
+    assert job["pageLimit"] is None

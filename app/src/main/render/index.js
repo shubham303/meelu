@@ -37,7 +37,7 @@ export function requestRenderStop(jobId) {
 }
 
 export async function runRender(params, emit, options = {}) {
-  const { siteId, trigger = "user", scope = "sample", profile = "googlebot" } = params ?? {};
+  const { siteId, trigger = "user", scope = "sample", profile = "googlebot", limit, url } = params ?? {};
   const device = params?.device === "mobile" ? "mobile" : "desktop";
   const cookieHeader = options.cookieHeader ?? "";
   if (!siteId) throw new Error("A render needs a website — no siteId was passed.");
@@ -46,7 +46,14 @@ export async function runRender(params, emit, options = {}) {
     method: "POST",
     siteId,
     cookieHeader,
-    body: { trigger, scope, userAgentProfile: profile, device },
+    body: {
+      trigger,
+      scope,
+      userAgentProfile: profile,
+      device,
+      ...(Number.isFinite(Number(limit)) && Number(limit) > 0 ? { limit: Number(limit) } : {}),
+      ...(typeof url === "string" && url.trim() ? { url: url.trim() } : {}),
+    },
   });
 
   if (!opened.started) {

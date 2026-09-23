@@ -38,15 +38,24 @@ ToolFn = Callable[..., Any]
 READ_TOOLS: set[ToolFn] = set()
 WRITE_TOOLS: set[ToolFn] = set()
 TOOL_DESKS: dict[ToolFn, str] = {}
+TOOL_PROVIDERS: dict[ToolFn, str] = {}
 
 
-def tool(*, writes: bool = False, desk: str | None = None) -> Callable[[ToolFn], ToolFn]:
+def tool(
+    *, writes: bool = False, desk: str | None = None, provider: str | None = None
+) -> Callable[[ToolFn], ToolFn]:
     def register(fn: ToolFn) -> ToolFn:
-        meta = {"meelu/writes": writes, **({"meelu/desk": desk} if desk else {})}
+        meta = {
+            "meelu/writes": writes,
+            **({"meelu/desk": desk} if desk else {}),
+            **({"meelu/provider": provider} if provider else {}),
+        }
         mcp.tool(meta=meta)(fn)
         (WRITE_TOOLS if writes else READ_TOOLS).add(fn)
         if desk is not None:
             TOOL_DESKS[fn] = desk
+        if provider is not None:
+            TOOL_PROVIDERS[fn] = provider
         return fn
 
     return register

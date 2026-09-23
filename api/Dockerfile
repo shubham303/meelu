@@ -14,6 +14,7 @@ COPY alembic ./alembic
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --extra agent
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV HF_HOME=/app/.cache/models
 
 FROM base AS api
 EXPOSE 8000
@@ -27,5 +28,4 @@ FROM base AS migrator
 CMD ["alembic", "upgrade", "head"]
 
 FROM base AS embed-worker
-ENV HF_HOME=/app/.cache/models
 CMD ["python", "-m", "src.embed_worker"]

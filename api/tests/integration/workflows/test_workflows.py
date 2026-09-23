@@ -35,7 +35,7 @@ async def test_workflows_crud(client, email):
     assert r.status_code == 400
     assert r.json() == {
         "error": {
-            "message": "Not a desk: legal. Allowed: site, pages, content, social, outreach, analytics."
+            "message": "Not a desk: legal. Allowed: site, pages, content, social, analytics."
         }
     }
 
@@ -258,7 +258,7 @@ async def test_run_lifecycle(client, email):
 
 async def test_run_failure_and_done_stages(client, email):
     await setup_site(client, email)
-    workflow = await create_workflow(client, desks=["content", "outreach"])
+    workflow = await create_workflow(client, desks=["content", "analytics"])
 
     r = await client.post("/api/v1/workflows/runs", json={"workflowId": workflow["id"]})
     run = r.json()["data"]
@@ -352,7 +352,7 @@ async def test_seed_default_workflows(client, email):
         assert row["clonedFromId"] is None
         assert row["siteId"] == site["id"]
     assert [w["desks"] for w in rows] == [
-        ["content", "outreach"],
+        ["content", "analytics"],
         ["social"],
         ["site", "pages"],
     ]

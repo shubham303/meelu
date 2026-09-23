@@ -7,7 +7,6 @@ class PageRule:
     severity: str
     issue: str
     where: str
-    llm_check: bool = False
     issue_type: str = "static"
 
 
@@ -17,5 +16,4 @@ class SiteRule:
     severity: str
     issue: str
     holds: bool
-    llm_check: bool = False
     issue_type: str = "static"

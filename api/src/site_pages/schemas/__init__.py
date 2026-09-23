@@ -7,6 +7,7 @@ from sqlalchemy import inspect
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
+from src.embed_worker.search.schemas import SearchHit, SearchMode
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.stage import STAGES, page_stage
 from src.site_pages.url import normalise_url
@@ -29,9 +30,11 @@ PAGE_DERIVED = frozenset(
         "updatedAt",
         "stage",
         "inlinks",
+        "editorialInlinks",
         "inboundAnchors",
         "depth",
         "linkScore",
+        "editorialScore",
         "visited",
     }
 )
@@ -142,6 +145,22 @@ class SitePageListQuery(SitePageFilters):
         return PaginationParams(page=self.page, page_size=self.page_size).validate()
 
 
+class SitePageSearchRequest(RequestModel):
+    text: str
+    input: Literal["query", "text"] = "query"
+    mode: SearchMode = "hybrid"
+    min_similarity: float | None = Field(default=None, ge=0, le=1)
+    limit: int = Field(default=20, ge=1, le=200)
+    rerank: bool = True
+
+
+class SitePageSearchResponse(EntityModel):
+    hits: list[SearchHit]
+    mode: SearchMode
+    reranked: bool
+    note: str | None = None
+
+
 class SitePageKeywordQuery(SitePageFilters):
     limit: int | None = None
 
@@ -169,6 +188,11 @@ class SitePageWritableFields(RequestModel):
     x_robots_tag: str | None = None
     blocked_by_robots: bool | None = None
     has_viewport: bool | None = None
+    viewport_meta: str | None = None
+    nosnippet_count: int | None = None
+    social_meta_count: int | None = None
+    social_meta: dict[str, Any] | None = None
+    has_google_analytics: bool | None = None
     author: str | None = None
     schema_types: list[str] | None = None
     schema_nodes: list[Any] | None = None
@@ -187,6 +211,7 @@ class SitePageWritableFields(RequestModel):
     modified_at: datetime | None = None
     content_changed_at: datetime | None = None
     word_count: int | None = None
+    external_link_density: float | None = None
     mixed_content: bool | None = None
     keywords: list[str] | None = None
     questions_answered: list[str] | None = None
@@ -355,6 +380,10 @@ class SitePageExportRecord(SemanticMatchFields):
     x_robots_tag: str | None
     blocked_by_robots: bool
     has_viewport: bool | None
+    viewport_meta: str | None = None
+    nosnippet_count: int = 0
+    social_meta_count: int = 0
+    has_google_analytics: bool | None = None
     word_count: int | None
     inlinks: int
     depth: int | None
@@ -417,6 +446,11 @@ class SitePageRecord(SemanticMatchFields):
     x_robots_tag: str | None
     blocked_by_robots: bool
     has_viewport: bool | None
+    viewport_meta: str | None = None
+    nosnippet_count: int = 0
+    social_meta_count: int = 0
+    social_meta: dict[str, Any] = {}
+    has_google_analytics: bool | None = None
     author: str | None
     schema_types: list[str]
     schema_nodes: list[Any]
@@ -436,16 +470,25 @@ class SitePageRecord(SemanticMatchFields):
     modified_at: JsDateTime | None
     content_changed_at: JsDateTime | None
     word_count: int | None
+    external_link_density: float | None
     mixed_content: bool
     keywords: list[str]
     questions_answered: list[str]
     link_score: float | None
+    editorial_inlinks: int
+    editorial_score: float | None
     chunked_from_hash: str | None
     embed_state: str | None
     embed_error: str | None
     shallow: bool
     shallow_reason: str | None
     visited: bool
+
+    @computed_field
+    @property
+    def is_leaf(self) -> bool:
+        return not self.out_links
+
     index_state: str | None = None
     coverage_state: str | None = None
     google_canonical: str | None = None
@@ -479,17 +522,11 @@ class SitePageRef(EntityModel):
 class SitePageEdge(EntityModel):
     src: str
     dst: str
+    weight: float = 1.0
 
 
 class SitePageLandingSeed(EntityModel):
     sessions_by_path: dict[str, int]
-
-
-class SemanticPageMatch(EntityModel):
-    page_id: str
-    similarity: float
-    snippet: str
-    heading_path: str | None
 
 
 class CrawlKnownPageRecord(EntityModel):
@@ -567,6 +604,34 @@ class SitePageStatsRecord(EntityModel):
     by_kind: list[KindCount]
     by_shallow_reason: list[ShallowReasonCount]
     chunks: ChunkCounts
+
+
+class DiscoveryPage(EntityModel):
+    id: str
+    url: str
+    title: str | None
+    kind: str
+    inlinks: int
+    depth: int | None
+    in_sitemap: bool
+
+
+class DepthCount(EntityModel):
+    depth: int | None
+    n: int
+
+
+class SitePageDiscoveryRecord(EntityModel):
+    live: int
+    home_found: bool
+    orphans: int
+    unreachable: int
+    deep: int
+    deep_from: int
+    by_depth: list[DepthCount]
+    orphan_pages: list[DiscoveryPage]
+    unreachable_pages: list[DiscoveryPage]
+    deep_pages: list[DiscoveryPage]
 
 
 class SitePageStatsResult(SitePageStatsRecord):
@@ -650,6 +715,10 @@ class SitePageKeywordCoverageResponse(SitePageKeywordCoverageResult):
 
 
 class SitePageStatsResponse(SitePageStatsResult):
+    pass
+
+
+class SitePageDiscoveryResponse(SitePageDiscoveryRecord):
     pass
 
 

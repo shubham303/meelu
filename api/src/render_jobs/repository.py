@@ -71,6 +71,8 @@ async def open_job(
     scope: str,
     device: str,
     profile: str,
+    page_limit: int | None = None,
+    page_url: str | None = None,
 ) -> RenderJobRecord | None:
     now = datetime.now(UTC)
     stmt = (
@@ -84,6 +86,8 @@ async def open_job(
             scope=scope,
             device=device,
             user_agent_profile=profile,
+            page_limit=page_limit,
+            page_url=page_url,
             created_at=now,
             updated_at=now,
         )
@@ -202,7 +206,12 @@ def _eligible():
 
 
 async def candidates(
-    db: AsyncSession, site_id: str, scope: str, device: str
+    db: AsyncSession,
+    site_id: str,
+    scope: str,
+    device: str,
+    page_limit: int | None = None,
+    page_url: str | None = None,
 ) -> list[RenderCandidateRecord]:
     rank = (
         func.row_number()
@@ -237,8 +246,12 @@ async def candidates(
         ranked.c.content_hash,
         ranked.c.rendered_from_hash,
     ).order_by(ranked.c.seq)
-    if scope == "sample":
+    if page_url:
+        query = query.where(ranked.c.url == page_url)
+    elif scope == "sample":
         query = query.where(ranked.c.rank <= SAMPLE_PER_KIND)
+    if page_limit:
+        query = query.limit(page_limit)
     result = await db.execute(query)
     return [RenderCandidateRecord.model_validate(row) for row in result.all()]
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Index, Integer, text
+from sqlalchemy import Boolean, Index, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,8 +14,3 @@ class SiteChannel(EntityMixin, SiteScopedMixin, Base):
     channel_key: Mapped[str] = mapped_column(nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     rules: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY)
-    timezone: Mapped[str] = mapped_column(nullable=False, server_default=text("'UTC'"))
-    posting_windows: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
-    )
-    min_gap_hours: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("24"))

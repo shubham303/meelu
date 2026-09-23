@@ -1,21 +1,12 @@
-from datetime import datetime
 from typing import Any
 
 from pydantic import Field, field_validator
 
 from src.content.numbers import number_or_null
-from src.content.schemas.channels import PostingWindow
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
-PIECE_STATUSES = ("draft", "blocked", "scheduled", "posted", "failed")
+PIECE_STATUSES = ("draft", "blocked")
 MEDIA_SOURCES = ("none", "upload", "unsplash")
-
-
-def _status(value: Any) -> str:
-    status = str(value)
-    if status not in PIECE_STATUSES:
-        raise ValueError(f"Invalid status. Allowed values: {', '.join(PIECE_STATUSES)}.")
-    return status
 
 
 def _required_text(value: Any, name: str) -> str:
@@ -73,9 +64,6 @@ class ContentPieceCreateRequest(ContentPieceMediaRequest):
     title: str | None = None
     body_markdown: str | None = None
     channel_key: str | None = None
-    status: str | None = None
-    scheduled_at: datetime | None = None
-    posted_url: str | None = None
     source_page_id: str | None = None
     clone_from_piece_id: str | None = None
 
@@ -89,26 +77,15 @@ class ContentPieceCreateRequest(ContentPieceMediaRequest):
     def _validate_channel(cls, v: Any) -> str | None:
         return None if v is None else _required_text(v, "channelKey")
 
-    @field_validator("body_markdown", "posted_url", mode="before")
+    @field_validator("body_markdown", mode="before")
     @classmethod
     def _validate_text(cls, v: Any) -> str | None:
         return None if v is None else str(v)
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def _validate_status(cls, v: Any) -> str | None:
-        return None if v is None else _status(v)
 
 
 class ContentPieceUpdateRequest(ContentPieceMediaRequest):
     title: str | None = None
     body_markdown: str | None = None
-    status: str | None = None
-    scheduled_at: datetime | None = None
-    posted_url: str | None = None
-    posted_at: datetime | None = None
-    external_post_id: str | None = None
-    failure: str | None = None
     source_page_id: str | None = None
 
     @field_validator("title", mode="before")
@@ -121,18 +98,6 @@ class ContentPieceUpdateRequest(ContentPieceMediaRequest):
     def _validate_body(cls, v: Any) -> str | None:
         return None if v is None else str(v)
 
-    @field_validator("status", mode="before")
-    @classmethod
-    def _validate_status(cls, v: Any) -> str | None:
-        return None if v is None else _status(v)
-
-    @field_validator("posted_url", mode="before")
-    @classmethod
-    def _validate_posted_url(cls, v: Any) -> str | None:
-        if not v:
-            return None
-        return str(v).strip() or None
-
 
 class ContentPieceRecord(EntityModel):
     id: str
@@ -143,11 +108,6 @@ class ContentPieceRecord(EntityModel):
     status: str
     word_count: int
     checks: list[PieceCheck]
-    scheduled_at: JsDateTime | None
-    posted_at: JsDateTime | None
-    posted_url: str | None
-    external_post_id: str | None
-    failure: str | None
     created_by: str
     media_source: str
     media_url: str | None
@@ -194,10 +154,6 @@ class ContentPieceListItemResponse(EntityModel):
     status: str
     word_count: int
     checks: list[PieceCheck]
-    scheduled_at: JsDateTime | None
-    posted_at: JsDateTime | None
-    posted_url: str | None
-    failure: str | None
     media_source: str
     media_url: str | None
     parent_piece_id: str | None
@@ -211,7 +167,6 @@ class ContentPieceSummaryResponse(EntityModel):
     channel_key: str
     status: str
     checks: list[PieceCheck]
-    scheduled_at: JsDateTime | None
     word_count: int
     parent_piece_id: str | None
 
@@ -219,20 +174,3 @@ class ContentPieceSummaryResponse(EntityModel):
 class ContentPieceDeleteResponse(EntityModel):
     id: str
     deleted: bool = Field(default=True)
-
-
-class TakenSlot(EntityModel):
-    scheduled_at: JsDateTime
-    title: str
-    status: str
-
-
-class ContentFreeSlotsResponse(EntityModel):
-    channel_key: str
-    timezone: str
-    min_gap_hours: int
-    posting_windows: list[PostingWindow]
-    from_: JsDateTime = Field(alias="from")
-    to: JsDateTime
-    free: list[JsDateTime]
-    taken: list[TakenSlot]

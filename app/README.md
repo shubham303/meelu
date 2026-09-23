@@ -16,19 +16,19 @@ OpenRouter, or a local endpoint):
    drift. The agent's data plane is the agent server (`../api/src/agent`, the
    `agent` compose service), reached over streamable HTTP at `MEELU_AGENT_MCP_URL` and authenticated with the
    signed-in account's workspace API key: direct SQL under RLS, the analytics
-   algorithms, and a small set of controlled write tools. Connectors from the
-   catalog (a mailbox, Resend) attach as extra MCP servers per scope.
+   algorithms, and a small set of controlled write tools. External MCP servers can
+   attach per scope.
 2. **Local workers** that call the dashboard REST API like any client: the
    crawler (`src/main/crawler/`), Search Console and Analytics syncs
-   (`src/main/integrations/`), the outreach mailbox (IMAP/SMTP), and the
-   env-gated background schedules for auto-crawl and rank checks.
+   (`src/main/integrations/`), and the env-gated background schedules for
+   auto-crawl and rank checks.
 3. **App-mode UI differences** — no marketing pages or docs chrome, plus the
    app-only Connections screen (model choice, Google OAuth, connectors).
 
 Two channels, exactly as designed: normal UI operations call the dashboard
 REST API directly from the page; everything device-side goes over one preload
 bridge (`window.meelu`, `src/preload/index.cjs`) — agent turns and events,
-crawls and syncs, connector and mailbox management, analytics source files —
+crawls and syncs, connector management, analytics source files —
 handled by IPC in `src/main/index.js`. The dashboard backend stays a dumb
 CRUD API + database, which is what keeps hosting cheap and keeps every user's
 LLM credential on their own machine.

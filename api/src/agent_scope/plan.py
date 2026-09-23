@@ -11,7 +11,7 @@ This plan is about "{{name}}" ({{domain}}), id {{id}}. Pass that id as `siteId` 
 
 ## What you produce
 A numbered list. Every step names four things and nothing else:
-1. **the desk** it runs on: Site, Pages, Technical SEO, GSC, Google Analytics, Content, Outreach or Analytics;
+1. **the desk** it runs on: Site, Pages, Technical SEO, GSC, Google Analytics, Content or Analytics;
 2. **what it produces**, in one noun the user can accept or reject;
 3. **how many runs** it is, because a per-item step is per-item cost;
 4. **why it is here**, in one clause grounded in something you read.

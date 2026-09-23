@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import type { SiteChannel } from "@/lib/types";
 import { ChannelDot } from "../channel-dot";
 import { channelLabel, STATUS_LABEL, type ContentPiece } from "../types";
@@ -34,8 +34,18 @@ export function Rail({
         <div>
           <p className="text-xs font-medium text-sub mb-1.5">Status</p>
           <p className="text-sm text-ink">{STATUS_LABEL[piece.status]}</p>
+          {piece.checks.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {piece.checks.map((c) => (
+                <Badge key={c.code} tone={c.level === "block" ? "bad" : "warn"} className="whitespace-normal">
+                  {c.message}
+                </Badge>
+              ))}
+            </div>
+          )}
           <p className="mt-1 text-xs leading-relaxed text-faint">
-            Slot, image and publishing live on the Publish panel.
+            Meelu keeps the text and checks it against {channelLabel(piece.channelKey)}&apos;s limits. Copy it out and
+            post it yourself.
           </p>
         </div>
         {channel && channel.rules.length > 0 && (
@@ -67,7 +77,6 @@ export function Rail({
           variant="ghost"
           size="sm"
           onClick={onDelete}
-          disabled={piece.status === "scheduled"}
           className="text-bad hover:text-bad"
         >
           <Trash2 size={13} /> Delete piece

@@ -47,7 +47,7 @@ per model. A prompt that forgets a rule cannot break precision.
 | Chunk embeddings | `SiteChunk` (`api/src/site_pages/models/site_chunk.py`), Vector(384), model e5-small with silent truncation at 512 tokens (`embed_worker/embedding.py:28-34`), HNSW cosine index, no per-site partitioning. Chunking lives in `api/src/embed_worker/chunking.py` (`page_chunk` at `:121`). Chunk 0 is a synthetic page summary (`title · h1s · meta · lead · inbound anchors`, `chunking.py:126-139`, `worker.py:18-25`). The query path `semantic_page_matches` (`repository.py:997-1027`) is already an exact per-site scan with a similarity cutoff and a pool clamp. It does not use the HNSW index |
 | Page kind | Crawler `extract.js::classify` (`:244`) returns `{kind, format?}`. `shallowReason()` (`:277`) is a separate export. `kind` server-defaults to `'other'` (`site_page.py:83`) |
 | GSC and GA | `site_search_daily(day, query, page, clicks, impressions, position)` and `site_traffic_landing_daily`. Local sync code lives in `app/src/main/integrations/` |
-| Local LLM jobs | The analysis-job pattern: one table per job type, no lease columns. Mutual exclusion is a partial unique index on the active row (`analysis_jobs/models/site_analysis_job.py:13-18`). Liveness is `heartbeat_at` plus `POST …/reap` with `STALE_JOB_MS` of 10 minutes (`analysis_jobs/service.py:21`). Claim is `POST /{id}/claim`. Heartbeat is `PATCH {heartbeat:true}` and it returns `{stop}`. The app reaps at boot with `staleMs: 0` (`orphaned-jobs.js:25`). On the app side, jobs run zero-tool `query()` calls through `llmEnv()` (`analysis/extract.js:62-77`; second consumer `technical-seo/check.js:119`) |
+| Local LLM jobs | The crawl-job pattern: one table per job type, no lease columns. Mutual exclusion is a partial unique index on the active row (`crawl_jobs/models/site_crawl_job.py`). Liveness is `heartbeat_at` plus `POST …/reap`. Claim is `POST /{id}/claim`. Heartbeat is `PATCH {heartbeat:true}` and it returns `{stop}`. The app reaps at boot with `staleMs: 0` (`orphaned-jobs.js:25`). On the app side, jobs run zero-tool `query()` calls through `llmEnv()` (`technical-seo/check.js:119`) |
 | Review-shaped table | `seo_structural_proposals` on the SEO desk. It is a shape reference only. Structure keeps its own tables because of desk isolation |
 
 Facts that constrain the design:
@@ -83,7 +83,7 @@ Facts that constrain the design:
 |---|---|---|
 | Link-context extraction | App crawler | The only place where HTML exists |
 | Precompute (edges, PageRank, roles, defects, verification) | api, `site_structure` package | Deterministic. Postgres and pgvector do all of it. It must run without the agent |
-| Item-loop LLM job | App local job | The analysis-job pattern, on the local model budget of the user |
+| Item-loop LLM job | App local job | The crawl-job pattern, on the local model budget of the user |
 | Retrieval, guarded writes, export, loop-start tools | Agent server (Site desk) | The primitives that strategies are built from |
 | Review UI | dashboard `site/structure` | Rendered in the App too |
 | Strategies | Prompts: guide recipes, plan-library entries, user asks | Never code |
@@ -231,7 +231,7 @@ reason), `created_by` (agent, ui).
 Partial unique index on `status='running'` per site. Multiple `queued`
 rows are allowed, and the runner drains them in order. So a second job
 queues instead of a refusal. `POST …/reap` uses the 10-minute staleness.
-Claim, heartbeat, and PATCH are identical to the analysis-job protocol.
+Claim, heartbeat, and PATCH are identical to the crawl-job protocol.
 
 New columns on `site_pages`: `editorial_inlinks INT` and
 `editorial_score REAL`.

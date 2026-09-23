@@ -284,9 +284,8 @@ PINTEREST_INSTRUCTIONS = """# Writing for Pinterest
 
 ## Format facts
 - Description 500 characters; a pin title is 100.
-- An image is required, and exactly one — no carousels through the API.
-- A pin is saved to a board, chosen when the account is connected.
-- Note: Meelu's post title is an internal calendar label and is not published,
+- An image is required, and exactly one.
+- Note: Meelu's post title is an internal label and is not published,
   so the description has to carry the pin on its own."""
 
 
@@ -343,8 +342,7 @@ GOOGLE_BUSINESS_INSTRUCTIONS = """# Writing for a Google Business Profile
 
 ## Format facts
 - 1,500 character limit on the post summary.
-- One image, jpg or png, minimum 400×300 (1200×900 recommended, 4:3). No video.
-- Posts go to one business location, chosen when the account is connected."""
+- One image, jpg or png, minimum 400×300 (1200×900 recommended, 4:3). No video."""
 
 
 WEBSITE_INSTRUCTIONS = """# Publishing to the website

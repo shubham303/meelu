@@ -90,6 +90,19 @@ services:
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN:-}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_REVIEW_MODEL: ${OPENROUTER_REVIEW_MODEL:-anthropic/claude-sonnet-4.5}
+      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
+      MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
+      MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
+      MEELU_RERANK_DISABLED: ${MEELU_RERANK_DISABLED:-}
+      MEELU_RERANK_MODEL: ${MEELU_RERANK_MODEL:-}
+      MEELU_SEARCH_MIN_SIMILARITY: ${MEELU_SEARCH_MIN_SIMILARITY:-}
+    volumes:
+      - embed-models:/app/.cache/models
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,6 +128,12 @@ services:
     environment:
       DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
       AGENT_DATA_DIR: /app/agent-data
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN:-}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD:-}
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_REVIEW_MODEL: ${OPENROUTER_REVIEW_MODEL:-anthropic/claude-sonnet-4.5}
+      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
     volumes:
       - agentdata:/app/agent-data
     depends_on:

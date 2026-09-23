@@ -18,21 +18,16 @@ import {
 } from "./analytics-store.js";
 import { closeAgentSessions, runAgentTurn } from "./agent/runner.js";
 import { requestCrawlStop, runCrawl } from "./crawler/index.js";
-import { requestAnalysisStop, runAnalysis } from "./analysis/index.js";
-import { requestIssueCheckStop, runIssueCheck } from "./technical-seo/index.js";
+import { startSignalsSearch, stopSignalsSearch } from "./social-signals/pipeline.js";
+import { startListeningSchedule } from "./social-signals/schedule.js";
+import { startLeadsRun, stopLeadsRun } from "./leads/pipeline.js";
+import { startLeadsSchedule } from "./leads/schedule.js";
 import { requestRenderStop, runRender } from "./render/index.js";
 import { AVAILABLE_CHECKS, runTextChecks } from "./text-checks/index.js";
 import { inspectPageUrl, listGscProperties, requestSearchSyncStop, runIndexCheck, runSearchSync } from "./integrations/gsc/sync.js";
 import { listGaProperties, requestTrafficSyncStop, runTrafficSync } from "./integrations/ga/sync.js";
 import { startCrawlSchedule } from "./crawler/schedule.js";
-import {
-  PROVIDER_CATALOG,
-  PROVIDER_DOMAINS,
-  callProviderTool,
-  createProviders,
-  providersStatus,
-  setProviderDefault,
-} from "./providers/index.js";
+import { createProviders } from "./providers/index.js";
 import { clearOrphanedJobs } from "./orphaned-jobs.js";
 import { appDir, screenshotDir } from "./paths.js";
 import { crawlToken } from "./crawler/token.js";
@@ -40,20 +35,9 @@ import { describeLlmConfig, loadLlmConfig, saveLlmConfig } from "./integrations/
 import {
   connectorValues,
   listConnectors,
-  listMailboxAccounts,
-  migrateLegacyMailbox,
   removeConnector,
-  removeMailboxAccount,
   saveConnector,
-  saveMailboxAccount,
 } from "./connector-config.js";
-import {
-  listInbox,
-  readMessage,
-  sendMessage,
-  syncProspectMessages,
-  warmupMailbox,
-} from "./integrations/mailbox.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BASE_URL = ENV_DEFAULTS.meeluBaseUrl;
@@ -140,12 +124,13 @@ function emitCrawl(event, data) {
   if (win && !win.isDestroyed()) win.webContents.send("crawl:event", { event, data });
 }
 
-function emitAnalysis(event, data) {
-  if (win && !win.isDestroyed()) win.webContents.send("analysis:event", { event, data });
+
+function emitSignals(message) {
+  if (win && !win.isDestroyed()) win.webContents.send("social-signals:event", message);
 }
 
-function emitIssueCheck(event, data) {
-  if (win && !win.isDestroyed()) win.webContents.send("issue-check:event", { event, data });
+function emitLeads(message) {
+  if (win && !win.isDestroyed()) win.webContents.send("leads:event", message);
 }
 
 function emitRender(event, data) {
@@ -363,39 +348,6 @@ function registerAgentIpc() {
     return { stopping: requestCrawlStop(jobId) };
   });
 
-  ipcMain.handle("site:analyze", async (ev, payload) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    const cookieHeader = await sessionCookieHeader().catch(() => "");
-    try {
-      return await runAnalysis({ ...(payload ?? {}), trigger: "user" }, emitAnalysis, {
-        cookieHeader,
-        llm: loadLlmConfig(),
-      });
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "The analysis could not start." };
-    }
-  });
-
-  ipcMain.handle("site:analyzeStop", (ev, { jobId } = {}) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return { stopping: requestAnalysisStop(jobId) };
-  });
-
-  ipcMain.handle("site:issueCheck", async (ev, payload) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    const cookieHeader = await sessionCookieHeader().catch(() => "");
-    try {
-      return runIssueCheck(payload ?? {}, emitIssueCheck, { cookieHeader, llm: loadLlmConfig() });
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "The issue check could not start." };
-    }
-  });
-
-  ipcMain.handle("site:issueCheckStop", (ev, { siteId } = {}) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return { stopping: requestIssueCheckStop(siteId) };
-  });
-
   ipcMain.handle("site:render", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     const cookieHeader = await sessionCookieHeader().catch(() => "");
@@ -453,45 +405,46 @@ function registerAgentIpc() {
     return listConnectors();
   });
 
-  const providersFor = async () => createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") });
+  const providersFor = async () =>
+    createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") });
 
-  ipcMain.handle("providers:catalog", (ev) => {
+  ipcMain.handle("social-signals:search", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return { catalog: PROVIDER_CATALOG, domains: PROVIDER_DOMAINS };
+    const providers = await providersFor();
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    return startSignalsSearch(payload ?? {}, emitSignals, {
+      providers,
+      llm: loadLlmConfig(),
+      cookieHeader,
+    });
   });
-  ipcMain.handle("providers:status", async (ev) => {
+  ipcMain.handle("social-signals:stop", (ev, { jobId } = {}) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return providersStatus(await providersFor());
+    return { stopping: stopSignalsSearch(jobId) };
   });
-  ipcMain.handle("providers:setDefault", async (ev, { domain, providerId } = {}) => {
+  ipcMain.handle("social-signals:platforms", async (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    setProviderDefault(domain, providerId ?? null);
-    return providersStatus(await providersFor());
+    const providers = await providersFor();
+    return { platforms: await providers.listening.availablePlatforms() };
   });
-  ipcMain.handle("providers:call", async (ev, { tool, input } = {}) => {
-    if (!allowedSender(ev)) return { ok: false, error: { code: "forbidden", message: "forbidden" } };
-    return callProviderTool(await providersFor(), tool, input ?? {});
-  });
-
-  const mailboxState = () => ({ accounts: listMailboxAccounts() });
-
-  ipcMain.handle("mailbox:accounts", (ev) => {
+  ipcMain.handle("leads:run", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return mailboxState();
+    const providers = await providersFor();
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    return startLeadsRun(payload ?? {}, emitLeads, {
+      providers,
+      llm: loadLlmConfig(),
+      cookieHeader,
+    });
   });
-  ipcMain.handle("mailbox:connect", (ev, { values, secretKeys } = {}) => {
+  ipcMain.handle("leads:stop", (ev, { jobId } = {}) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      const id = saveMailboxAccount(values ?? {}, secretKeys ?? []);
-      return { ...mailboxState(), connectedId: id };
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not save." };
-    }
+    return { stopping: stopLeadsRun(jobId) };
   });
-  ipcMain.handle("mailbox:forget", (ev, { accountId } = {}) => {
+  ipcMain.handle("leads:sources", async (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    removeMailboxAccount(accountId);
-    return mailboxState();
+    const providers = await providersFor();
+    return { sources: await providers.prospects.availableSources() };
   });
 
   ipcMain.handle("connectors:connectGsc", async (ev) => {
@@ -514,23 +467,6 @@ function registerAgentIpc() {
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Could not connect Google Analytics." };
     }
-  });
-
-  ipcMain.handle("mailbox:list", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return listInbox({ ...(params ?? {}), address: null });
-  });
-  ipcMain.handle("mailbox:read", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return readMessage({ ...(params ?? {}), address: null });
-  });
-  ipcMain.handle("mailbox:syncProspects", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return syncProspectMessages({ ...(params ?? {}), address: null });
-  });
-  ipcMain.handle("mailbox:send", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return sendMessage({ ...(params ?? {}), address: null });
   });
 
   ipcMain.handle("analytics:saveSource", (ev, params) => {
@@ -662,7 +598,6 @@ function registerScreenshotShortcut() {
 }
 
 function boot() {
-  migrateLegacyMailbox();
   registerAgentIpc();
 
   win = new BrowserWindow({
@@ -712,11 +647,27 @@ function boot() {
 
   void connect();
 
-  setTimeout(warmupMailbox, 3000);
-
   clearOrphanedJobs({ cookieHeader: sessionCookieHeader, log });
 
   startCrawlSchedule({ cookieHeader: sessionCookieHeader, emit: emitCrawl, log });
+
+  startListeningSchedule({
+    cookieHeader: sessionCookieHeader,
+    emit: emitSignals,
+    log,
+    providersFor: async () =>
+      createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") }),
+    llm: loadLlmConfig,
+  });
+
+  startLeadsSchedule({
+    cookieHeader: sessionCookieHeader,
+    emit: emitLeads,
+    log,
+    providersFor: async () =>
+      createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") }),
+    llm: loadLlmConfig,
+  });
 
 
   if (process.env.MEELU_SHOT && !app.isPackaged) {

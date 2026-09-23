@@ -3,7 +3,6 @@ from src.content.models.content_piece_issues import ContentPieceIssue
 from src.content.models.content_pieces import ContentPiece
 from src.content.models.post_media import PostMedia
 from src.content.models.site_channels import SiteChannel
-from src.content.models.social_accounts import SocialAccount
 from src.content.tools import content_update_piece
 from src.profile.models.profile import Profile
 from src.site_pages.models.site_chunk import SiteChunk
@@ -19,7 +18,6 @@ TABLES = desk_tables(
     ContentPieceIssue,
     SiteChannel,
     PostMedia,
-    SocialAccount,
     SitePage,
     SiteChunk,
     SiteSearchDaily,
@@ -41,7 +39,7 @@ Read the user's notes first. They are standing rules. Before drafting anything l
 Images and GIFs are markdown image lines pointing at the site's own media. Keep them in place unless asked, and never invent an image URL.
 
 ## What you cannot do
-Nothing here publishes, uploads, schedules or changes the piece's status. If asked, say in one line that this happens from the editor. Keep the text inside the limits of the channel named in the form draft. The same idea for another channel is a new piece cloned from this one.
+Nothing here publishes or uploads. Meelu holds the text and the user posts it themselves; images are attached from the editor. Keep the text inside the limits of the channel named in the form draft. The same idea for another channel is a new piece cloned from this one.
 
 ## Voice
 Plain and brief in the chat. The piece itself reads in the SITE's voice, not yours."""
@@ -58,5 +56,4 @@ scope = AgentScope(
     writes=[content_update_piece],
     limits={"maxTurns": 40, "maxBudgetUsd": 2},
     system_prompt=system_prompt,
-    providers=["social"],
 )

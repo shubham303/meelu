@@ -4,14 +4,16 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginationParams, PaginationService
+from src.embed_worker.search import search_from_query, search_from_text
 from src.site_pages import repository as repo
-from src.site_pages.embedding import EMBED_MODEL, embed_query
 from src.site_pages.pagerank import page_rank
 from src.site_pages.schemas import (
     SiteChunkRecord,
     SitePageBatchRequest,
     SitePageBatchResult,
     SitePageCreateRequest,
+    SitePageDiscoveryRecord,
+    SitePageEdge,
     SitePageFilters,
     SitePageKeywordCoverageResult,
     SitePageListResult,
@@ -19,6 +21,8 @@ from src.site_pages.schemas import (
     SitePagePruneResult,
     SitePageRecord,
     SitePageRef,
+    SitePageSearchRequest,
+    SitePageSearchResponse,
     SitePageStatsResult,
     SitePageUpdateRequest,
     SitePageVisitedRequest,
@@ -28,16 +32,7 @@ from src.site_pages.schemas import (
 from src.site_pages.url import landing_path, normalise_url
 from src.sites import repository as sites_repo
 
-
-def _empty_search_note(chunks_total: int, chunks_embedded: int) -> str:
-    if chunks_total == 0:
-        return "Nothing is embedded for this website yet, so a semantic search cannot see any page."
-    if chunks_embedded < chunks_total:
-        return (
-            f"No page matches. Semantic coverage is partial: {chunks_embedded} of "
-            f"{chunks_total} passages embedded."
-        )
-    return "No page covers that."
+SEARCH_MATCH_POOL = 200
 
 
 async def pages(
@@ -52,40 +47,53 @@ async def pages(
     if not text:
         return await repo.list_pages(db, site_id, filters, paging, view=view)
 
-    vector = await embed_query(text)
-    if vector is None:
-        raise HTTPException(
-            503, "Semantic search is unavailable — the query could not be embedded."
-        )
-
-    matches = await repo.semantic_page_matches(db, site_id, vector, model=EMBED_MODEL)
-    if not matches:
-        counts = await repo.page_stats(db, site_id)
+    found = await search_from_query(db, site_id, text, limit=SEARCH_MATCH_POOL)
+    if not found.hits:
         return SitePageListResult(
             data=[],
             pagination=PaginationService.build_pagination_meta(0, paging.page, paging.page_size),
-            note=_empty_search_note(counts.chunks.total, counts.chunks.embedded),
+            note=found.note or "No page covers that.",
         )
 
-    by_id = {m.page_id: m for m in matches}
-    result = await repo.list_pages(
-        db, site_id, filters, paging, view=view, match_ids=[m.page_id for m in matches]
-    )
+    by_id = {h.page_id: h for h in found.hits}
+    result = await repo.list_pages(db, site_id, filters, paging, view=view, match_ids=list(by_id))
     data = []
     for row in result.data:
-        match = by_id.get(getattr(row, "id", None))
-        if match is None:
+        hit = by_id.get(getattr(row, "id", None))
+        if hit is None:
             data.append(row)
             continue
         data.append(
             row.model_copy(
                 update={
-                    "similarity": match.similarity,
-                    "match": SitePageMatch(text=match.snippet, heading_path=match.heading_path),
+                    "similarity": hit.rerank_score
+                    if hit.rerank_score is not None
+                    else hit.similarity,
+                    "match": SitePageMatch(text=hit.snippet or "", heading_path=hit.heading_path),
                 }
             )
         )
-    return SitePageListResult(data=data, pagination=result.pagination, note=result.note)
+    return SitePageListResult(data=data, pagination=result.pagination, note=found.note)
+
+
+async def search(
+    db: AsyncSession, site_id: str, body: SitePageSearchRequest
+) -> SitePageSearchResponse:
+    if not body.text.strip():
+        raise HTTPException(400, "Pass something to search for.")
+    run = search_from_text if body.input == "text" else search_from_query
+    found = await run(
+        db,
+        site_id,
+        body.text,
+        mode=body.mode,
+        min_similarity=body.min_similarity,
+        limit=body.limit,
+        rerank=body.rerank,
+    )
+    return SitePageSearchResponse(
+        hits=found.hits, mode=found.mode, reranked=found.reranked, note=found.note
+    )
 
 
 async def covered_keywords(
@@ -187,34 +195,39 @@ async def prune_pages(db: AsyncSession, site_id: str) -> SitePagePruneResult:
 SEED_FLOOR = 0.1
 
 
+def _teleport(refs, seed_by_path: dict[str, int]) -> dict[str, float] | None:
+    if not seed_by_path:
+        return None
+    weights = {p.id: SEED_FLOOR for p in refs}
+    matched = 0
+    for ref in refs:
+        sessions = seed_by_path.get(landing_path(ref.url))
+        if sessions is None:
+            continue
+        weights[ref.id] = SEED_FLOOR + sessions
+        matched += 1
+    return weights if matched > 0 else None
+
+
 async def compute_link_scores(db: AsyncSession, site_id: str) -> int:
     refs = await repo.live_page_refs(db, site_id)
-    edges = await repo.edge_list(db, site_id)
-    seed_by_path = (await repo.landing_seed(db, site_id)).sessions_by_path
     if not refs:
         return 0
-
-    teleport: dict[str, float] | None = None
-    if seed_by_path:
-        weights = {p.id: SEED_FLOOR for p in refs}
-        matched = 0
-        for ref in refs:
-            sessions = seed_by_path.get(landing_path(ref.url))
-            if sessions is None:
-                continue
-            weights[ref.id] = SEED_FLOOR + sessions
-            matched += 1
-        if matched > 0:
-            teleport = weights
-
+    edges = await repo.edge_list(db, site_id)
+    teleport = _teleport(refs, (await repo.landing_seed(db, site_id)).sessions_by_path)
     ids = [p.id for p in refs]
-    scores = page_rank(ids, edges, teleport=teleport)
-    await repo.write_link_scores(db, site_id, scores)
+
+    canonical = [SitePageEdge(src=e.src, dst=e.dst) for e in edges]
+    await repo.write_scores(db, site_id, "link_score", page_rank(ids, canonical, teleport=teleport))
+    await repo.write_scores(
+        db, site_id, "editorial_score", page_rank(ids, edges, teleport=teleport)
+    )
     return len(ids)
 
 
 async def rebuild_graph(db: AsyncSession, site_id: str) -> None:
-    await repo.rebuild_graph(db, site_id)
+    await repo.rebuild_links(db, site_id)
+    await repo.restamp_graph(db, site_id)
     await compute_link_scores(db, site_id)
 
 
@@ -226,6 +239,10 @@ async def stats(db: AsyncSession, user_id: str, site_id: str) -> SitePageStatsRe
         last_crawled_at=site.last_crawled_at if site is not None else None,
         sitemap_url_count=site.sitemap_url_count if site is not None else None,
     )
+
+
+async def discovery(db: AsyncSession, site_id: str) -> SitePageDiscoveryRecord:
+    return await repo.page_discovery(db, site_id, deep_from=4, cap=500)
 
 
 async def chunks(db: AsyncSession, site_id: str, page_id: str) -> list[SiteChunkRecord]:

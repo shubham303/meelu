@@ -17,6 +17,7 @@ async function fetchCatalog(url, headers) {
         tools.push({
           name: t.name,
           desk: typeof meta["meelu/desk"] === "string" ? meta["meelu/desk"] : null,
+          provider: typeof meta["meelu/provider"] === "string" ? meta["meelu/provider"] : null,
           writes: meta["meelu/writes"] === true,
         });
       }
@@ -39,11 +40,16 @@ export function forgetToolCatalog(url) {
   CATALOGS.delete(url);
 }
 
-export function allowedToolNames(catalog, desks, writes) {
+export function allowedToolNames(catalog, desks, writes, providers = []) {
   const loaded = new Set(desks);
+  const domains = new Set(providers);
   const allowed = new Set(writes);
   for (const t of catalog) {
     if (t.writes) continue;
+    if (t.provider !== null) {
+      if (domains.has(t.provider)) allowed.add(t.name);
+      continue;
+    }
     if (t.desk === null || loaded.has(t.desk)) allowed.add(t.name);
   }
   return allowed;

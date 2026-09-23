@@ -7,10 +7,10 @@ export const newPiece: PromptChip[] = plainChips([
 ]);
 
 export const ask: PromptChip[] = plainChips([
-  "Which channels have nothing scheduled this week?",
-  "Where are the gaps in the next two weeks?",
-  "How many posts went out per channel this month?",
-  "Which drafts have a slot but never went out?",
+  "Which channels have no drafts yet?",
+  "Which pieces are blocked, and why?",
+  "How many pieces did we write per channel this month?",
+  "Rewrite the latest LinkedIn draft for X",
 ]);
 
 export const channelRules: PromptChip[] = plainChips([

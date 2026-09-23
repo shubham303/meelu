@@ -91,6 +91,133 @@ function titlePixels(title) {
   return px;
 }
 
+
+const REGION_MARKERS = [
+  ["breadcrumb", (el, cls, id, role, aria, tag) =>
+    /breadcrumb/.test(cls) || /breadcrumb/.test(id) || /breadcrumb/.test(aria) ||
+    /BreadcrumbList/.test(el.attribs?.itemtype ?? "")],
+  ["pagination", (el, cls, id, role, aria, tag) =>
+    /pagination|pager|page-numbers/.test(cls) || /pagination|pager/.test(id) || /pagination/.test(aria)],
+  ["footer", (el, cls, id, role, aria, tag) =>
+    tag === "footer" || role === "contentinfo" || /(^|[\s_-])footer/.test(cls) || /footer/.test(id)],
+  ["header", (el, cls, id, role, aria, tag) =>
+    tag === "header" || role === "banner" || /(^|[\s_-])(site-|page-|main-)?header/.test(cls) || /^(site-|page-|main-)?header/.test(id)],
+  ["nav", (el, cls, id, role, aria, tag) =>
+    tag === "nav" || role === "navigation" || role === "menubar" || /(^|[\s_-])(nav|menu)/.test(cls) || /(^|[\s_-])(nav|menu)/.test(id)],
+  ["aside", (el, cls, id, role, aria, tag) =>
+    tag === "aside" || role === "complementary" || /(^|[\s_-])sidebar/.test(cls) || /sidebar/.test(id)],
+];
+
+function markedRegion(el) {
+  for (let node = el; node && node.type === "tag"; node = node.parent) {
+    const tag = node.tagName?.toLowerCase() ?? "";
+    if (tag === "body" || tag === "html") break;
+    const cls = (node.attribs?.class ?? "").toLowerCase();
+    const id = (node.attribs?.id ?? "").toLowerCase();
+    const role = (node.attribs?.role ?? "").toLowerCase();
+    const aria = (node.attribs?.["aria-label"] ?? "").toLowerCase();
+    for (const [region, test] of REGION_MARKERS) {
+      if (test(node, cls, id, role, aria, tag)) return region;
+    }
+  }
+  return null;
+}
+
+function inBreadcrumbTrail($, el, url, breadcrumbUrls) {
+  if (breadcrumbUrls.size === 0) return false;
+  for (let node = el.parent; node && node.type === "tag"; node = node.parent) {
+    const links = $(node).find("a[href]");
+    if (links.length < 2) continue;
+    if (links.length > breadcrumbUrls.size + 1) return false;
+    return links.get().every((a) => breadcrumbUrls.has(abs($(a).attr("href") ?? "", url) ?? ""));
+  }
+  return false;
+}
+
+function inside(el, ancestor) {
+  for (let node = el; node; node = node.parent) if (node === ancestor) return true;
+  return false;
+}
+
+function sentenceContext(text, anchor, limit = 300) {
+  if (text.length <= limit) return text;
+  const at = anchor ? Math.max(text.indexOf(anchor), 0) : 0;
+  const bounds = [...text.matchAll(/[.!?](?=\s)/g)].map((m) => m.index + 1);
+  let start = 0;
+  for (const b of bounds) if (b <= at) start = b;
+  let end = text.length;
+  for (const b of bounds) if (b > at + anchor.length) { end = b; break; }
+  let out = text.slice(start, end).trim();
+  if (out.length > limit) {
+    const from = Math.max(0, Math.min(at - start - limit / 2, out.length - limit));
+    out = out.slice(from, from + limit).trim();
+  }
+  return out;
+}
+
+function breadcrumbTargets($, url) {
+  const targets = new Set();
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      for (const node of flattenLd(JSON.parse($(el).text()))) {
+        if (String(node["@type"] ?? "").toLowerCase() !== "breadcrumblist") continue;
+        for (const item of node.itemListElement ?? []) {
+          const target = item?.item?.["@id"] ?? item?.item?.url ?? item?.item ?? item?.url;
+          const resolved = typeof target === "string" ? abs(target, url) : undefined;
+          if (resolved) targets.add(resolved);
+        }
+      }
+    } catch {
+    }
+  });
+  return targets;
+}
+
+function extractLinks($, url, { scope, blockOrdinal, blockText, breadcrumbUrls }) {
+  const internal = new Map();
+  const externalLinks = [];
+  let passedScope = false;
+  $("a[href]").each((_, el) => {
+    const href = $(el).attr("href");
+    if (!href) return;
+    const target = abs(href, url);
+    if (!target) return;
+    const anchor = $(el).text().replace(/\s+/g, " ").trim().slice(0, 200);
+    const rel = $(el).attr("rel") ?? null;
+    const inScope = scope ? inside(el, scope) : true;
+    if (inScope) passedScope = true;
+
+    let region = markedRegion(el);
+    if (/(^|\s)(next|prev|previous)(\s|$)/.test((rel ?? "").toLowerCase())) region = "pagination";
+    if (region === null && inBreadcrumbTrail($, el, url, breadcrumbUrls)) region = "breadcrumb";
+    if (region === null && !inScope) region = passedScope ? "footer" : "header";
+    if (region === null) region = "body";
+
+    if (!sameSite(target, url)) {
+      externalLinks.push({ url: target, anchor, rel, region });
+      return;
+    }
+
+    const key = `${region} ${target}`;
+    const seen = internal.get(key);
+    if (seen) {
+      seen.count += 1;
+      return;
+    }
+    const entry = { url: target, anchor, rel, region, count: 1 };
+    if (region === "body") {
+      const block = $(el).closest(BLOCK_SELECTOR).get(0);
+      const ordinal = block ? blockOrdinal.get(block) : undefined;
+      if (ordinal !== undefined) {
+        entry.ordinal = ordinal;
+        entry.context = sentenceContext(blockText.get(block), anchor);
+      }
+    }
+    internal.set(key, entry);
+  });
+  return { outLinks: [...internal.values()], externalLinks };
+}
+
 export function extract(html, url, status) {
   const $ = cheerio.load(html);
 
@@ -100,6 +227,17 @@ export function extract(html, url, status) {
   const robotsDirectives = $('meta[name="robots"]').attr("content") ?? null;
   const lang = $("html").attr("lang") ?? null;
   const hasViewport = $('meta[name="viewport"]').length > 0;
+  const viewportMeta = $('meta[name="viewport"]').first().attr("content")?.trim() || null;
+  const nosnippetCount = $("[data-nosnippet]").length;
+  const socialMetaCount = $('meta[property^="og:"], meta[name^="twitter:"]').length;
+  const socialMeta = {};
+  $('meta[property^="og:"], meta[name^="twitter:"]').each((_, el) => {
+    const key = $(el).attr("property") ?? $(el).attr("name");
+    let content = $(el).attr("content")?.trim();
+    if (!key || !content || key in socialMeta) return;
+    if (/^(og:image|og:url|twitter:image)/.test(key)) content = abs(content, url) ?? content;
+    socialMeta[key] = content;
+  });
 
   const hreflang = {};
   $('link[rel="alternate"][hreflang]').each((_, el) => {
@@ -118,19 +256,6 @@ export function extract(html, url, status) {
     const text = $(el).text().replace(/\s+/g, " ").trim();
     if (!text) return;
     headings.push({ level: Number(el.tagName.slice(1)), text, ordinal: i });
-  });
-
-  const outLinks = [];
-  const externalLinks = [];
-  $("a[href]").each((_, el) => {
-    const href = $(el).attr("href");
-    if (!href) return;
-    const target = abs(href, url);
-    if (!target) return;
-    const anchor = $(el).text().replace(/\s+/g, " ").trim().slice(0, 200);
-    const rel = $(el).attr("rel") ?? null;
-    if (sameSite(target, url)) outLinks.push({ url: target, anchor, rel });
-    else externalLinks.push({ url: target, anchor, rel });
   });
 
   const schemaTypes = [];
@@ -172,8 +297,32 @@ export function extract(html, url, status) {
         "embed[src^='http://'], object[data^='http://'], link[href^='http://'][rel='stylesheet']",
     ).length > 0;
 
+  const gaScriptSrc = $("script[src]")
+    .toArray()
+    .some((el) => {
+      const src = $(el).attr("src") ?? "";
+      return (
+        /googletagmanager\.com\/(gtag\/js|gtm\.js)/i.test(src) ||
+        /google-analytics\.com\/(analytics|ga)\.js/i.test(src)
+      );
+    });
+  const gaInline = $("script:not([src])")
+    .toArray()
+    .some((el) => {
+      const text = $(el).text();
+      return (
+        /gtag\s*\(\s*['"]config['"]\s*,\s*['"](G|UA|AW|DC)-/i.test(text) ||
+        /googletagmanager\.com\/gtm\.js/i.test(text) ||
+        /GoogleAnalyticsObject/.test(text)
+      );
+    });
+  const hasGoogleAnalytics = gaScriptSrc || gaInline;
+
+  const breadcrumbUrls = breadcrumbTargets($, url);
   $("script, style, noscript, svg").remove();
   const blocks = [];
+  const blockOrdinal = new Map();
+  const blockText = new Map();
 
   const scoped = [$("main"), $("article")].find((el) => el.find(BLOCK_SELECTOR).length > 0);
   const root = scoped ?? $("body");
@@ -187,7 +336,16 @@ export function extract(html, url, status) {
     else if (tag === "li") line = `- ${text}`;
     else if (tag === "td" || tag === "th") line = `| ${text}`;
 
+    blockOrdinal.set(el, blocks.length);
+    blockText.set(el, text);
     blocks.push(line);
+  });
+
+  const { outLinks, externalLinks } = extractLinks($, url, {
+    scope: scoped ? scoped.get(0) : null,
+    blockOrdinal,
+    blockText,
+    breadcrumbUrls,
   });
 
   const parts = schemaText.length ? [...blocks, ...schemaText] : blocks;
@@ -212,6 +370,8 @@ export function extract(html, url, status) {
 
   const bodyText = parts.join("\n");
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
+  const bodyExternalLinks = externalLinks.filter((l) => l.region === "body").length;
+  const externalLinkDensity = wordCount > 0 ? (bodyExternalLinks * 100) / wordCount : null;
 
   return {
     url,
@@ -227,6 +387,11 @@ export function extract(html, url, status) {
     canonical: canonical ? (abs(canonical, url) ?? canonical) : null,
     robotsDirectives,
     hasViewport,
+    viewportMeta,
+    nosnippetCount,
+    socialMetaCount,
+    socialMeta,
+    hasGoogleAnalytics,
     lang,
     hreflang,
     schemaTypes: [...new Set(schemaTypes)],
@@ -236,6 +401,7 @@ export function extract(html, url, status) {
     publishedAt,
     modifiedAt,
     wordCount,
+    externalLinkDensity,
     mixedContent,
     contentHash: sha(blocks.join("\n")),
   };

@@ -13,6 +13,18 @@ def passage_input(title, heading_path, text):
     return f"passage: {text}"
 
 
+def query_input(text):
+    return f"query: {text}"
+
+
+POST_CHARS = 1200
+
+
+def post_input(title, text):
+    body = "\n".join(p for p in [title, text] if p)[:POST_CHARS]
+    return f"passage: {body}"
+
+
 class Embedder:
     def __init__(self, model_id):
         model_path = hf_hub_download(model_id, "onnx/model_quantized.onnx")
@@ -36,7 +48,11 @@ class Embedder:
             pad_id=pad_id if pad_id is not None else 0, pad_token=pad_token
         )
 
-        self.session = onnxruntime.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        options = onnxruntime.SessionOptions()
+        options.enable_cpu_mem_arena = False
+        self.session = onnxruntime.InferenceSession(
+            model_path, options, providers=["CPUExecutionProvider"]
+        )
         self.input_names = {i.name for i in self.session.get_inputs()}
         output_names = [o.name for o in self.session.get_outputs()]
         self.output_name = (
