@@ -26,18 +26,6 @@ export interface UserProfile {
   websiteUrl?: string;
 }
 
-export type SitePageKind =
-  | "home"
-  | "product"
-  | "pricing"
-  | "category"
-  | "article"
-  | "docs"
-  | "about"
-  | "contact"
-  | "legal"
-  | "other";
-
 export type SiteShallowReason =
   | "thin"
   | "legal"
@@ -66,28 +54,16 @@ export interface SitePage extends BaseEntity, SiteScoped {
   lastModified?: string;
   lastCrawledAt?: string;
   inlinks: number;
-  inboundAnchors: { from: string; anchor: string }[];
   title?: string;
   titlePixels?: number;
   metaDescription?: string;
   h1: string[];
   headings: { level: number; text: string; ordinal: number }[];
   bodyText?: string;
-  outLinks: {
-    url: string;
-    anchor: string;
-    rel?: string;
-    region: LinkRegion;
-    count: number;
-    ordinal?: number;
-    context?: string;
-  }[];
-  externalLinks: { url: string; anchor: string; rel?: string; region: LinkRegion }[];
   canonical?: string;
   robotsDirectives?: string;
   xRobotsTag?: string;
   blockedByRobots: boolean;
-  hasViewport?: boolean;
   viewportMeta?: string | null;
   nosnippetCount?: number;
   socialMetaCount: number;
@@ -98,7 +74,7 @@ export interface SitePage extends BaseEntity, SiteScoped {
   schemaNodes: { type: string; keys: number; props: string[] }[];
   lang?: string;
   hreflang: Record<string, string>;
-  kind: SitePageKind;
+  pageType?: SitePageType | null;
   format?: string;
   inSitemap: boolean;
   depth?: number;
@@ -111,9 +87,7 @@ export interface SitePage extends BaseEntity, SiteScoped {
   publishedAt?: string;
   modifiedAt?: string;
   wordCount?: number;
-  externalLinkDensity?: number | null;
   mixedContent: boolean;
-  keywords?: string[];
   contentChangedAt?: string;
   indexState?: SiteIndexState;
   coverageState?: string;
@@ -122,21 +96,42 @@ export interface SitePage extends BaseEntity, SiteScoped {
   similarity?: number;
   match?: { text: string; headingPath?: string };
   linkScore?: number;
-  editorialInlinks?: number;
-  editorialScore?: number;
   chunkedFromHash?: string;
   embedState?: string;
   embedError?: string;
   shallow: boolean;
   shallowReason?: SiteShallowReason;
   stage?: PageStage;
+  outLinkCount: number;
+  externalLinkCount: number;
+  isLeaf?: boolean;
+}
+
+export interface SitePageLink {
+  id: ID;
+  srcPageId: ID;
+  srcUrl?: string;
+  dstPageId?: ID | null;
+  dstUrl: string;
+  external: boolean;
+  region: LinkRegion;
+  rel?: string;
+  anchor?: string;
+  count: number;
+  followable: boolean;
+  dstCanonical: boolean;
+}
+
+export interface SitePageLinks {
+  inbound: SitePageLink[];
+  outbound: SitePageLink[];
 }
 
 export interface SiteDiscoveryPage {
   id: ID;
   url: string;
   title?: string;
-  kind: SitePageKind;
+  pageType?: SitePageType | null;
   inlinks: number;
   depth?: number;
   inSitemap: boolean;
@@ -163,10 +158,8 @@ export interface SiteChunk extends BaseEntity, SiteScoped {
   headingPath?: string;
   text: string;
   embedModel?: string;
-  embeddedFromHash?: string;
   embedAttempts: number;
   embedError?: string;
-  chunkStrategy?: string;
   fromHash?: string;
 }
 

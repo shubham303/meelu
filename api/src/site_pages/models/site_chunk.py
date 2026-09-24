@@ -37,10 +37,8 @@ class SiteChunk(EntityMixin, SiteScopedMixin, Base):
     text: Mapped[str] = mapped_column(nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
     embed_model: Mapped[str | None]
-    embedded_from_hash: Mapped[str | None]
     embed_attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=sql_text("0")
     )
     embed_error: Mapped[str | None]
-    chunk_strategy: Mapped[str | None]
     from_hash: Mapped[str | None]

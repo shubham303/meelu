@@ -172,5 +172,35 @@ export function surfaceSignals(text) {
     totalSpans: voiceSentences,
   });
 
+  const emDashRe = /—|\s--\s/g;
+  let emDashes = 0;
+  const emDashSpans = [];
+  let emDashSentences = 0;
+  for (const sentence of sents) {
+    const matches = sentence.text.match(emDashRe) ?? [];
+    if (matches.length === 0) continue;
+    emDashes += matches.length;
+    emDashSentences += 1;
+    if (emDashSpans.length < MAX_SPANS) {
+      emDashSpans.push(toSpan(sentence, `${matches.length} em dash${matches.length === 1 ? "" : "es"}`));
+    }
+  }
+  const emDashHeavy = emDashes >= 2 || (emDashes === 1 && words <= 150);
+  out.push({
+    id: "em-dashes",
+    label: "Em dashes",
+    value: `${emDashes} in ${words} words`,
+    note: emDashHeavy
+      ? "Em dashes at a rate chat models reach for and most people typing do not."
+      : "Em dashes are not being leaned on.",
+    leaning: emDashHeavy ? "ai" : "human",
+    trigger:
+      emDashes === 0
+        ? "Nothing triggered: there is no em dash in the text."
+        : `The ${emDashSentences === 1 ? "sentence" : `${emDashSentences} sentences`} carrying an em dash. One is ordinary punctuation; it is the rate that reads as generated.`,
+    spans: emDashSpans,
+    totalSpans: emDashSentences,
+  });
+
   return out;
 }

@@ -41,8 +41,8 @@ class FinishedJob(EntityModel):
 @tool(writes=True, desk="site")
 async def start_structure_job(prompt: str) -> StartedJob:
     """Open a structure job for the prompt you are about to run and get its job_id; every
-    suggestion you save carries it. Reconciles first: suggestions whose link now exists
-    become done, those whose page is gone become stale."""
+    suggestion you save carries it. Reconciles first: link suggestions already satisfied
+    or pointing at a gone page are deleted."""
     ctx = require_site()
     async with unit_of_work() as db:
         job, reconciled = await service.start_job(

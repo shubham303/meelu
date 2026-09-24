@@ -10,7 +10,7 @@ from src.analytics.models.analytics_sessions import AnalyticsSession
 from src.analytics.models.analytics_sources import AnalyticsSource
 from src.content.models.content_pieces import ContentPiece
 from src.site_pages.models.site_page import SitePage
-from src.site_pages.models.site_page_index_status import SitePageIndexStatus
+from src.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.site_search.models.site_search_daily import SiteSearchDaily
 from src.site_search.models.site_search_sync import SiteSearchSync
 from src.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily

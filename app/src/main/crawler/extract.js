@@ -226,7 +226,6 @@ export function extract(html, url, status) {
   const canonical = $('link[rel="canonical"]').attr("href");
   const robotsDirectives = $('meta[name="robots"]').attr("content") ?? null;
   const lang = $("html").attr("lang") ?? null;
-  const hasViewport = $('meta[name="viewport"]').length > 0;
   const viewportMeta = $('meta[name="viewport"]').first().attr("content")?.trim() || null;
   const nosnippetCount = $("[data-nosnippet]").length;
   const socialMetaCount = $('meta[property^="og:"], meta[name^="twitter:"]').length;
@@ -370,8 +369,6 @@ export function extract(html, url, status) {
 
   const bodyText = parts.join("\n");
   const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
-  const bodyExternalLinks = externalLinks.filter((l) => l.region === "body").length;
-  const externalLinkDensity = wordCount > 0 ? (bodyExternalLinks * 100) / wordCount : null;
 
   return {
     url,
@@ -386,7 +383,6 @@ export function extract(html, url, status) {
     externalLinks,
     canonical: canonical ? (abs(canonical, url) ?? canonical) : null,
     robotsDirectives,
-    hasViewport,
     viewportMeta,
     nosnippetCount,
     socialMetaCount,
@@ -401,34 +397,20 @@ export function extract(html, url, status) {
     publishedAt,
     modifiedAt,
     wordCount,
-    externalLinkDensity,
     mixedContent,
     contentHash: sha(blocks.join("\n")),
   };
 }
 
-export function classify(facts, origin) {
+export function articleFormat(facts) {
   const path = new URL(facts.url).pathname.toLowerCase();
   const types = facts.schemaTypes.map((t) => t.toLowerCase());
-
-  if (facts.url === origin || path === "" || path === "/") return { kind: "home" };
-  if (types.includes("product") || /\/(product|item|shop)\//.test(path)) return { kind: "product" };
-  if (/\/(pricing|plans|price)/.test(path)) return { kind: "pricing" };
-  if (/\/(privacy|terms|legal|cookie|disclaimer|refund)/.test(path)) return { kind: "legal" };
-  if (/\/(contact|support|help-desk)/.test(path)) return { kind: "contact" };
-  if (/\/(about|team|story|careers)/.test(path)) return { kind: "about" };
-  if (types.includes("faqpage")) return { kind: "docs" };
-  if (/\/(docs|documentation|guide|manual)\//.test(path)) return { kind: "docs" };
-  if (
+  const article =
     types.includes("article") ||
     types.includes("blogposting") ||
     types.includes("newsarticle") ||
-    /\/(blog|news|article|post)\//.test(path)
-  ) {
-    return { kind: "article", format: guessFormat(facts) };
-  }
-  if (/\/(category|collection|tag|topics)\//.test(path)) return { kind: "category" };
-  return { kind: "other" };
+    /\/(blog|news|article|post)\//.test(path);
+  return article ? guessFormat(facts) : null;
 }
 
 function guessFormat(facts) {
@@ -440,8 +422,9 @@ function guessFormat(facts) {
   return null;
 }
 
-export function shallowReason(facts, kind) {
-  if (kind === "legal") return "legal";
+export function shallowReason(facts) {
+  const path = new URL(facts.url).pathname.toLowerCase();
+  if (/\/(privacy|terms|legal|cookie|disclaimer|refund)/.test(path)) return "legal";
   if (/[?&]page=\d+|\/page\/\d+/.test(facts.url)) return "pagination";
   if (facts.wordCount < 80) return "thin";
   return null;

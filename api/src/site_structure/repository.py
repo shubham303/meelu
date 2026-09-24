@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Select, exists, func, or_, select, text, update
+from sqlalchemy import Select, delete, exists, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -9,10 +9,10 @@ from sqlalchemy.orm import aliased
 from src.agent.sql import quote_ident
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
-from src.site_page_llm_extraction.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_structure.constants import (
     HIERARCHY_TYPES,
     OPEN_STATES,
@@ -39,6 +39,11 @@ FROM_TEXT_CHARS = 3000
 
 FromPage = aliased(SitePage, name="from_page")
 ToPage = aliased(SitePage, name="to_page")
+ToPageType = aliased(SitePageLlmExtraction, name="to_page_type")
+
+
+def _is_home(page):
+    return func.regexp_replace(page.url, "^[a-z]+://[^/]+", "").in_(("", "/"))
 
 
 def _now() -> datetime:
@@ -268,7 +273,7 @@ async def edge_facts(
                 SitePageLink.region,
                 SitePageLink.anchor,
                 ToPage.url,
-                ToPage.kind,
+                _is_home(ToPage),
                 SitePageLlmExtraction.page_type,
                 func.coalesce(inlinks.c.n, 0),
             )
@@ -296,7 +301,7 @@ async def edge_facts(
             anchor=r[3],
             to_url=r[4],
             to_inlinks=r[7],
-            to_is_hub=r[5] == "home" or r[6] == "hub",
+            to_is_hub=bool(r[5]) or r[6] == "hub",
         )
     return facts
 
@@ -463,16 +468,14 @@ def _link_exists() -> Any:
     )
 
 
-async def mark_done_where_unlinked(db: AsyncSession, site_id: str) -> int:
+async def delete_where_unlinked(db: AsyncSession, site_id: str) -> int:
     result = await db.execute(
-        update(LinkSuggestion)
-        .where(
+        delete(LinkSuggestion).where(
             LinkSuggestion.site_id == site_id,
-            LinkSuggestion.state.in_(OPEN_STATES),
+            LinkSuggestion.state != "done",
             LinkSuggestion.action == "delete",
             ~_link_exists(),
         )
-        .values(state="done", updated_at=_now())
     )
     return result.rowcount or 0
 
@@ -486,33 +489,28 @@ def _page_gone(page: Any) -> Any:
     )
 
 
-async def mark_done_where_linked(db: AsyncSession, site_id: str) -> int:
+async def delete_where_linked(db: AsyncSession, site_id: str) -> int:
     result = await db.execute(
-        update(LinkSuggestion)
-        .where(
+        delete(LinkSuggestion).where(
             LinkSuggestion.site_id == site_id,
-            LinkSuggestion.state.in_(OPEN_STATES),
+            LinkSuggestion.state != "done",
             LinkSuggestion.action == "create",
             _link_exists(),
         )
-        .values(state="done", updated_at=_now())
     )
     return result.rowcount or 0
 
 
-async def mark_stale_where_page_gone(db: AsyncSession, site_id: str) -> int:
+async def delete_where_page_gone(db: AsyncSession, site_id: str) -> int:
     gone_ids = select(SitePage.id).where(SitePage.site_id == site_id, _page_gone(SitePage))
     result = await db.execute(
-        update(LinkSuggestion)
-        .where(
+        delete(LinkSuggestion).where(
             LinkSuggestion.site_id == site_id,
-            LinkSuggestion.state.in_(OPEN_STATES),
             or_(
                 LinkSuggestion.from_page_id.in_(gone_ids),
                 LinkSuggestion.to_page_id.in_(gone_ids),
             ),
         )
-        .values(state="stale", updated_at=_now())
     )
     return result.rowcount or 0
 
@@ -571,7 +569,7 @@ async def page_facts(
                 SitePage.word_count,
                 SitePageLlmExtraction.page_type,
                 func.coalesce(done.c.n, 0),
-                SitePage.kind,
+                _is_home(SitePage),
             )
             .outerjoin(outlinks, outlinks.c.src_page_id == SitePage.id)
             .outerjoin(done, done.c.from_page_id == SitePage.id)
@@ -587,7 +585,7 @@ async def page_facts(
             word_count=r[3],
             page_type=r[4],
             existing_suggestions=r[5],
-            kind=r[6],
+            is_home=r[6],
         )
         for r in rows
     }
@@ -597,16 +595,16 @@ async def page_facts(
 async def hierarchy_pages(db: AsyncSession, site_id: str) -> list[HierarchyPage]:
     rows = (
         await db.execute(
-            select(SitePage.id, SitePage.url, SitePage.kind, SitePageLlmExtraction.page_type)
+            select(SitePage.id, SitePage.url, _is_home(SitePage), SitePageLlmExtraction.page_type)
             .outerjoin(SitePageLlmExtraction, SitePageLlmExtraction.page_id == SitePage.id)
             .where(
                 SitePage.site_id == site_id,
                 ~_page_gone(SitePage),
-                or_(SitePage.kind == "home", SitePageLlmExtraction.page_type.in_(HIERARCHY_TYPES)),
+                or_(_is_home(SitePage), SitePageLlmExtraction.page_type.in_(HIERARCHY_TYPES)),
             )
         )
     ).all()
-    return [HierarchyPage(id=r[0], url=r[1], kind=r[2], page_type=r[3]) for r in rows]
+    return [HierarchyPage(id=r[0], url=r[1], is_home=r[2], page_type=r[3]) for r in rows]
 
 
 async def linked_pairs(db: AsyncSession, site_id: str, page_ids: list[str]) -> set[tuple[str, str]]:
@@ -689,13 +687,14 @@ async def _inputs(
                 ToPage.title,
                 ToPage.meta_description,
                 ToPage.h1,
-                ToPage.kind,
+                ToPageType.page_type,
                 ToPage.content_hash,
                 SitePageLink.anchor,
             )
             .join(FromPage, FromPage.id == LinkSuggestion.from_page_id)
             .join(ToPage, ToPage.id == LinkSuggestion.to_page_id)
             .outerjoin(SiteChunk, SiteChunk.id == LinkSuggestion.from_chunk_id)
+            .outerjoin(ToPageType, ToPageType.page_id == ToPage.id)
             .outerjoin(
                 SitePageLink,
                 (SitePageLink.src_page_id == LinkSuggestion.from_page_id)
@@ -720,7 +719,7 @@ async def _inputs(
             to_title=r[7],
             to_meta_description=r[8],
             to_h1=list(r[9] or []),
-            to_kind=r[10],
+            to_page_type=r[10],
             to_content_hash=r[11],
             anchor=r[12],
         )

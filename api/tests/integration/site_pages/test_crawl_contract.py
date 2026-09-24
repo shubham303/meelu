@@ -53,7 +53,7 @@ async def test_link_frontier_lists_unknown_targets(client, site):
             {
                 "url": "https://example.com/",
                 "status": 200,
-                "outLinks": [
+                "links": [
                     {"url": "https://example.com/known/", "anchor": "known"},
                     {"url": "https://example.com/new", "anchor": "new"},
                 ],

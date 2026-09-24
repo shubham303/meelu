@@ -26,7 +26,7 @@ export function CreditsCard() {
   const entries = ledger?.data ?? [];
 
   return (
-    <Card className="mb-4">
+    <Card className="stagger-item">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-2 min-w-0">
           <Coins size={15} className="text-accent shrink-0 mt-0.5" />

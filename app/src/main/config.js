@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
@@ -9,14 +10,24 @@ export const REPO_ROOT = path.resolve(APP_ROOT, "..");
 
 dotenv.config({ path: path.join(APP_ROOT, ".env"), quiet: true });
 
+function bundledOauthClient() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(APP_ROOT, "oauth-client.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const bundled = bundledOauthClient();
+
 export const GSC_OAUTH_CLIENT = {
-  clientId: process.env.MEELU_GSC_CLIENT_ID ?? "",
-  clientSecret: process.env.MEELU_GSC_CLIENT_SECRET ?? "",
+  clientId: process.env.MEELU_GSC_CLIENT_ID || bundled.clientId || "",
+  clientSecret: process.env.MEELU_GSC_CLIENT_SECRET || bundled.clientSecret || "",
 };
 
 export const GA_OAUTH_CLIENT = {
-  clientId: process.env.MEELU_GA_CLIENT_ID ?? "",
-  clientSecret: process.env.MEELU_GA_CLIENT_SECRET ?? "",
+  clientId: process.env.MEELU_GA_CLIENT_ID || bundled.clientId || "",
+  clientSecret: process.env.MEELU_GA_CLIENT_SECRET || bundled.clientSecret || "",
 };
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";

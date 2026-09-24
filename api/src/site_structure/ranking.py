@@ -35,7 +35,7 @@ class PageFacts:
     word_count: int | None = None
     page_type: str | None = None
     existing_suggestions: int = 0
-    kind: str | None = None
+    is_home: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,7 +80,7 @@ class SiteDistribution:
 
 
 def links_out_freely(page: PageFacts) -> bool:
-    return page.kind == "home" or page.page_type == "hub"
+    return page.is_home or page.page_type == "hub"
 
 
 def link_capacity(page: PageFacts) -> int:

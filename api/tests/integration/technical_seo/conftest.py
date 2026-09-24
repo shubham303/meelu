@@ -6,33 +6,27 @@ import pytest
 PAGE_DEFAULTS: dict[str, Any] = {
     "status": 200,
     "inlinks": 0,
-    "inbound_anchors": [],
     "title": None,
     "title_pixels": 400,
     "meta_description": None,
     "h1": [],
     "headings": [],
     "body_text": None,
-    "out_links": [],
-    "external_links": [],
     "canonical": None,
     "robots_directives": None,
     "x_robots_tag": None,
     "blocked_by_robots": False,
-    "has_viewport": True,
+    "viewport_meta": "width=device-width, initial-scale=1",
     "schema_types": [],
     "schema_nodes": [],
     "lang": "en",
     "hreflang": {},
-    "kind": "other",
     "in_sitemap": False,
     "depth": 1,
     "redirect_hops": None,
     "images": [],
     "word_count": 500,
     "mixed_content": False,
-    "keywords": [],
-    "questions_answered": [],
     "shallow": False,
 }
 
@@ -53,12 +47,18 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
     from src.core.database import SessionLocal
     from src.core.ids import uid
     from src.site_pages.models.site_page import SitePage
+    from src.site_pages.models.site_page_link import SitePageLink
+    from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
+    from src.site_pages.url import normalise_url
 
     made: dict[str, str] = {}
+    links_by_page: dict[str, list[dict[str, Any]]] = {}
     async with SessionLocal() as db:
         now = datetime.now(UTC)
         for page in pages:
             values = {**PAGE_DEFAULTS, **page}
+            page_type = values.pop("page_type", None)
+            page_links = values.pop("links", [])
             row = SitePage(
                 id=uid("pg"),
                 user_id=user_id,
@@ -69,6 +69,48 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
             )
             db.add(row)
             made[values["url"]] = row.id
+            links_by_page[row.id] = page_links
+            if page_type is not None:
+                db.add(
+                    SitePageLlmExtraction(
+                        id=uid("spx"),
+                        user_id=user_id,
+                        site_id=site_id,
+                        page_id=row.id,
+                        page_type=page_type,
+                        extracted_from_hash=values.get("content_hash"),
+                        extracted_at=now,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+        for src_id, page_links in links_by_page.items():
+            for link in page_links:
+                db.add(
+                    SitePageLink(
+                        id=uid("spl"),
+                        user_id=user_id,
+                        site_id=site_id,
+                        src_page_id=src_id,
+                        dst_page_id=None,
+                        dst_url=normalise_url(link["url"]),
+                        external=bool(link.get("external")),
+                        region=link.get("region", "body"),
+                        rel=link.get("rel"),
+                        anchor=link.get("anchor"),
+                        count=link.get("count", 1),
+                        followable="nofollow" not in (link.get("rel") or "").lower(),
+                        dst_canonical=True,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+        await db.commit()
+
+    from src.site_pages import repository as pages_repo
+
+    async with SessionLocal() as db:
+        await pages_repo.resolve_links(db, site_id)
         await db.commit()
     return made
 

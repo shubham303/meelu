@@ -16,10 +16,11 @@ from src.render_jobs.schemas import (
     RenderJobRecord,
 )
 from src.site_pages.models.site_page import SitePage
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 
 ACTIVE_JOB_STATUSES = ("queued", "running", "cancelling")
 
-SAMPLE_PER_KIND = 10
+SAMPLE_PER_PAGE_TYPE = 10
 
 
 def _active():
@@ -216,7 +217,7 @@ async def candidates(
     rank = (
         func.row_number()
         .over(
-            partition_by=SitePage.kind,
+            partition_by=SitePageLlmExtraction.page_type,
             order_by=(SitePage.depth.asc().nulls_last(), SitePage.inlinks.desc(), SitePage.url),
         )
         .label("rank")
@@ -225,7 +226,7 @@ async def candidates(
         select(
             SitePage.id.label("page_id"),
             SitePage.url,
-            SitePage.kind,
+            SitePageLlmExtraction.page_type,
             SitePage.content_hash,
             SitePageRender.rendered_from_hash,
             SitePage.seq,
@@ -236,20 +237,21 @@ async def candidates(
             (SitePageRender.page_id == SitePage.id) & (SitePageRender.device == device),
             isouter=True,
         )
+        .outerjoin(SitePageLlmExtraction, SitePageLlmExtraction.page_id == SitePage.id)
         .where(SitePage.site_id == site_id, *_eligible())
         .subquery()
     )
     query = select(
         ranked.c.page_id,
         ranked.c.url,
-        ranked.c.kind,
+        ranked.c.page_type,
         ranked.c.content_hash,
         ranked.c.rendered_from_hash,
     ).order_by(ranked.c.seq)
     if page_url:
         query = query.where(ranked.c.url == page_url)
     elif scope == "sample":
-        query = query.where(ranked.c.rank <= SAMPLE_PER_KIND)
+        query = query.where(ranked.c.rank <= SAMPLE_PER_PAGE_TYPE)
     if page_limit:
         query = query.limit(page_limit)
     result = await db.execute(query)

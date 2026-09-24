@@ -119,10 +119,7 @@ def lead_excerpt(body_text):
 
 
 def page_chunk(page):
-    raw_anchors = (
-        a.get("anchor") if isinstance(a, dict) else None for a in (page["inbound_anchors"] or [])
-    )
-    anchors = [a for a in dict.fromkeys(raw_anchors) if a]
+    anchors = [a for a in dict.fromkeys(page["inbound_anchors"] or []) if a]
     parts = [
         p
         for p in [

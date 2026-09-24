@@ -23,7 +23,7 @@ export async function connectSearchConsole() {
   if (!clientId || !clientSecret) {
     throw new Error(
       "This build has no Google OAuth client configured, so Search Console can't be " +
-        "connected. Set MEELU_GSC_CLIENT_ID and MEELU_GSC_CLIENT_SECRET (see .env.example).",
+        "connected. Please reinstall or update the app.",
     );
   }
 

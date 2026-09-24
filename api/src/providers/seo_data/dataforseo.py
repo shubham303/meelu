@@ -1,4 +1,3 @@
-import base64
 from typing import Any
 
 from src.providers.errors import ProviderRequestError
@@ -76,11 +75,10 @@ class DataForSeoAdapter(SeoDataAdapter):
     capabilities = SEO_CAPABILITIES
 
     def configured(self) -> bool:
-        return bool(settings.dataforseo_login and settings.dataforseo_password)
+        return bool(settings.dataforseo_auth)
 
     def headers(self) -> dict[str, str]:
-        raw = f"{settings.dataforseo_login.strip()}:{settings.dataforseo_password.strip()}"
-        return {"authorization": f"Basic {base64.b64encode(raw.encode()).decode()}"}
+        return {"authorization": f"Basic {settings.dataforseo_auth.strip()}"}
 
     async def post(self, endpoint: str, task: dict[str, Any]) -> tuple[dict, int]:
         path = ENDPOINTS[endpoint]

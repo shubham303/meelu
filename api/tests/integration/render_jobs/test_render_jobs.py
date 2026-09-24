@@ -37,9 +37,9 @@ async def prepare(client, email):
         site["id"],
         user_id,
         [
-            page("/", kind="home", depth=0, inlinks=5, title="Home", word_count=30),
-            page("/app", kind="other", depth=1, title=None, word_count=5),
-            page("/docs", kind="docs", depth=1, title="Docs", word_count=800),
+            page("/", page_type="money", depth=0, inlinks=5, title="Home", word_count=30),
+            page("/app", page_type="utility", depth=1, title=None, word_count=5),
+            page("/docs", page_type="support", depth=1, title="Docs", word_count=800),
             page("/dead", status=404, shallow=True),
             page("/private", blocked_by_robots=True),
         ],
@@ -198,7 +198,7 @@ async def test_reap_clears_a_job_left_running(client, email):
     assert reaped["jobs"][0]["status"] == "failed"
 
 
-async def test_sample_scope_limits_pages_per_kind(client, email):
+async def test_sample_scope_limits_pages_per_page_type(client, email):
     await signup(client, email)
     user_id = await user_id_of(email)
     r = await client.post(
@@ -208,19 +208,19 @@ async def test_sample_scope_limits_pages_per_kind(client, email):
     await seed_pages(
         site["id"],
         user_id,
-        [page(f"/blog/{n}", kind="article", depth=2, inlinks=n) for n in range(15)]
-        + [page(f"/p/{n}", kind="product", depth=1, inlinks=n) for n in range(3)],
+        [page(f"/blog/{n}", page_type="informational", depth=2, inlinks=n) for n in range(15)]
+        + [page(f"/p/{n}", page_type="money", depth=1, inlinks=n) for n in range(3)],
     )
 
     r = await client.post("/api/v1/site/render-jobs", json={"scope": "sample"})
     job = r.json()["data"]["job"]
     r = await client.post(f"/api/v1/site/render-jobs/{job['id']}/claim")
     claimed = r.json()["data"]
-    kinds = {}
+    counts = {}
     for p in claimed["pages"]:
-        kinds[p["kind"]] = kinds.get(p["kind"], 0) + 1
-    assert kinds == {"article": 10, "product": 3}
-    articles = [p["url"] for p in claimed["pages"] if p["kind"] == "article"]
+        counts[p["pageType"]] = counts.get(p["pageType"], 0) + 1
+    assert counts == {"informational": 10, "money": 3}
+    articles = [p["url"] for p in claimed["pages"] if p["pageType"] == "informational"]
     assert f"{ORIGIN}/blog/14" in articles
     assert f"{ORIGIN}/blog/0" not in articles
 

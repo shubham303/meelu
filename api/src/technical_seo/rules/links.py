@@ -49,8 +49,8 @@ LINK_PAGE_RULES: list[PageRule] = [
         ),
         where=f"""{INDEXABLE} and site_pages.depth >= 2
       and not exists (
-        select 1 from jsonb_array_elements(site_pages.out_links) l
-         where l->>'region' = 'breadcrumb'
+        select 1 from site_page_links e
+         where e.src_page_id = site_pages.id and e.region = 'breadcrumb'
       )
       and not exists (
         select 1 from unnest(site_pages.schema_types) t where lower(t) = 'breadcrumblist'

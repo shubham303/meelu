@@ -22,8 +22,7 @@ class Settings(EnvSettings):
 
     unsplash_access_key: str = ""
 
-    dataforseo_login: str = ""
-    dataforseo_password: str = ""
+    dataforseo_auth: str = ""
     dataforseo_base_url: str = "https://api.dataforseo.com"
     apify_token: str = ""
     openrouter_api_key: str = ""
@@ -34,7 +33,7 @@ class Settings(EnvSettings):
     credits_site_daily_usd: float = 0.4
     credits_minimum_balance_usd: float = 0.2
     credits_billing_period_hours: int = 24
-    credits_billing_sweep_seconds: int = 900
+    credits_billing_sweep_seconds: int = 300
     credits_billing_sweep_disabled: bool = False
     seo_job_vendor_ceiling_micros: int = 2_000_000
 

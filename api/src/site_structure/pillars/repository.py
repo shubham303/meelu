@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent.sql import quote_ident
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
-from src.site_page_llm_extraction.models.site_page_llm_extraction import SitePageLlmExtraction
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
@@ -206,7 +206,6 @@ async def page_points(db: AsyncSession, site_id: str) -> list[PagePoint]:
                 SitePage.title,
                 SitePageLlmExtraction.page_type,
                 SitePage.inlinks,
-                SitePage.keywords,
                 vectors.c.vector,
             )
             .join(vectors, vectors.c.page_id == SitePage.id)
@@ -221,8 +220,7 @@ async def page_points(db: AsyncSession, site_id: str) -> list[PagePoint]:
             title=r[2],
             page_type=r[3],
             inlinks=r[4],
-            keywords=tuple(r[5] or ()),
-            vector=np.asarray(r[6], dtype=float),
+            vector=np.asarray(r[5], dtype=float),
         )
         for r in rows
     ]

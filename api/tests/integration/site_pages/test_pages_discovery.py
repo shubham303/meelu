@@ -6,7 +6,7 @@ def chain(n: int) -> list[dict]:
         {
             "url": "https://example.com/",
             "status": 200,
-            "outLinks": [{"url": "https://example.com/d1", "anchor": "1"}],
+            "links": [{"url": "https://example.com/d1", "anchor": "1"}],
         }
     ]
     for i in range(1, n + 1):
@@ -14,7 +14,7 @@ def chain(n: int) -> list[dict]:
             {
                 "url": f"https://example.com/d{i}",
                 "status": 200,
-                "outLinks": [{"url": f"https://example.com/d{i + 1}", "anchor": str(i + 1)}],
+                "links": [{"url": f"https://example.com/d{i + 1}", "anchor": str(i + 1)}],
             }
         )
     return pages
@@ -26,10 +26,10 @@ async def test_discovery_counts_orphans_unreachable_and_deep(client, site):
             "url": "https://example.com/orphan",
             "status": 200,
             "inSitemap": True,
-            "outLinks": [{"url": "https://example.com/island", "anchor": "island"}],
+            "links": [{"url": "https://example.com/island", "anchor": "island"}],
         },
-        {"url": "https://example.com/island", "status": 200, "outLinks": []},
-        {"url": "https://example.com/gone", "status": 404, "outLinks": []},
+        {"url": "https://example.com/island", "status": 200, "links": []},
+        {"url": "https://example.com/gone", "status": 404, "links": []},
     ]
     await save_pages(client, pages)
     r = await client.post("/api/v1/site/pages/graph", json={})

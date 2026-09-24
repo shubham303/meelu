@@ -33,7 +33,7 @@ function siteName(page: SitePage): string {
 }
 
 function searchQuery(page: SitePage): string {
-  return page.keywords?.[0] ?? page.title ?? breadcrumb(page.url).host;
+  return page.title ?? breadcrumb(page.url).host;
 }
 
 const DUMMY_RESULTS = [

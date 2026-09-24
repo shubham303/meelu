@@ -190,7 +190,7 @@ class ScreeningInput(BaseModel):
     to_title: str | None
     to_meta_description: str | None
     to_h1: list[str]
-    to_kind: str
+    to_page_type: str | None
     to_content_hash: str | None
 
 
@@ -306,7 +306,7 @@ class MentionsResult(EntityModel):
 class HierarchyPage(BaseModel):
     id: str
     url: str
-    kind: str
+    is_home: bool
     page_type: str | None
 
 

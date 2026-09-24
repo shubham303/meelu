@@ -6,7 +6,8 @@ RENDERED = "r.rendered_at is not null and r.render_error is null and site_pages.
 
 RAW_WORDS = "coalesce(site_pages.word_count, 0)"
 
-RAW_LINKS = "jsonb_array_length(site_pages.out_links)"
+RAW_LINKS = """(select count(*) from site_page_links e
+  where e.src_page_id = site_pages.id and not e.external)"""
 
 RAW_NOINDEX = "(coalesce(site_pages.robots_directives, '') ilike '%noindex%')"
 
@@ -398,8 +399,9 @@ def norm(expr: str) -> str:
 
 def lost_links(alias: str) -> str:
     return (
-        "(select count(*) from jsonb_array_elements(site_pages.out_links) l"
-        f" where not (l->>'url' = any({alias}.internal_link_urls)))"
+        "(select count(*) from site_page_links e"
+        f" where e.src_page_id = site_pages.id and not e.external"
+        f" and not (e.dst_url = any({alias}.internal_link_urls)))"
     )
 
 
@@ -489,7 +491,7 @@ V2_PAGE_RULES: list[PageRule] = [
         "handlers. Google follows the rendered links, so the pages behind the missing ones lose "
         "the path and the equity the server-side markup promised.",
         lambda a: (
-            f"jsonb_array_length(site_pages.out_links) > 0 and ({lost_links(a)} >= 5 or {lost_links(a)} >= jsonb_array_length(site_pages.out_links) * 0.2)"
+            f"{RAW_LINKS} > 0 and ({lost_links(a)} >= 5 or {lost_links(a)} >= {RAW_LINKS} * 0.2)"
         ),
     ),
     *_both(
@@ -947,7 +949,7 @@ V2_PAGE_RULES: list[PageRule] = [
         "endorsement whether you meant it or not. Review them and add rel=nofollow or "
         "rel=sponsored where appropriate.",
         lambda a: (
-            f"(select count(*) from unnest({a}.external_link_hosts) h where not exists (select 1 from jsonb_array_elements(site_pages.external_links) l where substring(l->>'url' from '^https?://([^/]+)') = h)) >= 5"
+            f"(select count(*) from unnest({a}.external_link_hosts) h where not exists (select 1 from site_page_links e where e.src_page_id = site_pages.id and e.external and substring(e.dst_url from '^https?://([^/]+)') = h)) >= 5"
         ),
     ),
     *_both(

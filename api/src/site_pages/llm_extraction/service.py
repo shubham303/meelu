@@ -2,29 +2,17 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
-from src.site_page_llm_extraction import classify
-from src.site_page_llm_extraction import repository as repo
-from src.site_page_llm_extraction.schemas import (
+from src.site_pages.llm_extraction import repository as repo
+from src.site_pages.schemas.llm_extraction import (
     PageLlmExtractionCreateRequest,
     PageLlmExtractionRecord,
-    PageLlmExtractionRunResponse,
     PageLlmExtractionStatsRecord,
 )
 
 
 async def stats(db: AsyncSession, site_id: str) -> PageLlmExtractionStatsRecord:
     eligible, extracted, pending = await repo.counts(db, site_id)
-    return PageLlmExtractionStatsRecord(
-        eligible=eligible, extracted=extracted, pending=pending, running=classify.running(site_id)
-    )
-
-
-async def run(db: AsyncSession, user_id: str, site_id: str) -> PageLlmExtractionRunResponse:
-    _, _, pending = await repo.counts(db, site_id)
-    started = pending > 0 and classify.start(user_id, site_id)
-    return PageLlmExtractionRunResponse(
-        started=started, running=classify.running(site_id), pending=pending
-    )
+    return PageLlmExtractionStatsRecord(eligible=eligible, extracted=extracted, pending=pending)
 
 
 async def save(

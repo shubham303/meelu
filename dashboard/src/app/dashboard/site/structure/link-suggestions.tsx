@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ExternalLink,
   Link2,
+  RefreshCw,
   RotateCcw,
   Search as SearchIcon,
   Trash2,
@@ -26,14 +27,13 @@ import {
 
 const PAGE_SIZE = 50;
 
-type TabState = Exclude<LinkSuggestionState, "draft">;
+type TabState = Exclude<LinkSuggestionState, "draft" | "stale">;
 
 const STATE_LABEL: Record<TabState, string> = {
   ready: "Ready",
   done: "Done",
   user_rejected: "Turned down",
   llm_rejected: "Screened out",
-  stale: "Stale",
 };
 
 const ACTION_LABEL: Record<LinkSuggestionAction, string> = {
@@ -53,7 +53,6 @@ const EMPTY: Record<TabState, string> = {
   done: "Nothing marked done yet.",
   user_rejected: "Nothing turned down yet.",
   llm_rejected: "The agent has not screened anything out.",
-  stale: "No suggestion has gone stale. One does when either page leaves the crawl.",
 };
 
 const EMPTY_SUMMARY: LinkSuggestionSummary = {
@@ -109,6 +108,17 @@ export function LinkSuggestions() {
     void refreshSummary();
   }, [refresh, refreshSummary]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSuggestions = async () => {
+    setRefreshing(true);
+    try {
+      await api("/api/v1/site/structure/link-suggestions/reconcile", { method: "POST" });
+      reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const counts = summary ?? EMPTY_SUMMARY;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const nothingAtAll = summary !== null && total === 0;
@@ -116,7 +126,18 @@ export function LinkSuggestions() {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink">Link suggestions</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-lg text-ink">Link suggestions</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={refreshSuggestions}
+            title="Remove suggestions no longer valid: the link already exists, or a page left the crawl"
+          >
+            <RefreshCw size={13} className={cn(refreshing && "animate-spin")} /> Refresh
+          </Button>
+        </div>
         <span className="text-xs text-faint">
           Internal links the agent proposes. You make the change on the site, then mark it done.
         </span>
@@ -283,7 +304,6 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
             {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
-            {row.state === "stale" && <Badge tone="warn">Stale</Badge>}
             {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>
         </div>

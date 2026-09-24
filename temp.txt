@@ -1,5 +1,14 @@
-in site structure while running the workflow for adding a suggestion from one page to other.. we filter out suggestions if more than one suggestion is for same pair (from, to)
+This is doing too much work. Lets make it simple.
 
-this should be done after screening review and score calculation.. not before that..
-reason is there could be multiple chunks from from_page that could be releavnt for same to_page.. we need to pick the best one based 
-on score and filter out others. 
+Crawler crawls the site, updates the page table, site_page_link table.
+after crawling is completed it automatically computes the page rank scrore for all pages..
+
+The embed worker should do  tasks. The embed worker runs autonomously
+1. compute embedding for each page with chunks and save that data.
+2. jev call for each page to extract data as per request and save that data in site_page_llm_extraction table.
+both computation should take the page hash into consideration to avoid re-computation for the same page if it hasn't changed.
+3. seo pass
+4. listening pass
+
+Remove the 
+1. remove the llm extraction asyncio task as well as api call that calls jev api for llm based extraction, it becomes part of embed worker which runs iteratively to compute the llm extraction for each page.whose content has changed. 

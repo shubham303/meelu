@@ -44,8 +44,7 @@ select g.page_id, k.id as keyword_id, k.keyword, coalesce(hk.keyword, k.keyword)
        k.cluster_id, k.intent, k.volume, k.difficulty, g.position, g.impressions_28d,
        g.clicks_28d, g.impressions_prev_28d, g.clicks_prev_28d, g.clicks_ly_28d,
        g.impressions_ly_28d, g.ctr, g.ctr_gap, g.coverage, g.lexical_hit,
-       f.title, f.meta_description, f.title_pixels, f.content_hash, f.page_type,
-       f.questions_answered
+       f.title, f.meta_description, f.title_pixels, f.content_hash, f.page_type
 from seo_keyword_gsc_pages g
 join seo_keywords k on k.id = g.keyword_id
 left join seo_keyword_clusters c on c.id = k.cluster_id
@@ -223,9 +222,6 @@ def question_edits(rows: list[Any], min_questions: int):
     by_page: dict[str, list[Any]] = defaultdict(list)
     for r in rows:
         if not QUESTION_RE.match(r.keyword) or r.position is None or not (5 <= r.position <= 20):
-            continue
-        answered = " ".join(q.lower() for q in (r.questions_answered or []))
-        if r.keyword in answered:
             continue
         by_page[r.page_id].append(r)
     out = []

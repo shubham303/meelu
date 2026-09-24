@@ -19,7 +19,6 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     __tablename__ = "site_pages"
     __table_args__ = (
         Index("site_pages_site_url_idx", "site_id", "url", unique=True),
-        Index("site_pages_site_kind_idx", "site_id", "kind"),
         Index("site_pages_stage_idx", "site_id", "status", "shallow"),
         Index("site_pages_freshness_idx", "site_id", "last_crawled_at"),
         Index("site_pages_sitemap_idx", "site_id", "in_sitemap"),
@@ -43,12 +42,6 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     last_modified: Mapped[str | None]
     last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     inlinks: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    editorial_inlinks: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
-    inbound_anchors: Mapped[list[Any]] = mapped_column(
-        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
-    )
     title: Mapped[str | None]
     title_pixels: Mapped[int | None] = mapped_column(Integer)
     meta_description: Mapped[str | None]
@@ -59,19 +52,12 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
         JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
     )
     body_text: Mapped[str | None]
-    out_links: Mapped[list[Any]] = mapped_column(
-        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
-    )
-    external_links: Mapped[list[Any]] = mapped_column(
-        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
-    )
     canonical: Mapped[str | None]
     robots_directives: Mapped[str | None]
     x_robots_tag: Mapped[str | None]
     blocked_by_robots: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
-    has_viewport: Mapped[bool | None] = mapped_column(Boolean)
     viewport_meta: Mapped[str | None]
     nosnippet_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     has_google_analytics: Mapped[bool | None] = mapped_column(Boolean)
@@ -92,7 +78,6 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     hreflang: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=EMPTY_JSON_OBJECT
     )
-    kind: Mapped[str] = mapped_column(nullable=False, server_default=text("'other'"))
     format: Mapped[str | None]
     in_sitemap: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     depth: Mapped[int | None] = mapped_column(Integer)
@@ -108,18 +93,10 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     word_count: Mapped[int | None] = mapped_column(Integer)
-    external_link_density: Mapped[float | None] = mapped_column(REAL)
     mixed_content: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
-    keywords: Mapped[list[str]] = mapped_column(
-        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
-    )
-    questions_answered: Mapped[list[str]] = mapped_column(
-        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
-    )
     link_score: Mapped[float | None] = mapped_column(REAL)
-    editorial_score: Mapped[float | None] = mapped_column(REAL)
     chunked_from_hash: Mapped[str | None]
     embed_state: Mapped[str | None]
     embed_error: Mapped[str | None]

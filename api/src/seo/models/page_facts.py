@@ -19,7 +19,6 @@ class SeoPageFacts(EntityMixin, SiteScopedMixin, Base):
     status: Mapped[int | None] = mapped_column(Integer)
     redirect_to: Mapped[str | None]
     page_type: Mapped[str | None]
-    kind: Mapped[str | None]
     lang: Mapped[str | None]
     title: Mapped[str | None]
     h1: Mapped[str | None]
@@ -34,9 +33,6 @@ class SeoPageFacts(EntityMixin, SiteScopedMixin, Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     first_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_hash: Mapped[str | None]
-    questions_answered: Mapped[list[str]] = mapped_column(
-        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
-    )
     indexable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     live: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     is_home: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))

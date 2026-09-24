@@ -33,6 +33,15 @@ async def save_pages(client, items):
     return r.json()["data"]
 
 
+async def save_extraction(client, page_id, page_type):
+    r = await client.post(
+        "/api/v1/site/page-llm-extractions",
+        json={"pageId": page_id, "pageType": page_type},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()["data"]
+
+
 async def list_pages(client, **params):
     r = await client.get("/api/v1/site/pages", params=params)
     assert r.status_code == 200, r.text

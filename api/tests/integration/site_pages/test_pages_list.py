@@ -1,6 +1,11 @@
 import pytest
 
-from tests.integration.site_pages.conftest import list_pages, save_pages, urls
+from tests.integration.site_pages.conftest import (
+    list_pages,
+    save_extraction,
+    save_pages,
+    urls,
+)
 
 FIXTURE = [
     {
@@ -10,7 +15,6 @@ FIXTURE = [
         "metaDescription": "The home of everything",
         "h1": ["Home"],
         "bodyText": "welcome to the shop",
-        "kind": "home",
         "format": "html",
         "lang": "en",
         "wordCount": 500,
@@ -30,7 +34,6 @@ FIXTURE = [
         "metaDescription": "",
         "h1": [],
         "bodyText": "burr grinders compared",
-        "kind": "article",
         "format": "html",
         "lang": "en",
         "wordCount": 1200,
@@ -47,7 +50,6 @@ FIXTURE = [
         "url": "https://example.com/blog/old-kettles",
         "status": 404,
         "title": None,
-        "kind": "article",
         "lang": "de",
         "wordCount": 30,
         "inSitemap": False,
@@ -62,11 +64,18 @@ FIXTURE = [
         "url": "https://example.com/redirected",
         "status": 301,
         "redirectTo": "https://example.com/",
-        "kind": "other",
         "blockedByRobots": True,
         "wordCount": 0,
     },
 ]
+
+
+PAGE_TYPES = {
+    "https://example.com/": "money",
+    "https://example.com/blog/grinders": "informational",
+    "https://example.com/blog/old-kettles": "informational",
+    "https://example.com/redirected": "utility",
+}
 
 
 CHANGED_AT = {
@@ -78,6 +87,9 @@ CHANGED_AT = {
 @pytest.fixture
 async def corpus(client, site):
     await save_pages(client, FIXTURE)
+    for url, page_type in PAGE_TYPES.items():
+        r = await client.get("/api/v1/site/pages/by-url", params={"url": url})
+        await save_extraction(client, r.json()["data"]["id"], page_type)
     for url, changed in CHANGED_AT.items():
         r = await client.get("/api/v1/site/pages/by-url", params={"url": url})
         page_id = r.json()["data"]["id"]
@@ -103,12 +115,12 @@ async def test_list_defaults_sorted_by_url_with_totals(client, corpus):
     assert "bodyText" not in body["pages"][0]
 
 
-async def test_filter_kind_status_and_stage(client, corpus):
-    assert await urls(client, kind="article") == [
+async def test_filter_page_type_status_and_stage(client, corpus):
+    assert await urls(client, pageType="informational") == [
         "https://example.com/blog/grinders",
         "https://example.com/blog/old-kettles",
     ]
-    assert await urls(client, kinds="home,other") == [
+    assert await urls(client, pageTypes="money,utility") == [
         "https://example.com/",
         "https://example.com/redirected",
     ]
@@ -227,7 +239,7 @@ async def test_views(client, corpus):
     body = await list_pages(client, view="full", urlContains="grinders")
     page = body["pages"][0]
     assert page["bodyText"] == "burr grinders compared"
-    assert page["outLinks"] == []
+    assert page["outLinkCount"] == 0
 
     body = await list_pages(client, view="export", urlContains="grinders")
     page = body["pages"][0]
@@ -243,7 +255,7 @@ async def test_views(client, corpus):
     page = body["pages"][0]
     assert page["bodyText"] == "burr grinders compared"
     assert page["stage"] in ("crawled", "indexed")
-    assert "outLinks" not in page
+    assert "outLinkCount" not in page
     assert "headings" not in page
 
     r = await client.get("/api/v1/site/pages", params={"view": "wide"})

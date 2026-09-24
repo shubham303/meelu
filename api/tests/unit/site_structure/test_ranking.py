@@ -170,7 +170,9 @@ def test_home_and_hub_pages_link_out_without_limit():
     from src.site_structure.ranking import UNLIMITED_CAPACITY
 
     assert link_capacity(page("h", words=0, page_type="hub")) == UNLIMITED_CAPACITY
-    assert link_capacity(PageFacts("home", 0, 0, 50, "money", 0, kind="home")) == UNLIMITED_CAPACITY
+    assert (
+        link_capacity(PageFacts("home", 0, 0, 50, "money", 0, is_home=True)) == UNLIMITED_CAPACITY
+    )
     assert link_capacity(page("u", words=0, page_type="utility")) == 3
 
 

@@ -1,8 +1,10 @@
+import asyncio
 import signal
 import sys
 import time
 
 from src.seo.precompute.clusters import run_seo_pass
+from src.site_pages.llm_extraction.classify import run_extraction_pass
 
 from .chunking import chunk_body, page_chunk
 from .db import Db
@@ -131,6 +133,7 @@ def main():
     signal.signal(signal.SIGTERM, request_stop)
 
     once = settings.meelu_embed_once == "1"
+    loop = asyncio.new_event_loop()
 
     while not stopping:
         try:
@@ -140,6 +143,9 @@ def main():
             embedded = run_embed_pass(db, embedder, settings.meelu_embed_model)
             if embedded > 0:
                 print(f"embed-worker: embedded {embedded} chunk(s)")
+            extracted = loop.run_until_complete(run_extraction_pass())
+            if extracted > 0:
+                print(f"embed-worker: extracted {extracted} page(s)")
             listening = run_listening_pass(db, embedder, settings.meelu_embed_model)
             if listening > 0:
                 print(f"embed-worker: embedded {listening} listening row(s)")
@@ -148,7 +154,7 @@ def main():
                 print(f"embed-worker: rebuilt keyword clusters for {seo_sites} site(s)")
             if once:
                 break
-            if pages == 0 and embedded == 0 and listening == 0 and seo_sites == 0:
+            if pages == 0 and embedded == 0 and extracted == 0 and listening == 0 and seo_sites == 0:
                 time.sleep(interval)
         except Exception as e:
             print(f"embed-worker: pass failed — {e}", file=sys.stderr)
@@ -157,4 +163,5 @@ def main():
                 break
             time.sleep(interval)
 
+    loop.close()
     db.close()

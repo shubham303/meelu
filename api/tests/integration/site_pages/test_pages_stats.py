@@ -70,8 +70,8 @@ async def test_stats_shape(client, site):
 
     by_stage = {row["stage"]: row["n"] for row in body["byStage"]}
     assert by_stage == {"indexed": 1, "skipped": 1, "failed": 3, "blocked": 1, "pending": 1}
-    by_kind = {row["kind"]: row["n"] for row in body["byKind"]}
-    assert by_kind == {"other": 7}
+    by_page_type = {row["pageType"]: row["n"] for row in body["byPageType"]}
+    assert by_page_type == {None: 7}
     assert body["byShallowReason"] == [{"reason": "thin", "n": 1}]
 
 
@@ -84,45 +84,6 @@ async def test_stats_carries_site_fields(client, site):
 
     r = await client.get("/api/v1/site/pages/stats")
     assert r.json()["data"]["sitemapUrlCount"] is None
-
-
-async def test_keyword_coverage(client, site):
-    await save_page(
-        client,
-        url="https://example.com/a",
-        status=200,
-        keywords=["espresso", "grinder"],
-        questionsAnswered=["how to grind?"],
-    )
-    await save_page(
-        client,
-        url="https://example.com/b",
-        status=200,
-        keywords=["espresso"],
-    )
-    await save_page(client, url="https://example.com/c", status=404)
-
-    r = await client.get("/api/v1/site/pages/keywords")
-    assert r.status_code == 200
-    body = r.json()["data"]
-    assert body["keywords"] == [
-        {"value": "espresso", "pages": 2},
-        {"value": "grinder", "pages": 1},
-    ]
-    assert body["questions"] == [{"value": "how to grind?", "pages": 1}]
-    assert body["keywordsTruncated"] is False
-    assert body["questionsTruncated"] is False
-    assert body["matchedPages"] == 3
-    assert body["annotatedPages"] == 2
-
-    r = await client.get("/api/v1/site/pages/keywords", params={"status": "ok"})
-    assert r.json()["data"]["matchedPages"] == 2
-
-    r = await client.get("/api/v1/site/pages/keywords", params={"limit": "1"})
-    body = r.json()["data"]
-    assert body["keywords"] == [{"value": "espresso", "pages": 2}]
-    assert body["keywordsTruncated"] is True
-    assert body["questionsTruncated"] is False
 
 
 async def test_chunks_route(client, site):

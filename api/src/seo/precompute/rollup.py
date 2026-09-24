@@ -30,13 +30,12 @@ with gsc as (
   group by p.id
 ),
 src as (
-  select p.id as page_id, p.user_id, p.url, p.status, p.redirect_to, x.page_type, p.kind, p.lang,
+  select p.id as page_id, p.user_id, p.url, p.status, p.redirect_to, x.page_type, p.lang,
          p.title, p.h1[1] as h1,
          coalesce((select array_agg(h ->> 'text') from jsonb_array_elements(p.headings) h
                    where jsonb_exists(h, 'text')), '{{}}'::text[]) as headings,
          p.meta_description, p.title_pixels, p.word_count, p.inlinks, p.link_score,
          p.published_at, p.created_at as first_seen_at, p.content_hash,
-         p.questions_answered,
          (p.status between 200 and 299 and not p.blocked_by_robots
             and coalesce(p.robots_directives, '') not ilike '%noindex%'
             and coalesce(p.x_robots_tag, '') not ilike '%noindex%') as indexable,
@@ -51,24 +50,24 @@ src as (
   where p.site_id = :site_id
 )
 insert into seo_page_facts (id, user_id, site_id, page_id, url, status, redirect_to, page_type,
-  kind, lang, title, h1, headings, meta_description, title_pixels, word_count, inlinks,
-  link_score, published_at, first_seen_at, content_hash, questions_answered, indexable, live,
+  lang, title, h1, headings, meta_description, title_pixels, word_count, inlinks,
+  link_score, published_at, first_seen_at, content_hash, indexable, live,
   is_home, impressions_28d, clicks_28d, impressions_ly_28d, clicks_ly_28d)
 select 'pf_' || substr(md5(random()::text || page_id), 1, 10), user_id, :site_id, page_id, url,
-  status, redirect_to, page_type, kind, lang, title, h1, headings, meta_description,
+  status, redirect_to, page_type, lang, title, h1, headings, meta_description,
   title_pixels, word_count, inlinks, link_score, published_at, first_seen_at, content_hash,
-  questions_answered, indexable, live, is_home, impressions_28d, clicks_28d,
+  indexable, live, is_home, impressions_28d, clicks_28d,
   impressions_ly_28d, clicks_ly_28d
 from src
 on conflict (page_id) do update set
   url = excluded.url, status = excluded.status, redirect_to = excluded.redirect_to,
-  page_type = excluded.page_type, kind = excluded.kind, lang = excluded.lang,
+  page_type = excluded.page_type, lang = excluded.lang,
   title = excluded.title, h1 = excluded.h1, headings = excluded.headings,
   meta_description = excluded.meta_description, title_pixels = excluded.title_pixels,
   word_count = excluded.word_count, inlinks = excluded.inlinks, link_score = excluded.link_score,
   published_at = excluded.published_at,
   first_seen_at = coalesce(seo_page_facts.first_seen_at, excluded.first_seen_at),
-  content_hash = excluded.content_hash, questions_answered = excluded.questions_answered,
+  content_hash = excluded.content_hash,
   indexable = excluded.indexable, live = excluded.live, is_home = excluded.is_home,
   impressions_28d = excluded.impressions_28d, clicks_28d = excluded.clicks_28d,
   impressions_ly_28d = excluded.impressions_ly_28d, clicks_ly_28d = excluded.clicks_ly_28d,

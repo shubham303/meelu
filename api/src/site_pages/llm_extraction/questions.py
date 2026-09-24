@@ -1,7 +1,7 @@
 from typing import Any
 
 from src.providers.json_data_extractor.adapter import Question, choice
-from src.site_page_llm_extraction.schemas import PAGE_TYPES
+from src.site_pages.schemas.llm_extraction import PAGE_TYPES
 
 MAX_BODY_CHARS = 8000
 

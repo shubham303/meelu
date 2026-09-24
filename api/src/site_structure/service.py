@@ -68,12 +68,12 @@ async def finish_job(
 
 
 async def reconcile(db: AsyncSession, site_id: str) -> ReconcileResult:
-    done = await repo.mark_done_where_linked(db, site_id)
-    done += await repo.mark_done_where_unlinked(db, site_id)
-    stale = await repo.mark_stale_where_page_gone(db, site_id)
+    removed = await repo.delete_where_linked(db, site_id)
+    removed += await repo.delete_where_unlinked(db, site_id)
+    removed += await repo.delete_where_page_gone(db, site_id)
     pillars_reconciled = await pillars.reconcile(db, site_id)
     return ReconcileResult(
-        done=done + pillars_reconciled.done, stale=stale + pillars_reconciled.stale
+        done=pillars_reconciled.done, stale=pillars_reconciled.stale, removed=removed
     )
 
 

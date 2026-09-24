@@ -49,3 +49,4 @@ images/
 .backups/
 
 build/
+app/oauth-client.json

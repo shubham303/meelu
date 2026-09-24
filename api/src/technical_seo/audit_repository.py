@@ -23,6 +23,7 @@ PAGES = (
     "site_pages"
     " left join site_page_renders r on r.page_id = site_pages.id and r.device = 'desktop'"
     " left join site_page_renders m on m.page_id = site_pages.id and m.device = 'mobile'"
+    " left join site_page_llm_extraction x on x.page_id = site_pages.id"
 )
 
 

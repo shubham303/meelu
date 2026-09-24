@@ -1,10 +1,10 @@
 from src.agent_scope.ask import AskDesk, ask_prompt
 from src.agent_scope.lib import AgentScope, desk_guides, desk_tables
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
-from src.site_page_llm_extraction.models.site_page_llm_extraction import SitePageLlmExtraction
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
-from src.site_pages.models.site_page_index_status import SitePageIndexStatus
+from src.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.site_pages.models.site_page_link import SitePageLink
 from src.site_search.models.site_search_daily import SiteSearchDaily
 from src.site_search.models.site_search_sync import SiteSearchSync

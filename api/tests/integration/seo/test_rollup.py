@@ -66,7 +66,7 @@ async def prepare(client, email):
         site["id"],
         user_id,
         [
-            {"url": HOME, "title": "Acme Coffee", "h1": ["Acme"], "kind": "home"},
+            {"url": HOME, "title": "Acme Coffee", "h1": ["Acme"], "page_type": "money"},
             {"url": PRICING, "title": "Espresso machine pricing", "h1": ["Pricing"], "inlinks": 9},
             {
                 "url": BLOG,

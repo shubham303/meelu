@@ -204,7 +204,7 @@ function PageList({ pages, total }: { pages: SiteDiscoveryPage[]; total: number 
             {p.title && <p className="truncate text-xs text-faint">{p.url}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1.5 text-xs">
-            <Badge tone="neutral">{p.kind}</Badge>
+            {p.pageType && <Badge tone="neutral">{p.pageType}</Badge>}
             {p.inSitemap ? (
               <Badge tone="neutral">in sitemap</Badge>
             ) : (

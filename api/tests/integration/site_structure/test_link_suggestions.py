@@ -32,12 +32,16 @@ async def seed_chunk(site_id, user_id, page_id, ordinal, heading, text=None) -> 
 
 
 async def seed_link(site_id, user_id, src, dst, region="body") -> None:
+    from sqlalchemy import select
+
     from src.core.database import SessionLocal
     from src.core.ids import uid
+    from src.site_pages.models.site_page import SitePage
     from src.site_pages.models.site_page_link import SitePageLink
 
     async with SessionLocal() as db:
         now = datetime.now(UTC)
+        dst_url = (await db.execute(select(SitePage.url).where(SitePage.id == dst))).scalar_one()
         db.add(
             SitePageLink(
                 id=uid("lnk"),
@@ -45,6 +49,8 @@ async def seed_link(site_id, user_id, src, dst, region="body") -> None:
                 site_id=site_id,
                 src_page_id=src,
                 dst_page_id=dst,
+                dst_url=dst_url,
+                external=False,
                 region=region,
                 created_at=now,
                 updated_at=now,
@@ -63,9 +69,14 @@ async def prepare(client, email):
         site["id"],
         user_id,
         [
-            {"url": f"{ORIGIN}/", "kind": "home", "depth": 0, "inlinks": 40},
-            {"url": f"{ORIGIN}/blog/how-to", "kind": "article", "depth": 2, "inlinks": 5},
-            {"url": f"{ORIGIN}/pricing", "kind": "product", "depth": 1, "inlinks": 1},
+            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 40},
+            {
+                "url": f"{ORIGIN}/blog/how-to",
+                "page_type": "informational",
+                "depth": 2,
+                "inlinks": 5,
+            },
+            {"url": f"{ORIGIN}/pricing", "page_type": "money", "depth": 1, "inlinks": 1},
         ],
     )
     chunk = await seed_chunk(
@@ -334,7 +345,7 @@ async def test_hierarchy_links(client, email):
 
     from src.core.database import SessionLocal
     from src.core.ids import uid
-    from src.site_page_llm_extraction.models.site_page_llm_extraction import (
+    from src.site_pages.models.site_page_llm_extraction import (
         SitePageLlmExtraction,
     )
 

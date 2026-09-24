@@ -3,11 +3,12 @@ from src.agent_scope.lib import AgentScope, desk_guides, desk_tables
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
-from src.site_pages.models.site_page_index_status import SitePageIndexStatus
+from src.site_pages.models.site_page_link import SitePageLink
+from src.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.sites.models.site import Site
 
 DESK = "pages"
-TABLES = desk_tables(Site, SitePage, SiteChunk, SitePageIndexStatus, SiteCrawlJob)
+TABLES = desk_tables(Site, SitePage, SitePageLink, SiteChunk, SitePageIndexStatus, SiteCrawlJob)
 GUIDES = desk_guides("workflow", "pages")
 
 ASK = AskDesk(

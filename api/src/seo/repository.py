@@ -774,7 +774,6 @@ async def page_brief(db: AsyncSession, site_id: str, page_id: str | None) -> dic
         "inlinks": page.inlinks,
         "impressions_28d": page.impressions_28d,
         "clicks_28d": page.clicks_28d,
-        "questions_answered": list(page.questions_answered)[:20],
     }
 
 

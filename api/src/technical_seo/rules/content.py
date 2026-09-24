@@ -3,7 +3,7 @@ from src.technical_seo.rules.types import PageRule
 OPTIMISABLE = """site_pages.status = 200 and not site_pages.shallow and not site_pages.blocked_by_robots
   and coalesce(site_pages.robots_directives, '') not ilike '%noindex%'
   and coalesce(site_pages.x_robots_tag, '') not ilike '%noindex%'
-  and site_pages.kind in ('article', 'product', 'pricing', 'docs')"""
+  and x.page_type in ('informational', 'money', 'support')"""
 
 CONTENT_PAGE_RULES: list[PageRule] = [
     PageRule(

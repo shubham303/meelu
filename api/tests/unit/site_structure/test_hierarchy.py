@@ -4,8 +4,8 @@ from src.site_structure.schemas import HierarchyPage
 O = "https://x.example.com"
 
 
-def hp(pid, path, kind="other", page_type="hub"):
-    return HierarchyPage(id=pid, url=f"{O}{path}", kind=kind, page_type=page_type)
+def hp(pid, path, is_home=False, page_type="hub"):
+    return HierarchyPage(id=pid, url=f"{O}{path}", is_home=is_home, page_type=page_type)
 
 
 def edges_of(pages):
@@ -24,7 +24,7 @@ def test_paths():
 def test_home_links_to_and_from_hubs_and_utilities():
     edges, home, hubs = edges_of(
         [
-            hp("home", "/", kind="home", page_type="money"),
+            hp("home", "/", is_home=True, page_type="money"),
             hp("blog", "/blog"),
             hp("login", "/login", page_type="utility"),
         ]

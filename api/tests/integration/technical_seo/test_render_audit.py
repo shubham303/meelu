@@ -61,14 +61,14 @@ def page(url, **facts):
         "canonical": f"{ORIGIN}{url}",
         "schema_types": ["WebPage"],
         "word_count": 500,
-        "out_links": [{"url": f"{ORIGIN}/", "anchor": "Home"}],
+        "links": [{"url": f"{ORIGIN}/", "anchor": "Home"}],
         **facts,
     }
 
 
 def raw_pages():
     return [
-        page("/", kind="home", depth=0),
+        page("/", page_type="money", depth=0),
         page("/shell", title=None, h1=[], schema_types=[], word_count=8, canonical=None),
         page("/static"),
         page("/redirects"),

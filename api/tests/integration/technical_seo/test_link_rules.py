@@ -29,7 +29,7 @@ def pages():
     return [
         page(
             "/",
-            outLinks=[
+            links=[
                 link("/hub", "nav"),
                 link("/hub", "body"),
                 link("/facet?sort=price", "nav"),
@@ -37,13 +37,13 @@ def pages():
                 link("/breadcrumbed", "body"),
             ],
         ),
-        page("/hub", outLinks=[link("/spoke", "nav"), link("/mentioned", "body")]),
-        page("/spoke", outLinks=[]),
-        page("/mentioned", outLinks=[link("/hub", "breadcrumb")]),
-        page("/breadcrumbed", outLinks=[]),
-        page("/hidden", outLinks=[]),
-        page("/facet?sort=price", canonical=f"{ORIGIN}/hub", outLinks=[]),
-        *[page(f"/list/{i}", outLinks=[link("/facet?sort=price", "nav")]) for i in range(12)],
+        page("/hub", links=[link("/spoke", "nav"), link("/mentioned", "body")]),
+        page("/spoke", links=[]),
+        page("/mentioned", links=[link("/hub", "breadcrumb")]),
+        page("/breadcrumbed", links=[]),
+        page("/hidden", links=[]),
+        page("/facet?sort=price", canonical=f"{ORIGIN}/hub", links=[]),
+        *[page(f"/list/{i}", links=[link("/facet?sort=price", "nav")]) for i in range(12)],
     ]
 
 

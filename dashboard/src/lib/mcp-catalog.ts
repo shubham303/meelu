@@ -106,7 +106,7 @@ export function catalogEntry(id: string): CatalogEntry | undefined {
 }
 
 export function isInstallable(entry: CatalogEntry): boolean {
-  return entry.transport.kind === "http" || entry.transport.command !== "";
+  return entry.connect !== undefined || entry.transport.kind === "http" || entry.transport.command !== "";
 }
 
 export const MEELU_AGENT_MCP_URL = "http://127.0.0.1:8484/mcp/";

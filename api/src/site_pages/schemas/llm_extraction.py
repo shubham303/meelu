@@ -62,13 +62,6 @@ class PageLlmExtractionStatsRecord(EntityModel):
     eligible: int
     extracted: int
     pending: int
-    running: bool
-
-
-class PageLlmExtractionRunResponse(EntityModel):
-    started: bool
-    running: bool
-    pending: int
 
 
 class PageLlmExtractionResponse(PageLlmExtractionRecord):

@@ -560,6 +560,7 @@ async function buildConfig(session) {
   }
   const readOnly = isReadOnly(scope);
   const providerDomains = readOnly ? [] : (scope.providers ?? []);
+  session.catalog = catalog;
   session.access = deskAccess(catalog, [scope.desk, ...desks], writes, providerDomains, scope.silentWrites);
   const readTools = [...session.access.allowed]
     .filter((n) => !writes.includes(n))
@@ -664,6 +665,15 @@ async function buildConfig(session) {
 
     const { allowed, writes: liveWrites } = session.access;
     if (toolName.startsWith("mcp__meelu__") && !allowed.has(short)) {
+      if (!session.catalog?.some((t) => t.name === short)) {
+        return {
+          behavior: "deny",
+          message:
+            `${short} is not registered by the agent server, so no desk can offer it. ` +
+            `Do not try it again and do not load desks looking for it — tell the user the ` +
+            `agent server does not serve ${short} and carry on with the tools you hold.`,
+        };
+      }
       return {
         behavior: "deny",
         message:
@@ -782,6 +792,7 @@ class LiveSession {
     this.options = options;
     this.desks = new Set();
     this.access = { allowed: new Set(), hidden: [], writes: [], silentWrites: new Set() };
+    this.catalog = null;
     this.approvedJobs = new Set();
     this.sessionId = null;
     this.q = null;

@@ -557,7 +557,7 @@ class PageRenderRecord(EntityModel):
 class RenderCandidateRecord(EntityModel):
     page_id: str
     url: str
-    kind: str
+    page_type: str | None
     content_hash: str | None = None
     rendered_from_hash: str | None = None
 

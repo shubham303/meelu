@@ -13,9 +13,8 @@ from src.site_pages.schemas import (
     SitePageBatchResult,
     SitePageCreateRequest,
     SitePageDiscoveryRecord,
-    SitePageEdge,
     SitePageFilters,
-    SitePageKeywordCoverageResult,
+    SitePageLinksResult,
     SitePageListResult,
     SitePageMatch,
     SitePagePruneResult,
@@ -94,12 +93,6 @@ async def search(
     return SitePageSearchResponse(
         hits=found.hits, mode=found.mode, reranked=found.reranked, note=found.note
     )
-
-
-async def covered_keywords(
-    db: AsyncSession, site_id: str, filters: SitePageFilters, limit: int | None = None
-) -> SitePageKeywordCoverageResult:
-    return await repo.keyword_coverage(db, site_id, filters, limit if limit is not None else 500)
 
 
 async def page(db: AsyncSession, site_id: str, page_id: str) -> SitePageRecord:
@@ -217,16 +210,12 @@ async def compute_link_scores(db: AsyncSession, site_id: str) -> int:
     teleport = _teleport(refs, (await repo.landing_seed(db, site_id)).sessions_by_path)
     ids = [p.id for p in refs]
 
-    canonical = [SitePageEdge(src=e.src, dst=e.dst) for e in edges]
-    await repo.write_scores(db, site_id, "link_score", page_rank(ids, canonical, teleport=teleport))
-    await repo.write_scores(
-        db, site_id, "editorial_score", page_rank(ids, edges, teleport=teleport)
-    )
+    await repo.write_scores(db, site_id, "link_score", page_rank(ids, edges, teleport=teleport))
     return len(ids)
 
 
 async def rebuild_graph(db: AsyncSession, site_id: str) -> None:
-    await repo.rebuild_links(db, site_id)
+    await repo.resolve_links(db, site_id)
     await repo.restamp_graph(db, site_id)
     await compute_link_scores(db, site_id)
 
@@ -243,6 +232,11 @@ async def stats(db: AsyncSession, user_id: str, site_id: str) -> SitePageStatsRe
 
 async def discovery(db: AsyncSession, site_id: str) -> SitePageDiscoveryRecord:
     return await repo.page_discovery(db, site_id, deep_from=4, cap=500)
+
+
+async def page_links(db: AsyncSession, site_id: str, page_id: str) -> SitePageLinksResult:
+    await page(db, site_id, page_id)
+    return await repo.page_links(db, site_id, page_id)
 
 
 async def chunks(db: AsyncSession, site_id: str, page_id: str) -> list[SiteChunkRecord]:

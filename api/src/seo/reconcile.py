@@ -45,10 +45,6 @@ async def edit_outcome(
     )
     if "ctr" in strategies and snippet_changed:
         return "done"
-    if "questions" in strategies:
-        wanted = set(evidence.get("questions") or [])
-        if wanted and wanted & set(page.questions_answered):
-            return "done"
     content_changed = bool(page.content_hash) and page.content_hash != evidence.get("content_hash")
     if strategies & set(CONTENT_STRATEGIES) and content_changed:
         coverage = await topic_coverage(db, site_id, row.topic_key, page.page_id)

@@ -21,6 +21,8 @@ CLUSTER_MEMBER = """site_pages m
 
 PATH = "regexp_replace(site_pages.url, '^https?://[^/]+', '')"
 
+IS_HOME = f"{PATH} in ('', '/')"
+
 SLUG = f"split_part({PATH}, '?', 1)"
 
 STOP_WORD_RE = (
@@ -43,13 +45,17 @@ def without(*props: str) -> str:
     return f"not (n->'props' @> '[{listed}]'::jsonb)"
 
 
-def home_links_none(column: str, pattern: str) -> str:
-    return f"""site_pages.status = 200 and site_pages.kind = 'home'
+def home_links_none(external: bool, pattern: str) -> str:
+    return f"""site_pages.status = 200 and {IS_HOME}
       and not exists (
-        select 1 from jsonb_array_elements(site_pages.{column}) l
-         where coalesce(l->>'url', '') ~* '{pattern}'
+        select 1 from site_page_links e
+         where e.src_page_id = site_pages.id and e.external is {str(external).lower()}
+           and e.dst_url ~* '{pattern}'
       )"""
 
+
+BODY_EXTERNAL_LINKS = """(select coalesce(sum(e.count), 0) from site_page_links e
+  where e.src_page_id = site_pages.id and e.external and e.region = 'body')"""
 
 CONTACT_LINK = r"(^|/)contact(-us)?(/|\.|\?|$)"
 
@@ -296,9 +302,9 @@ PAGE_RULES: list[PageRule] = [
             "it."
         ),
         where="""site_pages.status = 200 and exists (
-        select 1 from jsonb_array_elements(site_pages.out_links) l
-          join site_pages t on t.site_id = site_pages.site_id and t.url = l->>'url'
-         where t.status >= 400
+        select 1 from site_page_links e
+          join site_pages t on t.id = e.dst_page_id
+         where e.src_page_id = site_pages.id and t.status >= 400
       )""",
     ),
     PageRule(
@@ -310,9 +316,9 @@ PAGE_RULES: list[PageRule] = [
             "signal. Update the link to the destination URL."
         ),
         where="""site_pages.status = 200 and exists (
-        select 1 from jsonb_array_elements(site_pages.out_links) l
-          join site_pages t on t.site_id = site_pages.site_id and t.url = l->>'url'
-         where t.status between 300 and 399
+        select 1 from site_page_links e
+          join site_pages t on t.id = e.dst_page_id
+         where e.src_page_id = site_pages.id and t.status between 300 and 399
       )""",
     ),
     PageRule(
@@ -325,9 +331,9 @@ PAGE_RULES: list[PageRule] = [
             "directory or a paid-link page rather than an article. Keep the references that earn "
             "their place and cut the rest, or write enough around them to carry the count."
         ),
-        where=f"""{INDEXABLE} and site_pages.external_link_density > 2
-        and (select count(*) from jsonb_array_elements(site_pages.external_links) l
-              where l->>'region' = 'body') >= 5""",
+        where=f"""{INDEXABLE} and coalesce(site_pages.word_count, 0) > 0
+        and ({BODY_EXTERNAL_LINKS}) >= 5
+        and ({BODY_EXTERNAL_LINKS}) * 100.0 / site_pages.word_count > 2""",
     ),
     PageRule(
         kind="orphan-page",
@@ -348,8 +354,8 @@ PAGE_RULES: list[PageRule] = [
             "a page that belongs above it, or accept that it is not meant to be found and take it "
             "down."
         ),
-        where="""site_pages.status = 200 and not site_pages.in_sitemap and site_pages.inlinks = 0
-      and site_pages.kind <> 'home'""",
+        where=f"""site_pages.status = 200 and not site_pages.in_sitemap and site_pages.inlinks = 0
+      and not ({IS_HOME})""",
     ),
     PageRule(
         kind="deep-page",
@@ -385,7 +391,7 @@ PAGE_RULES: list[PageRule] = [
             "dilutes the pages that are worth reading. Expand it, merge it into a fuller page, or "
             "drop it."
         ),
-        where=f"""{INDEXABLE} and site_pages.kind in ('article', 'product', 'docs')
+        where=f"""{INDEXABLE} and x.page_type in ('informational', 'money', 'support')
       and coalesce(site_pages.word_count, 0) < 250""",
     ),
     PageRule(
@@ -458,7 +464,7 @@ PAGE_RULES: list[PageRule] = [
             "it is what rich results and answer engines read. Add JSON-LD for the type of page this "
             "is."
         ),
-        where=f"""{INDEXABLE} and site_pages.kind in ('article', 'product')
+        where=f"""{INDEXABLE} and x.page_type in ('informational', 'money')
       and coalesce(cardinality(site_pages.schema_types), 0) = 0""",
     ),
     PageRule(
@@ -470,7 +476,7 @@ PAGE_RULES: list[PageRule] = [
             "search engine has only the text to work out who you are. Add them to the home page, with "
             "sameAs links to the profiles you already own."
         ),
-        where="""site_pages.status = 200 and site_pages.kind = 'home'
+        where=f"""site_pages.status = 200 and {IS_HOME}
       and not exists (
         select 1 from unnest(site_pages.schema_types) t
          where lower(t) in ('organization', 'website', 'localbusiness', 'corporation')
@@ -485,7 +491,7 @@ PAGE_RULES: list[PageRule] = [
             "is a real organisation or a page that could belong to anyone. Link a contact page from "
             "the home page — the footer is the usual place."
         ),
-        where=home_links_none("out_links", CONTACT_LINK),
+        where=home_links_none(False, CONTACT_LINK),
     ),
     PageRule(
         kind="home-missing-terms-link",
@@ -497,7 +503,7 @@ PAGE_RULES: list[PageRule] = [
             "service is expected to state its terms somewhere reachable. Publish a terms page and link "
             "it from the home page footer alongside the privacy policy."
         ),
-        where=home_links_none("out_links", TERMS_LINK),
+        where=home_links_none(False, TERMS_LINK),
     ),
     PageRule(
         kind="home-missing-social-links",
@@ -509,7 +515,7 @@ PAGE_RULES: list[PageRule] = [
             "property of Organization markup is expected to repeat. Link the profiles the business "
             "actually maintains from the home page; do not add accounts nobody posts to."
         ),
-        where=home_links_none("external_links", SOCIAL_LINK),
+        where=home_links_none(True, SOCIAL_LINK),
     ),
     PageRule(
         kind="home-missing-google-analytics",
@@ -523,7 +529,7 @@ PAGE_RULES: list[PageRule] = [
             "every page. If analytics is loaded through a consent manager or another product "
             "entirely, this can be ignored."
         ),
-        where="""site_pages.status = 200 and site_pages.kind = 'home'
+        where=f"""site_pages.status = 200 and {IS_HOME}
       and site_pages.has_google_analytics = false""",
     ),
     PageRule(
@@ -648,7 +654,7 @@ PAGE_RULES: list[PageRule] = [
             "it, so the text is unreadable until the reader pinches to zoom. Google indexes what the "
             "mobile crawler sees, so this is judged on every page that lacks the tag."
         ),
-        where="site_pages.status = 200 and not site_pages.shallow and site_pages.has_viewport is not true",
+        where="site_pages.status = 200 and not site_pages.shallow and site_pages.viewport_meta is null",
     ),
     PageRule(
         kind="title-too-long",

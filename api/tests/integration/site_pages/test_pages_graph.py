@@ -8,7 +8,7 @@ GRAPH = [
     {
         "url": "https://example.com/",
         "status": 200,
-        "outLinks": [
+        "links": [
             {"url": "https://example.com/a", "anchor": "About us"},
             {"url": "https://example.com/b/", "anchor": "Blog"},
         ],
@@ -16,10 +16,10 @@ GRAPH = [
     {
         "url": "https://example.com/a",
         "status": 200,
-        "outLinks": [{"url": "https://example.com/b#top", "anchor": "Blog again"}],
+        "links": [{"url": "https://example.com/b#top", "anchor": "Blog again"}],
     },
-    {"url": "https://example.com/b", "status": 200, "outLinks": []},
-    {"url": "https://example.com/orphan", "status": 200, "outLinks": []},
+    {"url": "https://example.com/b", "status": 200, "links": []},
+    {"url": "https://example.com/orphan", "status": 200, "links": []},
 ]
 
 
@@ -44,13 +44,22 @@ async def test_graph_counts_inlinks_and_depth(client, graph):
     assert graph["https://example.com/b"]["depth"] == 1
     assert graph["https://example.com/orphan"]["depth"] is None
 
-    anchors = graph["https://example.com/b"]["inboundAnchors"]
-    assert sorted(a["anchor"] for a in anchors) == ["Blog", "Blog again"]
-    assert sorted(a["from"] for a in anchors) == [
-        "https://example.com",
+
+async def test_page_links_route_reports_both_directions(client, graph):
+    blog = graph["https://example.com/b"]["id"]
+    r = await client.get(f"/api/v1/site/pages/{blog}/links")
+    assert r.status_code == 200, r.text
+    links = r.json()["data"]
+    assert sorted(l["anchor"] for l in links["inbound"]) == ["Blog", "Blog again"]
+    assert sorted(l["srcUrl"] for l in links["inbound"]) == [
+        "https://example.com/",
         "https://example.com/a",
     ]
-    assert graph["https://example.com/orphan"]["inboundAnchors"] == []
+    assert links["outbound"] == []
+
+    orphan = graph["https://example.com/orphan"]["id"]
+    r = await client.get(f"/api/v1/site/pages/{orphan}/links")
+    assert r.json()["data"]["inbound"] == []
 
 
 async def test_graph_writes_link_scores(client, graph):
@@ -69,7 +78,7 @@ async def test_graph_rebuild_clears_stale_scores(client, site):
 
     await save_pages(
         client,
-        [{"url": "https://example.com/", "status": 200, "outLinks": []}],
+        [{"url": "https://example.com/", "status": 200, "links": []}],
     )
     r = await client.post("/api/v1/site/pages/graph", json={})
     assert r.status_code == 200
@@ -157,7 +166,7 @@ REGIONS = [
     {
         "url": "https://example.com/",
         "status": 200,
-        "outLinks": [
+        "links": [
             {"url": "https://example.com/hub", "anchor": "Hub", "region": "nav"},
             {"url": "https://example.com/hub", "anchor": "Read the hub", "region": "body"},
             {"url": "https://example.com/legal", "anchor": "Terms", "region": "footer"},
@@ -178,26 +187,26 @@ REGIONS = [
     {
         "url": "https://example.com/hub",
         "status": 200,
-        "outLinks": [{"url": "https://example.com/spoke", "anchor": "Spoke", "region": "nav"}],
+        "links": [{"url": "https://example.com/spoke", "anchor": "Spoke", "region": "nav"}],
     },
-    {"url": "https://example.com/spoke", "status": 200, "outLinks": []},
-    {"url": "https://example.com/legal", "status": 200, "outLinks": []},
+    {"url": "https://example.com/spoke", "status": 200, "links": []},
+    {"url": "https://example.com/legal", "status": 200, "links": []},
     {
         "url": "https://example.com/page/2",
         "status": 200,
-        "outLinks": [{"url": "https://example.com/deep", "anchor": "Deep", "region": "body"}],
+        "links": [{"url": "https://example.com/deep", "anchor": "Deep", "region": "body"}],
     },
-    {"url": "https://example.com/deep", "status": 200, "outLinks": []},
+    {"url": "https://example.com/deep", "status": 200, "links": []},
     {
         "url": "https://example.com/hidden",
         "status": 200,
         "canonical": "https://example.com/hub",
-        "outLinks": [],
+        "links": [],
     },
 ]
 
 
-async def test_graph_stores_regions_and_editorial_counts(client, site):
+async def test_graph_stores_regions_and_edge_facts(client, site):
     from sqlalchemy import select
 
     from src.core.database import unit_of_work
@@ -210,20 +219,11 @@ async def test_graph_stores_regions_and_editorial_counts(client, site):
 
     hub = pages["https://example.com/hub"]
     assert hub["inlinks"] == 1
-    assert hub["editorialInlinks"] == 1
     assert hub["depth"] == 1
 
-    spoke = pages["https://example.com/spoke"]
-    assert spoke["inlinks"] == 1
-    assert spoke["editorialInlinks"] == 0
-
+    assert pages["https://example.com/spoke"]["inlinks"] == 1
     assert pages["https://example.com/page/2"]["depth"] is None
     assert pages["https://example.com/deep"]["depth"] is None
-
-    assert (
-        pages["https://example.com/hub"]["editorialScore"]
-        > pages["https://example.com/legal"]["editorialScore"]
-    )
 
     async with unit_of_work() as db:
         rows = (
@@ -232,13 +232,16 @@ async def test_graph_stores_regions_and_editorial_counts(client, site):
             .all()
         )
     by_id = {p["id"]: p["url"] for p in pages.values()}
-    edges = {(by_id[e.src_page_id], by_id[e.dst_page_id], e.region): e for e in rows}
+    edges = {(by_id[e.src_page_id], e.dst_url, e.region): e for e in rows}
     home = "https://example.com/"
-    assert edges[(home, "https://example.com/hub", "nav")].weight == pytest.approx(0.2)
-    assert edges[(home, "https://example.com/hub", "body")].weight == pytest.approx(1.0)
-    assert edges[(home, "https://example.com/legal", "footer")].weight == pytest.approx(0.1)
+    hub_nav = edges[(home, "https://example.com/hub", "nav")]
+    hub_body = edges[(home, "https://example.com/hub", "body")]
+    assert hub_nav.dst_page_id == pages["https://example.com/hub"]["id"]
+    assert hub_body.dst_page_id == hub_nav.dst_page_id
+    assert hub_body.anchor == "Read the hub"
+    assert edges[(home, "https://example.com/legal", "footer")].region == "footer"
     hidden = edges[(home, "https://example.com/hidden", "body")]
     assert hidden.followable is False
-    assert hidden.weight == 0
     assert hidden.dst_canonical is False
     assert edges[(home, "https://example.com/page/2", "pagination")].rel == "next"
+    assert all(e.external is False for e in rows)

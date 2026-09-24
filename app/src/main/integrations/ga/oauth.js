@@ -22,8 +22,8 @@ export async function connectAnalytics() {
   const { clientId, clientSecret } = GA_OAUTH_CLIENT;
   if (!clientId || !clientSecret) {
     throw new Error(
-      "This build has no Google Analytics OAuth client configured, so Analytics can't be " +
-        "connected. Set MEELU_GA_CLIENT_ID and MEELU_GA_CLIENT_SECRET (see .env.example).",
+      "This build has no Google OAuth client configured, so Analytics can't be " +
+        "connected. Please reinstall or update the app.",
     );
   }
 

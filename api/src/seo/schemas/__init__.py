@@ -72,7 +72,6 @@ class PageFactsRecord(EntityModel):
     status: int | None
     redirect_to: str | None
     page_type: str | None
-    kind: str | None
     lang: str | None
     title: str | None
     h1: str | None
@@ -85,7 +84,6 @@ class PageFactsRecord(EntityModel):
     published_at: JsDateTime | None
     first_seen_at: JsDateTime | None
     content_hash: str | None
-    questions_answered: list[str]
     indexable: bool
     live: bool
     is_home: bool

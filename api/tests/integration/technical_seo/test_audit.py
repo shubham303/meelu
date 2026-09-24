@@ -16,7 +16,7 @@ def defect_pages():
     return [
         page(
             "/",
-            kind="home",
+            page_type="money",
             in_sitemap=True,
             inlinks=3,
             depth=0,
@@ -25,13 +25,15 @@ def defect_pages():
             h1=["Audit Example"],
             canonical=f"{ORIGIN}/",
             schema_types=["Organization"],
-            out_links=[
+            links=[
                 {"url": f"{ORIGIN}/dead", "anchor": "Dead"},
                 {"url": f"{ORIGIN}/redirected", "anchor": "Moved"},
                 {"url": f"{ORIGIN}/contact", "anchor": "Contact"},
-            ],
-            external_links=[
-                {"url": "https://www.linkedin.com/company/audit", "anchor": "LinkedIn"}
+                {
+                    "url": "https://www.linkedin.com/company/audit",
+                    "anchor": "LinkedIn",
+                    "external": True,
+                },
             ],
         ),
         page("/boom", status=500, shallow=True, inlinks=1),

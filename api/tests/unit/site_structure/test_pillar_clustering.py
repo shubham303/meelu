@@ -11,11 +11,11 @@ from src.site_structure.pillars.clustering import (
 )
 
 
-def point(pid, axis, wobble=0.0, page_type="informational", keywords=(), title=None):
+def point(pid, axis, wobble=0.0, page_type="informational", title=None):
     v = np.zeros(16)
     v[axis] = 1.0
     v[(axis + 1) % 16] = wobble
-    return PagePoint(pid, f"https://x/{pid}", title, page_type, 1, tuple(keywords), v)
+    return PagePoint(pid, f"https://x/{pid}", title, page_type, 1, v)
 
 
 def test_cluster_pages_splits_by_direction_and_drops_singletons():
@@ -48,9 +48,9 @@ def test_overlap_topic_and_structural_share():
     assert overlap(["a", "b", "c"], ["b", "c", "d"]) == 0.5
     assert overlap([], []) == 0.0
     points = [
-        point("a", 0, keywords=("seo", "links"), page_type="legal"),
-        point("b", 0, keywords=("seo",), page_type="utility"),
-        point("c", 0, keywords=("seo", "links", "hubs")),
+        point("a", 0, title="SEO links", page_type="legal"),
+        point("b", 0, title="SEO", page_type="utility"),
+        point("c", 0, title="SEO links hubs"),
     ]
     assert topic_for(points) == "seo, links, hubs"
     assert sorted(topic_for([point("t", 0, title="The best SEO guide")]).split(", ")) == [

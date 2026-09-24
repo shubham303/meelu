@@ -68,7 +68,7 @@ def test_page_chunk_assembly():
         "h1": ["Welcome"],
         "meta_description": "A store",
         "body_text": "Great gear for everyone",
-        "inbound_anchors": [{"anchor": "shop"}, {"anchor": "shop"}, {"anchor": None}, {}],
+        "inbound_anchors": ["shop", "shop", None],
     }
     chunk = page_chunk(page)
     assert chunk == {

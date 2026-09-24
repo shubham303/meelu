@@ -16,7 +16,6 @@ import {
   Spinner,
 } from "@/components/ui";
 import { CATEGORY_LABEL, isInstallable, MCP_CATALOG, type CatalogEntry } from "@/lib/mcp-catalog";
-import { CreditsCard } from "./credits-card";
 import { formatRelative } from "@/lib/utils";
 import type { ConnectorsView, LlmConfigView, LlmProvider } from "../agent-tasks";
 
@@ -267,7 +266,6 @@ export default function ConnectionsPage() {
       />
 
       <ModelProviderCard />
-      <CreditsCard />
 
       {!canConnect && (
         <p className="text-sm text-sub mb-4">

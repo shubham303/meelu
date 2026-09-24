@@ -24,7 +24,6 @@ from src.providers.errors import ProviderError
 from src.render_jobs.endpoints import router as render_jobs_router
 from src.seo.endpoints import router as seo_router
 from src.settings import settings
-from src.site_page_llm_extraction.endpoints import router as site_page_llm_extraction_router
 from src.site_pages.endpoints import router as site_pages_router
 from src.site_search.endpoints import router as site_search_router
 from src.site_structure.endpoints import router as site_structure_router
@@ -63,7 +62,6 @@ for desk in (
     profile_router,
     sites_router,
     stats_router,
-    site_page_llm_extraction_router,
     site_pages_router,
     site_structure_router,
     seo_router,

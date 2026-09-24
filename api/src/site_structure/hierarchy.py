@@ -25,7 +25,7 @@ def parent_of(path: str) -> str:
 def hierarchy_edges(
     pages: list[HierarchyPage], job_id: str
 ) -> tuple[list[NewLinkSuggestion], HierarchyPage | None, int]:
-    home = next((p for p in pages if p.kind == "home"), None)
+    home = next((p for p in pages if p.is_home), None)
     hubs = [p for p in pages if p.page_type == "hub" and p is not home]
     utilities = [p for p in pages if p.page_type == "utility" and p is not home]
     edges: dict[tuple[str, str], str] = {}

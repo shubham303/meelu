@@ -10,7 +10,6 @@ from src.profile import models as profile_models
 from src.providers import models as providers_models
 from src.render_jobs import models as render_jobs_models
 from src.seo import models as seo_models
-from src.site_page_llm_extraction import models as site_page_llm_extraction_models
 from src.site_pages import models as site_pages_models
 from src.site_search import models as site_search_models
 from src.site_structure import models as site_structure_models
@@ -32,7 +31,6 @@ __all__ = [
     "providers_models",
     "render_jobs_models",
     "seo_models",
-    "site_page_llm_extraction_models",
     "site_pages_models",
     "site_search_models",
     "site_structure_models",

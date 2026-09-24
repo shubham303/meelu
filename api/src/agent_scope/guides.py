@@ -79,10 +79,14 @@ before re-recommending the same fix.
 - `site_pages`: one row per crawled URL with everything the crawl parsed.
   Columns: status, title, meta_description, h1, headings, body_text.
   Also canonical, robots directives, depth, inlinks, in_sitemap and
-  word_count. `out_links` is a JSON array of `{url, anchor, rel, region,
-  count, ordinal?, context?}`: region is one of body, breadcrumb, nav,
-  header, footer, aside, pagination; ordinal and context (the containing
-  sentence) exist only for body links. Only body links are editorial.
+  word_count.
+- `site_page_links`: one row per link found on a page, and the only place
+  link data lives. `src_page_id` is the page holding the link, `dst_url` the
+  normalised target, `dst_page_id` the page it resolves to (null for
+  external links and for internal targets not in the corpus), `external`
+  says which. Also `region` (body, breadcrumb, nav, header, footer, aside,
+  pagination — only body links are editorial), `anchor`, `rel`, `count`,
+  `followable` and `dst_canonical`.
 - `site_chunks`: passages with embeddings behind the site's hybrid search.
 - `site`: one row per website. Columns: domain, summary, sitemap_urls,
   gsc_property, last_crawled_at.
@@ -141,8 +145,7 @@ instruction.
   `page_id` matches `site_pages.id` but rows are never deleted: `live` is
   false when the page is gone or not 2xx, `indexable` when robots allow it.
   Carries title, h1, headings, meta, word count, inlinks, link_score,
-  `page_type`, `first_seen_at`, `content_hash`, `questions_answered`,
-  `is_home`, and the page's own 28-day impressions and clicks.
+  `page_type`, `first_seen_at`, `content_hash`, `is_home`, and the page's own 28-day impressions and clicks.
 - `seo_keywords`: the site's keyword universe, unique per `keyword`
   (lowercased). `first_source` says how it entered (gsc, ideas, ranked,
   competitor, serp_paa, serp_related, user). `volume`, `difficulty`, `cpc`,
@@ -184,8 +187,8 @@ instruction.
 - Branded keywords are excluded. Only live, indexable pages get edits.
 - gsc edits: position 4–20, impressions above the floor, coverage below
   0.55 with no lexical hit. ctr edits: position ≤10, `ctr_gap × impressions`
-  in the site's top quarter. questions: question-form queries at 5–20 not
-  in `questions_answered`, at least three per page. decay: clicks down 30%
+  in the site's top quarter. questions: question-form queries at 5–20, at
+  least three per page. decay: clicks down 30%
   against the previous window (and last year when known), both windows
   above the impressions floor. cluster: owner page missing members with
   volume.

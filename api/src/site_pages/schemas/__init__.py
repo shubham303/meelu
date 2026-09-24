@@ -30,16 +30,13 @@ PAGE_DERIVED = frozenset(
         "updatedAt",
         "stage",
         "inlinks",
-        "editorialInlinks",
-        "inboundAnchors",
         "depth",
         "linkScore",
-        "editorialScore",
         "visited",
     }
 )
 
-CRAWL_MAY_NOT_WRITE = frozenset({"inlinks", "inboundAnchors", "depth"})
+CRAWL_MAY_NOT_WRITE = frozenset({"inlinks", "depth"})
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -63,8 +60,8 @@ class SitePageFilters(RequestModel):
     url: str | None = None
     urls: list[str] | None = None
     ids: list[str] | None = None
-    kind: str | None = None
-    kinds: list[str] | None = None
+    page_type: str | None = None
+    page_types: list[str] | None = None
     needs_audit: bool | None = None
     status: Literal[STATUS_CLASSES] | None = None
     status_code: list[int] | None = None
@@ -99,7 +96,7 @@ class SitePageFilters(RequestModel):
     published_before: datetime | None = None
     published_after: datetime | None = None
 
-    @field_validator("urls", "ids", "kinds", "status_code", "missing", mode="before")
+    @field_validator("urls", "ids", "page_types", "status_code", "missing", mode="before")
     @classmethod
     def _csv(cls, v: Any) -> Any:
         return _split_csv(v)
@@ -161,13 +158,6 @@ class SitePageSearchResponse(EntityModel):
     note: str | None = None
 
 
-class SitePageKeywordQuery(SitePageFilters):
-    limit: int | None = None
-
-    def filters(self) -> "SitePageFilters":
-        return SitePageFilters.model_validate(self.model_dump(exclude={"limit"}))
-
-
 class SitePageWritableFields(RequestModel):
     url: str | None = None
     status: int | None = None
@@ -181,13 +171,10 @@ class SitePageWritableFields(RequestModel):
     h1: list[str] | None = None
     headings: list[Any] | None = None
     body_text: str | None = None
-    out_links: list[Any] | None = None
-    external_links: list[Any] | None = None
     canonical: str | None = None
     robots_directives: str | None = None
     x_robots_tag: str | None = None
     blocked_by_robots: bool | None = None
-    has_viewport: bool | None = None
     viewport_meta: str | None = None
     nosnippet_count: int | None = None
     social_meta_count: int | None = None
@@ -198,7 +185,6 @@ class SitePageWritableFields(RequestModel):
     schema_nodes: list[Any] | None = None
     lang: str | None = None
     hreflang: dict[str, Any] | None = None
-    kind: str | None = None
     format: str | None = None
     in_sitemap: bool | None = None
     redirect_to: str | None = None
@@ -211,10 +197,7 @@ class SitePageWritableFields(RequestModel):
     modified_at: datetime | None = None
     content_changed_at: datetime | None = None
     word_count: int | None = None
-    external_link_density: float | None = None
     mixed_content: bool | None = None
-    keywords: list[str] | None = None
-    questions_answered: list[str] | None = None
     chunked_from_hash: str | None = None
     embed_state: str | None = None
     embed_error: str | None = None
@@ -275,8 +258,21 @@ class SitePageUpdateRequest(SitePageWritableFields):
         return _reject_unwritable(data)
 
 
+class PageLinkInput(RequestModel):
+    url: str
+    anchor: str | None = None
+    rel: str | None = None
+    region: str = "body"
+    count: int = 1
+    external: bool = False
+
+
 class SitePageCrawlItem(SitePageWritableFields):
     url: str
+    links: list[PageLinkInput] | None = None
+
+    def changes(self) -> dict[str, Any]:
+        return {k: v for k, v in super().changes().items() if k != "links"}
 
     @model_validator(mode="before")
     @classmethod
@@ -311,9 +307,10 @@ class SitePageSlimRecord(SemanticMatchFields):
     chunked_from_hash: str | None
     url: str
     title: str | None
-    kind: str
+    page_type: str | None
     status: int | None
     inlinks: int
+    link_score: float | None
     content_hash: str | None
     shallow: bool
     shallow_reason: str | None
@@ -367,7 +364,7 @@ class SitePageTextRecord(SemanticMatchFields):
 class SitePageExportRecord(SemanticMatchFields):
     url: str
     status: int | None
-    kind: str
+    page_type: str | None
     format: str | None
     title: str | None
     title_pixels: int | None
@@ -379,7 +376,6 @@ class SitePageExportRecord(SemanticMatchFields):
     robots_directives: str | None
     x_robots_tag: str | None
     blocked_by_robots: bool
-    has_viewport: bool | None
     viewport_meta: str | None = None
     nosnippet_count: int = 0
     social_meta_count: int = 0
@@ -432,20 +428,16 @@ class SitePageRecord(SemanticMatchFields):
     last_modified: str | None
     last_crawled_at: JsDateTime | None
     inlinks: int
-    inbound_anchors: list[Any]
     title: str | None
     title_pixels: int | None
     meta_description: str | None
     h1: list[str]
     headings: list[Any]
     body_text: str | None
-    out_links: list[Any]
-    external_links: list[Any]
     canonical: str | None
     robots_directives: str | None
     x_robots_tag: str | None
     blocked_by_robots: bool
-    has_viewport: bool | None
     viewport_meta: str | None = None
     nosnippet_count: int = 0
     social_meta_count: int = 0
@@ -456,7 +448,6 @@ class SitePageRecord(SemanticMatchFields):
     schema_nodes: list[Any]
     lang: str | None
     hreflang: dict[str, Any]
-    kind: str
     format: str | None
     in_sitemap: bool
     depth: int | None
@@ -470,24 +461,21 @@ class SitePageRecord(SemanticMatchFields):
     modified_at: JsDateTime | None
     content_changed_at: JsDateTime | None
     word_count: int | None
-    external_link_density: float | None
     mixed_content: bool
-    keywords: list[str]
-    questions_answered: list[str]
     link_score: float | None
-    editorial_inlinks: int
-    editorial_score: float | None
     chunked_from_hash: str | None
     embed_state: str | None
     embed_error: str | None
     shallow: bool
     shallow_reason: str | None
     visited: bool
+    out_link_count: int = 0
+    external_link_count: int = 0
 
     @computed_field
     @property
     def is_leaf(self) -> bool:
-        return not self.out_links
+        return self.out_link_count == 0
 
     index_state: str | None = None
     coverage_state: str | None = None
@@ -548,27 +536,13 @@ class CrawlCountsResult(EntityModel):
     pages: int
 
 
-class TermCount(EntityModel):
-    value: str
-    pages: int
-
-
-class SitePageKeywordCoverageResult(EntityModel):
-    keywords: list[TermCount]
-    questions: list[TermCount]
-    keywords_truncated: bool
-    questions_truncated: bool
-    matched_pages: int
-    annotated_pages: int
-
-
 class StageCount(EntityModel):
     stage: str
     n: int
 
 
-class KindCount(EntityModel):
-    kind: str
+class PageTypeCount(EntityModel):
+    page_type: str | None
     n: int
 
 
@@ -601,7 +575,7 @@ class SitePageStatsRecord(EntityModel):
     embed_failed: int
     crawl_complete: int
     by_stage: list[StageCount]
-    by_kind: list[KindCount]
+    by_page_type: list[PageTypeCount]
     by_shallow_reason: list[ShallowReasonCount]
     chunks: ChunkCounts
 
@@ -610,7 +584,7 @@ class DiscoveryPage(EntityModel):
     id: str
     url: str
     title: str | None
-    kind: str
+    page_type: str | None
     inlinks: int
     depth: int | None
     in_sitemap: bool
@@ -647,13 +621,35 @@ class SiteChunkRecord(EntityModel):
     heading_path: str | None
     text: str
     embed_model: str | None
-    embedded_from_hash: str | None
     embed_attempts: int
     embed_error: str | None
-    chunk_strategy: str | None
     from_hash: str | None
     created_at: JsDateTime
     updated_at: JsDateTime
+
+
+class SitePageLinkRecord(EntityModel):
+    id: str
+    src_page_id: str
+    src_url: str | None = None
+    dst_page_id: str | None
+    dst_url: str
+    external: bool
+    region: str
+    rel: str | None
+    anchor: str | None
+    count: int
+    followable: bool
+    dst_canonical: bool
+
+
+class SitePageLinksResult(EntityModel):
+    inbound: list[SitePageLinkRecord]
+    outbound: list[SitePageLinkRecord]
+
+
+class SitePageLinksResponse(SitePageLinksResult):
+    pass
 
 
 class SitePageBatchResult(EntityModel):
@@ -708,10 +704,6 @@ class SitePageDeleteResponse(EntityModel):
     id: str
     url: str
     deleted: bool = Field(default=True)
-
-
-class SitePageKeywordCoverageResponse(SitePageKeywordCoverageResult):
-    pass
 
 
 class SitePageStatsResponse(SitePageStatsResult):

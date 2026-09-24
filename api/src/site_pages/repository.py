@@ -23,14 +23,17 @@ from src.core.ids import uid
 from src.core.pagination import PaginationParams, PaginationService
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
-from src.site_pages.models.site_page_index_status import SitePageIndexStatus
+from src.site_search.models.site_page_index_status import SitePageIndexStatus
+from src.site_pages.models.site_page_link import SitePageLink
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.schemas import (
+    PageLinkInput,
     ChunkCounts,
     CrawlCountsResult,
     CrawlKnownPageRecord,
     DepthCount,
     DiscoveryPage,
-    KindCount,
+    PageTypeCount,
     ShallowReasonCount,
     SiteChunkRecord,
     SitemapPresenceResult,
@@ -39,8 +42,9 @@ from src.site_pages.schemas import (
     SitePageEdge,
     SitePageExportRecord,
     SitePageFilters,
-    SitePageKeywordCoverageResult,
     SitePageLandingSeed,
+    SitePageLinkRecord,
+    SitePageLinksResult,
     SitePageListResult,
     SitePageRecord,
     SitePageRef,
@@ -48,11 +52,19 @@ from src.site_pages.schemas import (
     SitePageStatsRecord,
     SitePageTextRecord,
     StageCount,
-    TermCount,
 )
 from src.site_pages.stage import CRAWL_COMPLETE_SQL, STAGE_SQL
+from src.site_pages.url import normalise_url
 
 NEEDS_AUDIT = and_(SitePage.status == 200, SitePage.content_hash.is_not(None))
+
+PAGE_TYPE = (
+    select(SitePageLlmExtraction.page_type)
+    .where(SitePageLlmExtraction.page_id == SitePage.id)
+    .correlate(SitePage)
+    .scalar_subquery()
+    .label("page_type")
+)
 
 SLIM = (
     SitePage.id,
@@ -60,9 +72,10 @@ SLIM = (
     SitePage.chunked_from_hash,
     SitePage.url,
     SitePage.title,
-    SitePage.kind,
+    PAGE_TYPE,
     SitePage.status,
     SitePage.inlinks,
+    SitePage.link_score,
     SitePage.content_hash,
     SitePage.shallow,
     SitePage.shallow_reason,
@@ -90,6 +103,23 @@ TEXT_VIEW = (
     SitePage.body_text,
 )
 
+
+def _link_count(external: bool):
+    return (
+        select(cast(func.count(), Integer))
+        .select_from(SitePageLink)
+        .where(
+            SitePageLink.src_page_id == SitePage.id,
+            SitePageLink.external.is_(external),
+        )
+        .correlate(SitePage)
+        .scalar_subquery()
+    )
+
+
+OUT_LINK_COUNT = _link_count(False)
+EXTERNAL_LINK_COUNT = _link_count(True)
+
 IMAGE_BYTES_SQL = text(
     """(select coalesce(sum((im->>'bytes')::bigint), 0)
     from jsonb_array_elements(site_pages.images) im where im->>'bytes' is not null)::int"""
@@ -98,7 +128,7 @@ IMAGE_BYTES_SQL = text(
 EXPORT = (
     SitePage.url,
     SitePage.status,
-    SitePage.kind,
+    PAGE_TYPE,
     SitePage.format,
     SitePage.title,
     SitePage.title_pixels,
@@ -110,7 +140,6 @@ EXPORT = (
     SitePage.robots_directives,
     SitePage.x_robots_tag,
     SitePage.blocked_by_robots,
-    SitePage.has_viewport,
     SitePage.viewport_meta,
     SitePage.nosnippet_count,
     SitePage.social_meta_count,
@@ -133,8 +162,8 @@ EXPORT = (
     SitePage.content_hash,
     SitePage.chunked_from_hash,
     SitePage.body_text.is_not(None).label("has_text"),
-    cast(func.jsonb_array_length(SitePage.out_links), Integer).label("out_link_count"),
-    cast(func.jsonb_array_length(SitePage.external_links), Integer).label("external_link_count"),
+    OUT_LINK_COUNT.label("out_link_count"),
+    EXTERNAL_LINK_COUNT.label("external_link_count"),
     cast(func.jsonb_array_length(SitePage.images), Integer).label("image_count"),
     IMAGE_BYTES_SQL.scalar_subquery().label("image_bytes"),
     cast(func.jsonb_array_length(SitePage.headings), Integer).label("heading_count"),
@@ -204,10 +233,10 @@ def _conditions(site_id: str, f: SitePageFilters, match_ids: list[str] | None = 
         where.append(SitePage.id.in_(f.ids))
     if match_ids:
         where.append(SitePage.id.in_(match_ids))
-    if f.kind:
-        where.append(SitePage.kind == f.kind)
-    if f.kinds:
-        where.append(SitePage.kind.in_(f.kinds))
+    if f.page_type:
+        where.append(PAGE_TYPE == f.page_type)
+    if f.page_types:
+        where.append(PAGE_TYPE.in_(f.page_types))
     if f.needs_audit:
         where.append(NEEDS_AUDIT)
     if f.stage:
@@ -364,66 +393,6 @@ async def list_pages(
     )
 
 
-def _grouped(column, where, cap: int):
-    sub = (
-        select(SitePage.id.label("page_id"), func.unnest(column).label("value"))
-        .where(*where)
-        .subquery()
-    )
-    return (
-        select(
-            sub.c.value.label("value"),
-            cast(func.count(func.distinct(sub.c.page_id)), Integer).label("pages"),
-        )
-        .group_by(sub.c.value)
-        .order_by(text("pages desc"), text("value asc"))
-        .limit(cap + 1)
-    )
-
-
-async def keyword_coverage(
-    db: AsyncSession, site_id: str, f: SitePageFilters, limit: int = 500
-) -> SitePageKeywordCoverageResult:
-    where = _conditions(site_id, f)
-    cap = min(max(limit, 1), 2000)
-
-    kw = [
-        TermCount.model_validate(m)
-        for m in (await db.execute(_grouped(SitePage.keywords, where, cap))).mappings()
-    ]
-    qs = [
-        TermCount.model_validate(m)
-        for m in (await db.execute(_grouped(SitePage.questions_answered, where, cap))).mappings()
-    ]
-    counts = (
-        await db.execute(
-            select(
-                cast(func.count(), Integer).label("matched"),
-                cast(
-                    func.count().filter(
-                        or_(
-                            func.coalesce(func.cardinality(SitePage.keywords), 0) > 0,
-                            func.coalesce(func.cardinality(SitePage.questions_answered), 0) > 0,
-                        )
-                    ),
-                    Integer,
-                ).label("annotated"),
-            )
-            .select_from(SitePage)
-            .where(*where)
-        )
-    ).one()
-
-    return SitePageKeywordCoverageResult(
-        keywords=kw[:cap],
-        questions=qs[:cap],
-        keywords_truncated=len(kw) > cap,
-        questions_truncated=len(qs) > cap,
-        matched_pages=counts.matched,
-        annotated_pages=counts.annotated,
-    )
-
-
 async def crawl_known_pages(
     db: AsyncSession, site_id: str, limit: int = 20_000
 ) -> list[CrawlKnownPageRecord]:
@@ -461,13 +430,14 @@ async def link_frontier(db: AsyncSession, site_id: str, limit: int = 20_000) -> 
         await db.execute(
             text(
                 """
-    select distinct l->>'url' as url
-      from site_pages p, lateral jsonb_array_elements(p.out_links) l
-     where p.site_id = :site_id
+    select distinct e.dst_url
+      from site_page_links e
+     where e.site_id = :site_id
+       and not e.external
        and not exists (
          select 1 from site_pages t
           where t.site_id = :site_id
-            and regexp_replace(t.url, '/+$', '') = regexp_replace(l->>'url', '/+$', '')
+            and regexp_replace(t.url, '/+$', '') = e.dst_url
        )
      limit :limit
     """
@@ -529,14 +499,78 @@ async def _load_page(
     return result.scalars().first()
 
 
+async def _link_counts(db: AsyncSession, page_id: str) -> tuple[int, int]:
+    row = (
+        await db.execute(
+            select(
+                cast(func.count().filter(SitePageLink.external.is_(False)), Integer).label(
+                    "internal"
+                ),
+                cast(func.count().filter(SitePageLink.external.is_(True)), Integer).label(
+                    "external"
+                ),
+            ).where(SitePageLink.src_page_id == page_id)
+        )
+    ).one()
+    return int(row.internal), int(row.external)
+
+
+async def _as_record(db: AsyncSession, page: SitePage | None) -> SitePageRecord | None:
+    if page is None:
+        return None
+    internal, external = await _link_counts(db, page.id)
+    return SitePageRecord.model_validate(page).model_copy(
+        update={"out_link_count": internal, "external_link_count": external}
+    )
+
+
 async def get_page(db: AsyncSession, site_id: str, page_id: str) -> SitePageRecord | None:
-    page = await _load_page(db, site_id, page_id=page_id)
-    return None if page is None else SitePageRecord.model_validate(page)
+    return await _as_record(db, await _load_page(db, site_id, page_id=page_id))
 
 
 async def get_page_by_url(db: AsyncSession, site_id: str, url: str) -> SitePageRecord | None:
-    page = await _load_page(db, site_id, url=url)
-    return None if page is None else SitePageRecord.model_validate(page)
+    return await _as_record(db, await _load_page(db, site_id, url=url))
+
+
+LINK_COLUMNS = (
+    SitePageLink.id,
+    SitePageLink.src_page_id,
+    SitePageLink.dst_page_id,
+    SitePageLink.dst_url,
+    SitePageLink.external,
+    SitePageLink.region,
+    SitePageLink.rel,
+    SitePageLink.anchor,
+    SitePageLink.count,
+    SitePageLink.followable,
+    SitePageLink.dst_canonical,
+)
+
+
+async def page_links(
+    db: AsyncSession, site_id: str, page_id: str, cap: int = 500
+) -> SitePageLinksResult:
+    outbound = (
+        await db.execute(
+            select(*LINK_COLUMNS)
+            .where(SitePageLink.site_id == site_id, SitePageLink.src_page_id == page_id)
+            .order_by(SitePageLink.external.asc(), SitePageLink.dst_url.asc())
+            .limit(cap)
+        )
+    ).mappings()
+    inbound = (
+        await db.execute(
+            select(*LINK_COLUMNS, SitePage.url.label("src_url"))
+            .join(SitePage, SitePage.id == SitePageLink.src_page_id)
+            .where(SitePageLink.site_id == site_id, SitePageLink.dst_page_id == page_id)
+            .order_by(SitePage.url.asc())
+            .limit(cap)
+        )
+    ).mappings()
+    return SitePageLinksResult(
+        inbound=[SitePageLinkRecord.model_validate(r) for r in inbound],
+        outbound=[SitePageLinkRecord.model_validate(r) for r in outbound],
+    )
 
 
 async def insert_page(
@@ -588,13 +622,10 @@ CRAWL_COLUMNS = (
     "h1",
     "headings",
     "body_text",
-    "out_links",
-    "external_links",
     "canonical",
     "robots_directives",
     "x_robots_tag",
     "blocked_by_robots",
-    "has_viewport",
     "viewport_meta",
     "nosnippet_count",
     "social_meta_count",
@@ -605,7 +636,6 @@ CRAWL_COLUMNS = (
     "schema_nodes",
     "lang",
     "hreflang",
-    "kind",
     "format",
     "in_sitemap",
     "redirect_to",
@@ -617,7 +647,6 @@ CRAWL_COLUMNS = (
     "published_at",
     "modified_at",
     "word_count",
-    "external_link_density",
     "mixed_content",
     "shallow",
     "shallow_reason",
@@ -632,10 +661,13 @@ async def upsert_pages(
     now = datetime.now(UTC)
 
     deduped: dict[str, dict[str, Any]] = {}
+    links_by_url: dict[str, list[PageLinkInput]] = {}
     for item in items:
         url = item.url
         if url.strip() == "":
             continue
+        if item.links is not None:
+            links_by_url[url] = item.links
         row = item.changes()
         if "content_hash" in row:
             row["content_changed_at"] = now
@@ -670,28 +702,14 @@ async def upsert_pages(
         ).returning(SitePage.id, SitePage.url)
         result = await db.execute(stmt)
         written.extend(SitePageRef(id=r.id, url=r.url) for r in result)
+
+    if links_by_url:
+        by_page = {ref.id: links_by_url[ref.url] for ref in written if ref.url in links_by_url}
+        await replace_page_links(db, user_id, site_id, by_page)
     return written
 
 
-OUT_LINK_URL = """lateral (
-  select regexp_replace(regexp_replace(l->>'url', '#.*$', ''), '/+$', '') as u
-) x"""
-
-NORM_OUT_LINK = """coalesce(
-  lower(substring(x.u from '^([A-Za-z][A-Za-z0-9+.-]*://[^/]*)')) ||
-  coalesce(substring(x.u from '^[A-Za-z][A-Za-z0-9+.-]*://[^/]*(/.*)$'), ''),
-  x.u)"""
-
-
-REGION_WEIGHT_SQL = """case region
-  when 'body' then 1.0
-  when 'breadcrumb' then 0.4
-  when 'nav' then 0.2
-  when 'header' then 0.2
-  when 'aside' then 0.15
-  when 'pagination' then 0.15
-  when 'footer' then 0.1
-  else 1.0 end"""
+NORMALISE_LINK_URL_SQL = """regexp_replace(regexp_replace(:url, '#.*$', ''), '/+$', '')"""
 
 DST_CANONICAL_SQL = """t.status between 200 and 299
   and not t.blocked_by_robots
@@ -700,45 +718,110 @@ DST_CANONICAL_SQL = """t.status between 200 and 299
   and (t.canonical is null or regexp_replace(t.canonical, '/+$', '') = regexp_replace(t.url, '/+$', ''))
   and t.redirect_to is null"""
 
+LINK_REGIONS = ("body", "nav", "header", "footer", "aside", "breadcrumb", "pagination")
 
-async def rebuild_links(db: AsyncSession, site_id: str) -> None:
+
+def _link_region(region: str | None) -> str:
+    wanted = (region or "").strip().lower()
+    return wanted if wanted in LINK_REGIONS else "body"
+
+
+async def replace_page_links(
+    db: AsyncSession,
+    user_id: str,
+    site_id: str,
+    links_by_page: dict[str, list[PageLinkInput]],
+) -> int:
+    if not links_by_page:
+        return 0
+    now = datetime.now(UTC)
+    page_ids = list(links_by_page)
     await db.execute(
-        text("delete from site_page_links where site_id = :site_id"), {"site_id": site_id}
+        delete(SitePageLink).where(
+            SitePageLink.site_id == site_id, SitePageLink.src_page_id.in_(page_ids)
+        )
+    )
+
+    rows: list[dict[str, Any]] = []
+    for page_id, links in links_by_page.items():
+        merged: dict[tuple[str, str], dict[str, Any]] = {}
+        for link in links:
+            target = normalise_url(link.url)
+            if target == "":
+                continue
+            region = _link_region(link.region)
+            key = (target, region)
+            existing = merged.get(key)
+            count = max(link.count, 1)
+            if existing is None:
+                merged[key] = {
+                    "id": uid("spl"),
+                    "user_id": user_id,
+                    "site_id": site_id,
+                    "src_page_id": page_id,
+                    "dst_page_id": None,
+                    "dst_url": target,
+                    "external": link.external,
+                    "region": region,
+                    "rel": link.rel,
+                    "anchor": link.anchor,
+                    "count": count,
+                    "followable": _followable(link.rel),
+                    "dst_canonical": True,
+                    "created_at": now,
+                    "updated_at": now,
+                }
+                continue
+            existing["count"] += count
+            existing["followable"] = existing["followable"] or _followable(link.rel)
+            if existing["anchor"] is None:
+                existing["anchor"] = link.anchor
+        rows.extend(merged.values())
+
+    if not rows:
+        return 0
+    for chunk in (rows[i : i + 1000] for i in range(0, len(rows), 1000)):
+        await db.execute(pg_insert(SitePageLink).values(chunk))
+    return len(rows)
+
+
+def _followable(rel: str | None) -> bool:
+    return "nofollow" not in (rel or "").lower()
+
+
+async def resolve_links(db: AsyncSession, site_id: str) -> None:
+    await db.execute(
+        text(
+            f"""
+    update site_page_links e
+       set dst_page_id = t.id,
+           dst_canonical = ({DST_CANONICAL_SQL}),
+           updated_at = now()
+      from site_pages t
+     where e.site_id = :site_id
+       and not e.external
+       and t.site_id = :site_id
+       and regexp_replace(t.url, '/+$', '') = e.dst_url
+       and t.id <> e.src_page_id
+    """
+        ),
+        {"site_id": site_id},
     )
     await db.execute(
         text(
             f"""
-    with links as (
-      select p.id as src, p.user_id,
-             {NORM_OUT_LINK} as dst_url,
-             l->>'anchor' as anchor,
-             l->>'rel' as rel,
-             coalesce(nullif(l->>'region', ''), 'body') as region,
-             greatest(coalesce((l->>'count')::int, 1), 1) as count
-        from site_pages p, lateral jsonb_array_elements(p.out_links) l, {OUT_LINK_URL}
-       where p.site_id = :site_id
-    ),
-    edges as (
-      select l.src, l.user_id, t.id as dst, l.region,
-             min(l.anchor) as anchor,
-             min(l.rel) as rel,
-             sum(l.count)::int as count,
-             bool_or(coalesce(l.rel, '') !~* 'nofollow') as followable,
-             bool_and({DST_CANONICAL_SQL}) as dst_canonical
-        from links l
-        join site_pages t
-          on t.site_id = :site_id and regexp_replace(t.url, '/+$', '') = l.dst_url
-       where l.src <> t.id
-       group by l.src, l.user_id, t.id, l.region
-    )
-    insert into site_page_links
-      (id, user_id, site_id, src_page_id, dst_page_id, region, rel, anchor, count,
-       weight, followable, dst_canonical, created_at, updated_at)
-    select 'spl_' || substr(md5(random()::text || clock_timestamp()::text || src || dst || region), 1, 10),
-           user_id, :site_id, src, dst, region, rel, anchor, count,
-           case when followable then ({REGION_WEIGHT_SQL}) else 0 end,
-           followable, dst_canonical, now(), now()
-      from edges
+    update site_page_links e
+       set dst_page_id = null,
+           dst_canonical = true,
+           updated_at = now()
+     where e.site_id = :site_id
+       and (e.external
+            or not exists (
+              select 1 from site_pages t
+               where t.site_id = :site_id
+                 and regexp_replace(t.url, '/+$', '') = e.dst_url
+                 and t.id <> e.src_page_id
+            ))
     """
         ),
         {"site_id": site_id},
@@ -750,21 +833,13 @@ async def restamp_graph(db: AsyncSession, site_id: str) -> None:
         text(
             """
     with recursive edges as (
-      select e.src_page_id as src, e.dst_page_id as dst, e.region, e.anchor,
-             regexp_replace(s.url, '/+$', '') as src_url
+      select e.src_page_id as src, e.dst_page_id as dst, e.region
         from site_page_links e
-        join site_pages s on s.id = e.src_page_id
-       where e.site_id = :site_id
+       where e.site_id = :site_id and e.dst_page_id is not null
     ),
     inbound as (
-      select dst,
-             count(distinct src)::int as inlinks,
-             count(distinct src) filter (where region = 'body')::int as editorial_inlinks,
-             jsonb_agg(jsonb_build_object('from', src_url, 'anchor', anchor) order by src_url)
-               filter (where rn <= 25) as anchors
-        from (select src, dst, region, anchor, src_url,
-                     row_number() over (partition by dst order by src_url, region) as rn
-                from edges) ranked
+      select dst, count(distinct src)::int as inlinks
+        from edges
        group by dst
     ),
     home as (
@@ -784,8 +859,6 @@ async def restamp_graph(db: AsyncSession, site_id: str) -> None:
     depths as (select id, min(depth)::int as depth from reach group by id)
     update site_pages p
        set inlinks = coalesce(i.inlinks, 0),
-           editorial_inlinks = coalesce(i.editorial_inlinks, 0),
-           inbound_anchors = coalesce(i.anchors, '[]'::jsonb),
            depth = d.depth,
            updated_at = now()
       from site_pages k
@@ -821,19 +894,17 @@ async def edge_list(db: AsyncSession, site_id: str) -> list[SitePageEdge]:
         await db.execute(
             text(
                 f"""
-    select e.src_page_id as src, e.dst_page_id as dst, sum(e.weight)::float as weight
+    select distinct e.src_page_id as src, e.dst_page_id as dst
       from site_page_links e
       join site_pages p on p.id = e.src_page_id
-     where e.site_id = :site_id and e.followable and e.dst_canonical and {LIVE_PAGE}
-     group by e.src_page_id, e.dst_page_id
+     where e.site_id = :site_id and e.dst_page_id is not null
+       and e.followable and e.dst_canonical and {LIVE_PAGE}
     """
             ),
             {"site_id": site_id},
         )
     ).mappings()
-    return [
-        SitePageEdge(src=str(r["src"]), dst=str(r["dst"]), weight=float(r["weight"])) for r in rows
-    ]
+    return [SitePageEdge(src=str(r["src"]), dst=str(r["dst"])) for r in rows]
 
 
 async def landing_seed(db: AsyncSession, site_id: str) -> SitePageLandingSeed:
@@ -854,7 +925,7 @@ async def landing_seed(db: AsyncSession, site_id: str) -> SitePageLandingSeed:
     return SitePageLandingSeed(sessions_by_path={str(r["path"]): int(r["sessions"]) for r in rows})
 
 
-SCORE_COLUMNS = ("link_score", "editorial_score")
+SCORE_COLUMNS = ("link_score",)
 
 
 async def write_scores(
@@ -990,11 +1061,13 @@ async def page_stats(db: AsyncSession, site_id: str) -> SitePageStatsRecord:
         )
     ).mappings()
 
-    by_kind = (
+    by_page_type = (
         await db.execute(
-            select(SitePage.kind, cast(func.count(), Integer).label("n"))
+            select(SitePageLlmExtraction.page_type, cast(func.count(), Integer).label("n"))
+            .select_from(SitePage)
+            .outerjoin(SitePageLlmExtraction, SitePageLlmExtraction.page_id == SitePage.id)
             .where(SitePage.site_id == site_id)
-            .group_by(SitePage.kind)
+            .group_by(SitePageLlmExtraction.page_type)
         )
     ).mappings()
 
@@ -1025,7 +1098,7 @@ async def page_stats(db: AsyncSession, site_id: str) -> SitePageStatsRecord:
     return SitePageStatsRecord(
         **dict(row),
         by_stage=[StageCount(stage=r["stage"], n=r["n"]) for r in by_stage],
-        by_kind=[KindCount(kind=r["kind"], n=r["n"]) for r in by_kind],
+        by_page_type=[PageTypeCount(page_type=r["page_type"], n=r["n"]) for r in by_page_type],
         by_shallow_reason=[
             ShallowReasonCount(reason=r["shallow_reason"], n=r["n"]) for r in by_shallow_reason
         ],
@@ -1037,7 +1110,7 @@ DISCOVERY_COLUMNS = (
     SitePage.id,
     SitePage.url,
     SitePage.title,
-    SitePage.kind,
+    PAGE_TYPE,
     SitePage.inlinks,
     SitePage.depth,
     SitePage.in_sitemap,
@@ -1123,10 +1196,8 @@ CHUNK_COLUMNS = (
     SiteChunk.heading_path,
     SiteChunk.text,
     SiteChunk.embed_model,
-    SiteChunk.embedded_from_hash,
     SiteChunk.embed_attempts,
     SiteChunk.embed_error,
-    SiteChunk.chunk_strategy,
     SiteChunk.from_hash,
     SiteChunk.created_at,
     SiteChunk.updated_at,

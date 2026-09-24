@@ -78,8 +78,8 @@ async def test_generators_revive_llm_rejected_rows(client, email):
         client,
         email,
         [
-            {"url": f"{ORIGIN}/", "kind": "home", "depth": 0, "inlinks": 4},
-            {"url": f"{ORIGIN}/guide", "kind": "article", "depth": 1, "inlinks": 2},
+            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 4},
+            {"url": f"{ORIGIN}/guide", "page_type": "informational", "depth": 1, "inlinks": 2},
         ],
     )
     home, guide = pages[f"{ORIGIN}/"], pages[f"{ORIGIN}/guide"]
@@ -113,16 +113,16 @@ async def test_link_removals(client, email):
         client,
         email,
         [
-            {"url": f"{ORIGIN}/", "kind": "home", "depth": 0, "inlinks": 4},
+            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 4},
             {
                 "url": f"{ORIGIN}/blog/a",
-                "kind": "article",
+                "page_type": "informational",
                 "depth": 1,
                 "inlinks": 3,
                 "word_count": 900,
             },
-            {"url": f"{ORIGIN}/blog/b", "kind": "article", "depth": 1, "inlinks": 3},
-            {"url": f"{ORIGIN}/legal", "kind": "other", "depth": 1, "inlinks": 1},
+            {"url": f"{ORIGIN}/blog/b", "page_type": "informational", "depth": 1, "inlinks": 3},
+            {"url": f"{ORIGIN}/legal", "page_type": "utility", "depth": 1, "inlinks": 1},
         ],
     )
     home, a, b, legal = (pages[f"{ORIGIN}/{p}"] for p in ("", "blog/a", "blog/b", "legal"))
@@ -213,15 +213,14 @@ async def test_pillar_pages(client, email, monkeypatch):
     site, user_id, pages, job = await prepare(
         client,
         email,
-        [{"url": f"{ORIGIN}/", "kind": "home", "depth": 0, "inlinks": 9}]
+        [{"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 9}]
         + [
             {
                 "url": u,
-                "kind": "article",
+                "page_type": "informational",
                 "depth": 1,
                 "inlinks": 2,
                 "title": u.rsplit("/", 2)[1] + " tips",
-                "keywords": [u.rsplit("/", 2)[1]],
             }
             for u in urls
         ],
@@ -278,7 +277,7 @@ async def test_pillar_pages(client, email, monkeypatch):
     assert len(rows) == 1
     row = rows[0]
     assert set(row["memberPageIds"]) == set(seo)
-    assert row["topic"] == "seo"
+    assert "seo" in row["topic"].split(", ")
     assert len(row["members"]) == 5
     assert row["searchScore"] > 0.9
 
@@ -342,7 +341,9 @@ async def test_pillar_pages(client, email, monkeypatch):
     }
 
     hub = await seed_pages(
-        site["id"], user_id, [{"url": f"{ORIGIN}/seo/", "kind": "other", "depth": 1, "inlinks": 1}]
+        site["id"],
+        user_id,
+        [{"url": f"{ORIGIN}/seo/", "page_type": "utility", "depth": 1, "inlinks": 1}],
     )
     for p in seo[:4]:
         await seed_link(site["id"], user_id, hub[f"{ORIGIN}/seo/"], p)

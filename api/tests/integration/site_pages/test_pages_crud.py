@@ -38,9 +38,9 @@ async def test_get_update_delete_page(client, site):
     assert updated["title"] == "A"
     assert updated["wordCount"] == 120
 
-    r = await client.patch(f"/api/v1/site/pages/{page['id']}", json={"kind": "article"})
+    r = await client.patch(f"/api/v1/site/pages/{page['id']}", json={"format": "how-to"})
     assert r.status_code == 200
-    assert r.json()["data"]["kind"] == "article"
+    assert r.json()["data"]["format"] == "how-to"
 
     r = await client.delete(f"/api/v1/site/pages/{page['id']}")
     assert r.status_code == 200

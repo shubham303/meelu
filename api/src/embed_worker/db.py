@@ -13,10 +13,15 @@ PAGE_COLUMNS = [
     "title",
     "h1",
     "meta_description",
-    "inbound_anchors",
     "body_text",
     "content_hash",
 ]
+
+INBOUND_ANCHORS_SQL = """coalesce((
+  select array_agg(distinct l.anchor)
+    from site_page_links l
+   where l.dst_page_id = site_pages.id and l.anchor is not null and l.anchor <> ''
+), '{}'::text[]) as inbound_anchors"""
 
 SEO_KEYWORD_COLUMNS = ("id", "keyword", "embedding", "embed_model", "embed_error", "cluster_id")
 
@@ -28,11 +33,9 @@ CHUNK_COLUMNS = [
     "ordinal",
     "heading_path",
     "text",
-    "chunk_strategy",
     "from_hash",
     "embedding",
     "embed_model",
-    "embedded_from_hash",
     "embed_attempts",
     "embed_error",
     "seq",
@@ -97,7 +100,7 @@ class Db:
 
     def pages_needing_chunks(self, limit):
         rows, _ = self.query(
-            f"""select {", ".join(PAGE_COLUMNS)}
+            f"""select {", ".join(PAGE_COLUMNS)}, {INBOUND_ANCHORS_SQL}
                   from site_pages
                  where status = 200
                    and body_text is not null
@@ -118,8 +121,8 @@ class Db:
                     cur.execute(
                         """insert into site_chunks
                              (id, user_id, site_id, page_id, ordinal, heading_path, text,
-                              chunk_strategy, from_hash, embed_attempts, created_at, updated_at)
-                           values (%s, %s, %s, %s, %s, %s, %s, 'headings-v1', %s, 0, now(), now())""",
+                              from_hash, embed_attempts, created_at, updated_at)
+                           values (%s, %s, %s, %s, %s, %s, %s, %s, 0, now(), now())""",
                         (
                             chunk_id(),
                             page["user_id"],
@@ -168,7 +171,7 @@ class Db:
         self.query(
             """update site_chunks
                   set embedding = %(vector)s::vector, embed_model = %(model)s,
-                      embedded_from_hash = %(hash)s, embed_error = null, updated_at = now()
+                      embed_error = null, updated_at = now()
                 where id = %(id)s and from_hash is not distinct from %(hash)s""",
             {"vector": vector_literal(vector), "model": model, "hash": hash_at_read, "id": id},
         )

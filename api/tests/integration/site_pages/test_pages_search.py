@@ -177,7 +177,7 @@ async def test_hybrid_search_with_models(client, site, monkeypatch):
     assert r.json()["data"]["hits"] == []
 
     r = await client.get(
-        "/api/v1/site/pages", params={"searchText": "burr grinder", "kind": "nothing"}
+        "/api/v1/site/pages", params={"searchText": "burr grinder", "pageType": "nothing"}
     )
     assert r.json()["data"] == []
 

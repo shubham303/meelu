@@ -51,7 +51,7 @@ def screening_state(item: ScreeningInput) -> dict[str, Any]:
             "title": item.to_title or "",
             "meta_description": item.to_meta_description or "",
             "h1": item.to_h1,
-            "kind": item.to_kind,
+            "page_type": item.to_page_type or "",
         },
     }
 

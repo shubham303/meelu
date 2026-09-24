@@ -48,7 +48,6 @@ class PagePoint:
     title: str | None
     page_type: str | None
     inlinks: int
-    keywords: tuple[str, ...]
     vector: np.ndarray
 
 
@@ -126,13 +125,8 @@ def overlap(a: Iterable[str], b: Iterable[str]) -> float:
 def topic_for(points: Sequence[PagePoint]) -> str:
     counts: Counter[str] = Counter()
     for p in points:
-        counts.update(k.strip().lower() for k in p.keywords if k.strip())
-    if not counts:
-        for p in points:
-            words = [
-                w for w in (p.title or "").lower().split() if w.isalpha() and w not in STOPWORDS
-            ]
-            counts.update(set(words))
+        words = [w for w in (p.title or "").lower().split() if w.isalpha() and w not in STOPWORDS]
+        counts.update(set(words))
     top = [word for word, _ in counts.most_common(TOPIC_WORDS)]
     return ", ".join(top) if top else "untitled topic"
 

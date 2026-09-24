@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { fetchPage, loadLlms, loadRobots, pool, sleep, USER_AGENT } from "./fetch.js";
 import { crawlFetch, withOutboundSlot } from "../net.js";
-import { classify, extract, shallowReason } from "./extract.js";
+import { articleFormat, extract, shallowReason } from "./extract.js";
 import { IMAGE_PROBE_BUDGET, weighImages } from "./images.js";
 import { probeHostVariants } from "./host-variants.js";
 import { probeCrawlerAccess } from "./probe.js";
@@ -66,9 +66,17 @@ function blockedRow(url, inSitemap) {
   };
 }
 
+function pageLinks(f) {
+  return [
+    ...f.outLinks.map((l) => ({ ...l, external: false })),
+    ...f.externalLinks.map((l) => ({ ...l, count: 1, external: true })),
+  ];
+}
+
 function failedRow(url, inSitemap, status, reason, fetchError = null) {
   return {
     url,
+    links: [],
     status,
     inSitemap,
     blockedByRobots: false,
@@ -86,6 +94,7 @@ function failedRow(url, inSitemap, status, reason, fetchError = null) {
 function redirectRow(hop, inSitemap, final, hopsLeft) {
   return {
     url: hop.url,
+    links: [],
     status: hop.status,
     inSitemap,
     blockedByRobots: false,
@@ -464,8 +473,8 @@ export async function crawlSite(domain, known, opts = {}) {
     if (changed) counts[prior ? "changed" : "new"]++;
     else counts.unchanged++;
 
-    const { kind, format } = classify(f, origin);
-    const reason = shallowReason(f, kind);
+    const format = articleFormat(f);
+    const reason = shallowReason(f);
     const row = {
       url: f.url,
       status: f.status,
@@ -487,11 +496,9 @@ export async function crawlSite(domain, known, opts = {}) {
       h1: f.h1,
       headings: f.headings,
       bodyText: f.bodyText,
-      outLinks: f.outLinks,
-      externalLinks: f.externalLinks,
+      links: pageLinks(f),
       canonical: f.canonical,
       robotsDirectives: f.robotsDirectives,
-      hasViewport: f.hasViewport,
       viewportMeta: f.viewportMeta,
       nosnippetCount: f.nosnippetCount,
       socialMetaCount: f.socialMetaCount,
@@ -506,10 +513,8 @@ export async function crawlSite(domain, known, opts = {}) {
       publishedAt: f.publishedAt,
       modifiedAt: f.modifiedAt,
       wordCount: f.wordCount,
-      externalLinkDensity: f.externalLinkDensity,
       mixedContent: f.mixedContent,
-      kind,
-      format: format ?? null,
+      format,
       shallow: Boolean(reason),
       shallowReason: reason,
       state: changed ? (prior ? "changed" : "new") : "unchanged",

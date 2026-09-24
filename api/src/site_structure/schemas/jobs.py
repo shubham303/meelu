@@ -40,3 +40,4 @@ class StructureJobUpdateRequest(RequestModel):
 class ReconcileResult(EntityModel):
     done: int = 0
     stale: int = 0
+    removed: int = 0

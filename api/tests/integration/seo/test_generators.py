@@ -64,12 +64,7 @@ async def prepare(client, email):
             {"url": GUIDE, "title": "Grinder guide", "inlinks": 5, "word_count": 1500},
             {"url": RIVAL, "title": "Grinder guide copy", "inlinks": 1, "word_count": 400},
             {"url": PRODUCT, "title": "Coffee product", "meta_description": "Buy it", "inlinks": 8},
-            {
-                "url": FAQ,
-                "title": "FAQ",
-                "questions_answered": ["How to clean a grinder"],
-                "inlinks": 4,
-            },
+            {"url": FAQ, "title": "FAQ", "inlinks": 4},
         ],
     )
     days = gsc_days()
@@ -117,6 +112,7 @@ async def test_page_edit_generators(client, email, monkeypatch):
     faq = next(d for d in drafts if d["pageId"] == pages[FAQ] and "questions" in d["strategies"])
     assert faq["strategies"] == ["gsc", "questions"]
     assert set(faq["evidence"]["questions"]) == {
+        "how to clean a grinder",
         "why is my grinder loud",
         "what grinder size for espresso",
     }

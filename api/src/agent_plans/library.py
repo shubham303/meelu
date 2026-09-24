@@ -177,7 +177,7 @@ Three lookups, joined by the page id:
 
 SELECT id, url, status, title, meta_description, h1, word_count, depth,
        inlinks, in_sitemap, canonical, robots_directives, blocked_by_robots,
-       kind, last_crawled_at, keywords, questions_answered
+       format, last_crawled_at
 FROM site_pages WHERE site_id = :site AND url = :url;
 
 Open issues on it, from the latest audit only:

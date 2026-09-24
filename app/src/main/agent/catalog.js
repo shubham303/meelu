@@ -3,6 +3,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 const CATALOGS = new Map();
 
+const CATALOG_TTL_MS = 60_000;
+
 async function fetchCatalog(url, headers) {
   const client = new Client({ name: "meelu-app", version: "0.1.0" });
   const transport = new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } });
@@ -30,9 +32,10 @@ async function fetchCatalog(url, headers) {
 }
 
 export async function agentToolCatalog(url, headers, { refresh = false } = {}) {
-  if (!refresh && CATALOGS.has(url)) return CATALOGS.get(url);
+  const cached = CATALOGS.get(url);
+  if (!refresh && cached && Date.now() - cached.at < CATALOG_TTL_MS) return cached.tools;
   const tools = await fetchCatalog(url, headers);
-  CATALOGS.set(url, tools);
+  CATALOGS.set(url, { tools, at: Date.now() });
   return tools;
 }
 
