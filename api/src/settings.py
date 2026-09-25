@@ -28,7 +28,6 @@ class Settings(EnvSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
     openrouter_jev_model: str = "~typesafe/jev-latest"
-    openrouter_review_model: str = "anthropic/claude-sonnet-4.5"
     credits_signup_grant_usd: float = 5.0
     credits_site_daily_usd: float = 0.4
     credits_minimum_balance_usd: float = 0.2

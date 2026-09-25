@@ -31,7 +31,8 @@ from src.seo.schemas import (
     RankRequest,
     RankResult,
     ReconcileResult,
-    ReviewRequest,
+    ReviewBatch,
+    ReviewInputsRequest,
     ReviewResult,
     RollupResult,
     SavePageSuggestionRequest,
@@ -44,6 +45,7 @@ from src.seo.schemas import (
     SiteStateUpdateRequest,
     TopicPagesRequest,
     TopicPagesResult,
+    VerdictRequest,
 )
 from src.settings import settings
 
@@ -290,11 +292,13 @@ async def screen_suggestions(
     )
 
 
-async def review_suggestions(
-    db: AsyncSession, user_id: str, site_id: str, body: ReviewRequest
-) -> ReviewResult:
+async def review_inputs(db: AsyncSession, site_id: str, body: ReviewInputsRequest) -> ReviewBatch:
     await get_job(db, site_id, body.job_id)
-    return await review.review(db, user_id, site_id, body.job_id, body.prompt, body.ids, body.limit)
+    return await review.review_inputs(db, site_id, body.job_id, body.prompt, body.ids, body.limit)
+
+
+async def apply_verdicts(db: AsyncSession, site_id: str, body: VerdictRequest) -> ReviewResult:
+    return await review.apply_verdicts(db, site_id, body.verdicts)
 
 
 async def rank_suggestions(db: AsyncSession, site_id: str, body: RankRequest) -> RankResult:

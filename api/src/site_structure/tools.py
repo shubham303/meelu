@@ -10,7 +10,6 @@ from src.site_structure.schemas import (
     MentionsRequest,
     MentionsResult,
     PillarRankRequest,
-    PillarReviewRequest,
     PillarScreenRequest,
     PillarsRequest,
     PillarsResult,
@@ -19,8 +18,6 @@ from src.site_structure.schemas import (
     ReconcileResult,
     RemovalsRequest,
     RemovalsResult,
-    ReviewRequest,
-    ReviewResult,
     ScreenRequest,
     ScreenResult,
     StructureJobCreateRequest,
@@ -123,23 +120,6 @@ async def screen_link_suggestions(
 
 
 @tool(writes=True, desk="site")
-async def review_link_suggestions(
-    prompt: str, job_id: str | None = None, ids: list[str] | None = None, limit: int = 200
-) -> ReviewResult:
-    """Have the review model read every draft suggestion (a job's, or the given ids) one by
-    one against your prompt and settle each: ready shows it to the user, llm_rejected hides
-    it. This is the only step that makes a row ready; run it after screening."""
-    ctx = require_site()
-    async with unit_of_work() as db:
-        return await service.review_suggestions(
-            db,
-            ctx.user_id,
-            ctx.site_id,
-            ReviewRequest(prompt=prompt, job_id=job_id, ids=ids, limit=limit),
-        )
-
-
-@tool(writes=True, desk="site")
 async def rank_link_suggestions(
     max_per_target: int | None = None, target_discount: float = 1.0
 ) -> RankResult:
@@ -185,23 +165,6 @@ async def screen_pillar_suggestions(
     async with unit_of_work() as db:
         return await pillars.screen_suggestions(
             db, ctx.user_id, ctx.site_id, PillarScreenRequest(job_id=job_id, ids=ids, limit=limit)
-        )
-
-
-@tool(writes=True, desk="site")
-async def review_pillar_suggestions(
-    prompt: str, job_id: str | None = None, ids: list[str] | None = None, limit: int = 100
-) -> ReviewResult:
-    """Have the review model read every draft pillar suggestion against your prompt and
-    settle each: ready (it also writes the page title and the brief the user acts on) or
-    llm_rejected. The only step that makes a pillar row ready; run it after screening."""
-    ctx = require_site()
-    async with unit_of_work() as db:
-        return await pillars.review_suggestions(
-            db,
-            ctx.user_id,
-            ctx.site_id,
-            PillarReviewRequest(prompt=prompt, job_id=job_id, ids=ids, limit=limit),
         )
 
 

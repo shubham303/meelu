@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.agent.sql import quote_ident
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
-from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
+from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_structure.constants import OPEN_STATES
 from src.site_structure.models.pillar_page_suggestion import PillarPageSuggestion
 from src.site_structure.pillars.clustering import PagePoint

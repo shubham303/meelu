@@ -33,13 +33,12 @@ import {
 
 const PAGE_SIZE = 50;
 
-type TabState = Exclude<PageSuggestionState, "draft" | "reviewed">;
+type TabState = Exclude<PageSuggestionState, "draft" | "reviewed" | "llm_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
   ready: "Ready",
   done: "Done",
   user_rejected: "Turned down",
-  llm_rejected: "Screened out",
   stale: "Stale",
 };
 
@@ -74,7 +73,6 @@ const EMPTY: Record<TabState, string> = {
     "Nothing ready. Run a strategy above and the suggestions that survive the pipeline land here.",
   done: "Nothing marked done yet.",
   user_rejected: "Nothing turned down yet.",
-  llm_rejected: "The agent has not screened anything out.",
   stale:
     "Nothing has gone stale. A suggestion does when its page leaves the crawl.",
 };

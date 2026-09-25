@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { refuseOnWeb, streamTurn, type RunningTurn } from "@/components/agent";
+import { refuseOnWeb, streamTurn, usePinnedSite, type RunningTurn } from "@/components/agent";
 
 export interface AgentReply {
   text: string;
@@ -48,6 +48,7 @@ export function useAgent(
   getDraft: () => { title: string; body: string; channel: string },
   getIssues: () => FlaggedIssue[] = () => [],
 ) {
+  const siteId = usePinnedSite();
   const runningRef = useRef<RunningTurn | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ export function useAgent(
       setBusy(true);
       const turn = streamTurn({
         action: "content-draft",
+        siteId,
         message,
         onText: options.onText ? (_chunk, full) => options.onText?.(full) : undefined,
         onTool: options.onTool,
@@ -79,7 +81,7 @@ export function useAgent(
         body: fenced ? fenced[1].replace(/\s+$/, "") : null,
       };
     },
-    [],
+    [siteId],
   );
 
   const draftFraming = useCallback(() => {

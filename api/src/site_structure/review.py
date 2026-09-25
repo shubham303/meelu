@@ -2,15 +2,15 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.logging import get_logger
-from src.credits.service import InsufficientCreditsError
-from src.providers.errors import NoProviderError, ProviderRequestError
-from src.providers.llm_judge.service import llm_judge
-from src.providers.registry import Caller
 from src.site_structure import repository as repo
-from src.site_structure.schemas import LinkSuggestionChanges, ReviewResult, ScreeningInput
-
-log = get_logger("site_structure.review")
+from src.site_structure.schemas import (
+    LinkSuggestionChanges,
+    ReviewBatch,
+    ReviewItem,
+    ReviewResult,
+    ScreeningInput,
+    Verdict,
+)
 
 VERDICTS = ("ready", "llm_rejected")
 
@@ -52,56 +52,34 @@ def review_state(item: ScreeningInput) -> dict[str, Any]:
     }
 
 
-async def review_one(
-    db: AsyncSession, caller: Caller, item: ScreeningInput, prompt: str
-) -> str | None:
-    subject = {
-        "suggestion_id": item.id,
-        "from_hash": item.from_content_hash,
-        "to_hash": item.to_content_hash,
-        "prompt": prompt,
-    }
-    try:
-        result = await llm_judge.judge(
-            db,
-            caller,
-            subject,
-            INSTRUCTIONS.format(prompt=prompt),
-            review_state(item),
-            SCHEMA,
-        )
-    except ProviderRequestError as exc:
-        log.warning("link suggestion review failed", suggestion_id=item.id, error=str(exc))
-        return None
-    verdict = result["answer"].get("verdict")
-    if verdict not in VERDICTS:
-        log.warning("link suggestion review gave no verdict", suggestion_id=item.id)
-        return None
-    await repo.update_one(db, caller.site_id or "", item.id, LinkSuggestionChanges(state=verdict))
-    return verdict
-
-
-async def review(
+async def review_inputs(
     db: AsyncSession,
-    user_id: str,
     site_id: str,
     prompt: str,
     job_id: str | None,
     ids: list[str] | None,
     limit: int,
-) -> ReviewResult:
-    caller = Caller(user_id=user_id, site_id=site_id)
+) -> ReviewBatch:
     items = await repo.review_inputs(db, site_id, job_id, ids, limit)
+    return ReviewBatch(
+        instructions=INSTRUCTIONS.format(prompt=prompt),
+        schema=SCHEMA,
+        items=[ReviewItem(id=item.id, state=review_state(item)) for item in items],
+    )
+
+
+async def apply_verdicts(db: AsyncSession, site_id: str, verdicts: list[Verdict]) -> ReviewResult:
     result = ReviewResult()
-    for item in items:
-        try:
-            verdict = await review_one(db, caller, item, prompt)
-        except (NoProviderError, InsufficientCreditsError) as exc:
-            result.stopped = str(exc)
-            break
-        if verdict is None:
+    for given in verdicts:
+        if given.verdict not in VERDICTS:
+            result.failed += 1
+            continue
+        updated = await repo.update_one(
+            db, site_id, given.id, LinkSuggestionChanges(state=given.verdict)
+        )
+        if updated is None:
             result.failed += 1
             continue
         result.reviewed += 1
-        setattr(result, verdict, getattr(result, verdict) + 1)
+        setattr(result, given.verdict, getattr(result, given.verdict) + 1)
     return result

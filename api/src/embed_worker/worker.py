@@ -3,6 +3,7 @@ import signal
 import sys
 import time
 
+import src.core.tables  # noqa: F401
 from src.seo.precompute.clusters import run_seo_pass
 from src.site_pages.llm_extraction.classify import run_extraction_pass
 

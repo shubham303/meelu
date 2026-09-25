@@ -19,7 +19,6 @@ from src.seo.tools import (
     propose_page_edits,
     propose_topic_pages,
     rank_page_suggestions,
-    review_page_suggestions,
     save_page_suggestion,
     screen_page_suggestions,
     start_seo_job,
@@ -52,7 +51,7 @@ ASK = AskDesk(
 
 Open a job with start_seo_job and the prompt you are running. It reconciles the standing suggestions first, tells you whether the precompute is pending, and hands back the job_id every row carries, plus how many ready rows the user already has per action. If the site has ready rows on the same topics, say so before generating more.
 
-Generate drafts with the generators, never by hand-listing rows: propose_page_edits (Search Console and cluster evidence, one kind or all) and propose_cannibalisation (pairs of pages fighting for the same queries). Narrow them with page_ids or keyword_ids you selected with SQL. Each returns how many drafts it saved, which existing rows it collided with, and what it filtered and why. Drafts are invisible to the user. Then screen_page_suggestions (a cheap model throws out the clear noes), review_page_suggestions with the prompt you are running (a stronger model reads each draft with the live page, keyword and search facts, rewrites the suggestion and settles it), and rank_page_suggestions (keeps the budget per action as ready). Close with finish_seo_job. Only ready rows reach the user, who marks them done or turns them down on the SEO screen. Never mark done or turn down for them.
+Generate drafts with the generators, never by hand-listing rows: propose_page_edits (Search Console and cluster evidence, one kind or all) and propose_cannibalisation (pairs of pages fighting for the same queries). Narrow them with page_ids or keyword_ids you selected with SQL. Each returns how many drafts it saved, which existing rows it collided with, and what it filtered and why. Drafts are invisible to the user. Then screen_page_suggestions (a cheap model throws out the clear noes), review_page_suggestions with the prompt you are running (it reads each draft one by one off your context with the live page, keyword and search facts, rewrites the suggestion and settles it), and rank_page_suggestions (keeps the budget per action as ready). Close with finish_seo_job. Only ready rows reach the user, who marks them done or turns them down on the SEO screen. Never mark done or turn down for them.
 
 When a strategy needs a row no generator makes — you compared two pages yourself, the user named a topic — write it with save_page_suggestion. It lands ready; you are its reviewer, so hold it to the same bar.
 
@@ -90,7 +89,6 @@ scope = AgentScope(
         collect_serps,
         save_page_suggestion,
         screen_page_suggestions,
-        review_page_suggestions,
         rank_page_suggestions,
         finish_seo_job,
     ],
@@ -99,10 +97,10 @@ scope = AgentScope(
         propose_cannibalisation,
         propose_gap_pages,
         screen_page_suggestions,
-        review_page_suggestions,
         rank_page_suggestions,
         finish_seo_job,
     ],
+    local_tools=["review_page_suggestions"],
     limits={"maxTurns": 60, "maxBudgetUsd": 3},
     system_prompt=ask_prompt(ASK),
 )

@@ -108,7 +108,7 @@ async def test_generators_revive_llm_rejected_rows(client, email):
     assert r.json()["data"]["state"] == "user_rejected"
 
 
-async def test_link_removals(client, email):
+async def test_link_removals(client, email, screener):
     site, user_id, pages, job = await prepare(
         client,
         email,
@@ -135,8 +135,9 @@ async def test_link_removals(client, email):
     await seed_embedded_chunk(site["id"], user_id, a, vector(0), "Our terms of use are strict.")
     await seed_embedded_chunk(site["id"], user_id, b, vector(5))
 
-    from src.core.database import SessionLocal
     from sqlalchemy import update
+
+    from src.core.database import SessionLocal
     from src.site_pages.models.site_page_link import SitePageLink
 
     async with SessionLocal() as db:
@@ -203,12 +204,12 @@ async def test_link_removals(client, email):
         )
         await db.commit()
     r = await client.post(f"{BASE}/link-suggestions/reconcile")
-    assert r.json()["data"] == {"done": 1, "stale": 0}
+    assert r.json()["data"] == {"done": 0, "stale": 0, "removed": 1}
     r = await client.get(f"{BASE}/link-suggestions/{rows[(a, b)]['id']}")
-    assert r.json()["data"]["state"] == "done"
+    assert r.status_code == 404
 
 
-async def test_pillar_pages(client, email, monkeypatch):
+async def test_pillar_pages(client, email, screener):
     urls = [f"{ORIGIN}/seo/{i}" for i in range(5)] + [f"{ORIGIN}/ads/{i}" for i in range(4)]
     site, user_id, pages, job = await prepare(
         client,
@@ -288,41 +289,24 @@ async def test_pillar_pages(client, email, monkeypatch):
     assert r.json()["data"]["screened"] == 2
     assert r.json()["data"]["llmRejected"] == 0
 
-    from src.providers.llm_judge.adapter import JUDGE, LlmJudgeAdapter
-    from src.providers.llm_judge.service import llm_judge
-    from src.providers.registry import VendorResponse
-
-    class FakeJudge(LlmJudgeAdapter):
-        id = "fake-judge"
-        name = "fake"
-        capabilities = frozenset({JUDGE})
-        charges = False
-
-        async def judge(self, instructions, state, schema):
-            ready = state["action"] == "create"
-            return VendorResponse(
-                {
-                    "model": "fake",
-                    "answer": {
-                        "verdict": "ready" if ready else "llm_rejected",
-                        "title": "The SEO hub" if ready else "",
-                        "suggestion": "Build it." if ready else "",
-                        "reason": "ok",
-                    },
-                }
-            )
-
-    monkeypatch.setattr(llm_judge, "adapters", [FakeJudge()])
     r = await client.post(
-        f"{BASE}/pillar-suggestions/review", json={"prompt": "Pillars", "jobId": job["id"]}
+        f"{BASE}/pillar-suggestions/review-inputs", json={"prompt": "Pillars", "jobId": job["id"]}
     )
-    assert r.json()["data"] == {
-        "reviewed": 2,
-        "ready": 1,
-        "llmRejected": 1,
-        "failed": 0,
-        "stopped": None,
-    }
+    batch = r.json()["data"]
+    assert "Pillars" in batch["instructions"]
+    assert len(batch["items"]) == 2
+    verdicts = [
+        {
+            "id": item["id"],
+            "verdict": "ready" if item["state"]["action"] == "create" else "llm_rejected",
+            "title": "The SEO hub",
+            "suggestion": "Build it.",
+        }
+        for item in batch["items"]
+    ]
+
+    r = await client.post(f"{BASE}/pillar-suggestions/verdicts", json={"verdicts": verdicts})
+    assert r.json()["data"] == {"reviewed": 2, "ready": 1, "llmRejected": 1, "failed": 0}
     r = await client.get(f"{BASE}/pillar-suggestions/{row['id']}")
     assert r.json()["data"]["state"] == "ready"
     assert r.json()["data"]["topic"] == "The SEO hub"
@@ -348,7 +332,7 @@ async def test_pillar_pages(client, email, monkeypatch):
     for p in seo[:4]:
         await seed_link(site["id"], user_id, hub[f"{ORIGIN}/seo/"], p)
     r = await client.post(f"{BASE}/jobs", json={"prompt": "Next run"})
-    assert r.json()["data"]["reconciled"] == {"done": 1, "stale": 0}
+    assert r.json()["data"]["reconciled"] == {"done": 1, "stale": 0, "removed": 0}
     r = await client.get(f"{BASE}/pillar-suggestions/{row['id']}")
     assert r.json()["data"]["state"] == "done"
 

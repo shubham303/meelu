@@ -23,6 +23,17 @@ async def save(
     return await repo.upsert(db, user_id, site_id, body)
 
 
+async def set_page_type(
+    db: AsyncSession, user_id: str, site_id: str, page_id: str, page_type: str
+) -> PageLlmExtractionRecord:
+    if not await repo.page_exists(db, site_id, page_id):
+        raise HTTPException(404, f"No page {page_id} for this website.")
+    saved = await repo.set_page_type(db, user_id, site_id, page_id, page_type)
+    if saved is None:
+        raise HTTPException(409, f"Page {page_id} already has a page type.")
+    return saved
+
+
 async def get(db: AsyncSession, site_id: str, extraction_id: str) -> PageLlmExtractionRecord:
     found = await repo.by_id(db, site_id, extraction_id)
     if found is None:

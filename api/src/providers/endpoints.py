@@ -9,7 +9,6 @@ from src.core.pagination.utils import get_pagination_params
 from src.core.schemas import RequestModel
 from src.providers import repository as repo
 from src.providers.json_data_extractor.service import json_data_extractor
-from src.providers.llm_judge.service import llm_judge
 from src.providers.prospect_sources.service import prospect_sources
 from src.providers.registry import Caller
 from src.providers.schemas import DomainStatus, ProviderCallResponse
@@ -18,7 +17,7 @@ from src.providers.social_search.service import social_search
 
 router = APIRouter()
 
-FACADES = (seo_data, social_search, prospect_sources, json_data_extractor, llm_judge)
+FACADES = (seo_data, social_search, prospect_sources, json_data_extractor)
 
 
 class SocialSearchRequest(RequestModel):

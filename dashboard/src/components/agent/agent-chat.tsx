@@ -141,6 +141,7 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
 }: AgentChatProps<TChip>) {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (layout === "inline") return;
@@ -153,6 +154,7 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
     if (!canSend) return;
     const value = text.trim();
     setText("");
+    if (inputRef.current) inputRef.current.style.height = "auto";
     onSend(value);
   }
 
@@ -257,6 +259,7 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
                 </IconButton>
               )}
               <textarea
+                ref={inputRef}
                 autoFocus={autoFocus}
                 rows={1}
                 value={text}

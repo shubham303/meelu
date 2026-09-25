@@ -26,6 +26,10 @@ class PageLlmExtractionCreateRequest(PageLlmExtractionFields):
         return self.model_dump(exclude={"page_id"})
 
 
+class PageLlmExtractionPageTypeRequest(RequestModel):
+    page_type: PageType
+
+
 class PageLlmExtractionListQuery(RequestModel):
     page_type: PageType | None = None
     page: int = Field(default=1, ge=1)

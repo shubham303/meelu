@@ -23,13 +23,15 @@ from src.site_structure.schemas import (
     ReconcileResult,
     RemovalsRequest,
     RemovalsResult,
-    ReviewRequest,
+    ReviewBatch,
+    ReviewInputsRequest,
     ReviewResult,
     ScreenRequest,
     ScreenResult,
     StructureJobCreateRequest,
     StructureJobRecord,
     StructureJobUpdateRequest,
+    VerdictRequest,
 )
 
 NOT_FOUND = "No such link suggestion on this website."
@@ -176,10 +178,12 @@ async def screen_suggestions(
     )
 
 
-async def review_suggestions(
-    db: AsyncSession, user_id: str, site_id: str, body: ReviewRequest
-) -> ReviewResult:
-    return await review.review(db, user_id, site_id, body.prompt, body.job_id, body.ids, body.limit)
+async def review_inputs(db: AsyncSession, site_id: str, body: ReviewInputsRequest) -> ReviewBatch:
+    return await review.review_inputs(db, site_id, body.prompt, body.job_id, body.ids, body.limit)
+
+
+async def apply_verdicts(db: AsyncSession, site_id: str, body: VerdictRequest) -> ReviewResult:
+    return await review.apply_verdicts(db, site_id, body.verdicts)
 
 
 async def rank_suggestions(db: AsyncSession, site_id: str, body: RankRequest) -> RankResult:

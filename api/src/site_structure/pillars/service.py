@@ -26,12 +26,14 @@ from src.site_structure.schemas import (
     PillarPageSuggestionSummaryResponse,
     PillarPageSuggestionUpdateRequest,
     PillarRankRequest,
-    PillarReviewRequest,
+    PillarReviewInputsRequest,
     PillarScreenRequest,
     PillarsRequest,
     PillarsResult,
+    PillarVerdictRequest,
     RankResult,
     ReconcileResult,
+    ReviewBatch,
     ReviewResult,
     ScreenResult,
     WorkspaceGroup,
@@ -175,10 +177,16 @@ async def screen_suggestions(
     return await screening.screen(db, user_id, site_id, body.job_id, body.ids, body.limit)
 
 
-async def review_suggestions(
-    db: AsyncSession, user_id: str, site_id: str, body: PillarReviewRequest
+async def review_inputs(
+    db: AsyncSession, site_id: str, body: PillarReviewInputsRequest
+) -> ReviewBatch:
+    return await review.review_inputs(db, site_id, body.prompt, body.job_id, body.ids, body.limit)
+
+
+async def apply_verdicts(
+    db: AsyncSession, site_id: str, body: PillarVerdictRequest
 ) -> ReviewResult:
-    return await review.review(db, user_id, site_id, body.prompt, body.job_id, body.ids, body.limit)
+    return await review.apply_verdicts(db, site_id, body.verdicts)
 
 
 async def rank_suggestions(db: AsyncSession, site_id: str, body: PillarRankRequest) -> RankResult:

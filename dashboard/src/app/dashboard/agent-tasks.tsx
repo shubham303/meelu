@@ -25,7 +25,7 @@ import {
 import { gsap, useGSAP } from "@/components/animate";
 import { Button, IconButton } from "@/components/ui";
 import { currentSiteId, GLOBAL } from "@/lib/current-site";
-import { useApi } from "@/lib/use-api";
+import { useApi, useCurrentSite } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
 import { formatRelative } from "@/lib/utils";
 import type { PromptChip } from "@/features/prompt-chips/lib";
@@ -290,15 +290,23 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     setLastTaskId((prev) => (prev === id ? null : prev));
   }, []);
 
+  const site = useCurrentSite();
+  const here = site === GLOBAL ? null : site;
+  const mine = useMemo(
+    () => tasks.filter((t) => t.siteId === null || t.siteId === here),
+    [tasks, here],
+  );
+  const mineIds = useMemo(() => new Set(mine.map((t) => t.id)), [mine]);
+
   const sorted = useMemo(
     () =>
-      [...tasks].sort((a, b) => {
+      [...mine].sort((a, b) => {
         const ra = a.status === "running" ? 0 : 1;
         const rb = b.status === "running" ? 0 : 1;
         if (ra !== rb) return ra - rb;
         return b.createdAt - a.createdAt;
       }),
-    [tasks],
+    [mine],
   );
 
   const rail = useAgentRunsOptional();
@@ -306,8 +314,8 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     (r) => r.status === "running" || r.status === "waiting",
   ).length;
   const needsYes = rail?.needsYes.length ?? 0;
-  const anyRunning = tasks.some((t) => t.status === "running") || liveRuns > 0;
-  const dockCount = tasks.length + liveRuns;
+  const anyRunning = mine.some((t) => t.status === "running") || liveRuns > 0;
+  const dockCount = mine.length + liveRuns;
 
   const api = useMemo(
     () => ({ launchTask, openTask, hasTask, updateTaskDraft, updateTaskHooks }),
@@ -330,7 +338,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
           suggestions={task.suggestions}
           autoStart={task.autoStart}
           siteId={task.siteId}
-          open={openTaskId === task.id}
+          open={openTaskId === task.id && mineIds.has(task.id)}
           onOpenChange={(o) =>
             setOpenTaskId((prev) => (o ? task.id : prev === task.id ? null : prev))
           }
@@ -380,7 +388,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
       />
       )}
 
-      {isApp && lastTaskId !== null && openTaskId === null && !listOpen && (
+      {isApp && lastTaskId !== null && mineIds.has(lastTaskId) && openTaskId === null && !listOpen && (
         <button
           type="button"
           onClick={() => setOpenTaskId(lastTaskId)}

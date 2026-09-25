@@ -32,7 +32,8 @@ from src.seo.schemas import (
     RankRequest,
     RankResult,
     ReconcileResult,
-    ReviewRequest,
+    ReviewBatch,
+    ReviewInputsRequest,
     ReviewResult,
     RollupResult,
     SavePageSuggestionRequest,
@@ -45,6 +46,7 @@ from src.seo.schemas import (
     SiteStateUpdateRequest,
     TopicPagesRequest,
     TopicPagesResult,
+    VerdictRequest,
     fields,
 )
 
@@ -320,13 +322,22 @@ async def screen_suggestions(
     return await service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
 
 
-@router.post("/page-suggestions/review")
-async def review_suggestions(
-    body: ReviewRequest,
+@router.post("/page-suggestions/review-inputs")
+async def page_suggestion_review_inputs(
+    body: ReviewInputsRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> ReviewBatch:
+    return await service.review_inputs(db, ctx.site_id, body)
+
+
+@router.post("/page-suggestions/verdicts")
+async def page_suggestion_verdicts(
+    body: VerdictRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await service.review_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await service.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/rank")

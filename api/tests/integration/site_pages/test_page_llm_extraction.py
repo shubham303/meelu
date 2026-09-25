@@ -152,3 +152,86 @@ async def test_manual_save_and_delete(client, site):
     assert r.status_code == 200
     r = await client.get(f"/api/v1/site/page-llm-extractions/{saved['id']}")
     assert r.status_code == 404
+
+
+class UnsureJev(FakeJev):
+    async def decide(self, state, questions):
+        self.calls.append(state)
+        return VendorResponse(
+            {
+                "model": "~typesafe/jev-latest",
+                "answers": {
+                    "page_type": {
+                        "type": "choice",
+                        "choice": "money",
+                        "probabilities": {"money": 0.4},
+                        "confidence": 0.4,
+                    }
+                },
+            },
+            42,
+        )
+
+
+@pytest.fixture
+def unsure_jev(monkeypatch):
+    fake = UnsureJev()
+    monkeypatch.setattr(json_data_extractor, "adapters", [fake])
+    return fake
+
+
+async def test_low_confidence_leaves_the_type_unset_and_is_not_retried(
+    client, site, unsure_jev
+):
+    a = await add_page(client, "https://extract.example.com/unsure", bodyText="x", contentHash="h1")
+
+    assert await classify.run_extraction_pass(site["id"]) == 1
+
+    r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
+    assert r.json()["data"]["pageType"] is None
+    assert r.json()["data"]["confidence"] == 0.4
+    assert r.json()["data"]["error"] is None
+
+    assert await classify.run_extraction_pass(site["id"]) == 0
+    assert len(unsure_jev.calls) == 1
+
+
+async def test_set_page_type_fills_an_unset_type_only(client, site, unsure_jev):
+    a = await add_page(client, "https://extract.example.com/unsure", bodyText="x", contentHash="h1")
+    assert await classify.run_extraction_pass(site["id"]) == 1
+
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{a['id']}/page-type",
+        json={"pageType": "hub"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["pageType"] == "hub"
+    assert r.json()["data"]["extractedFromHash"] == "h1"
+
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{a['id']}/page-type",
+        json={"pageType": "money"},
+    )
+    assert r.status_code == 409
+
+    r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
+    assert r.json()["data"]["pageType"] == "hub"
+
+    assert await classify.run_extraction_pass(site["id"]) == 0
+
+
+async def test_set_page_type_on_a_page_never_extracted(client, site):
+    a = await add_page(client, "https://extract.example.com/new", bodyText="x", contentHash="h9")
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{a['id']}/page-type",
+        json={"pageType": "legal"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["pageType"] == "legal"
+    assert r.json()["data"]["extractedFromHash"] == "h9"
+
+    r = await client.post(
+        "/api/v1/site/page-llm-extractions/by-page/pg_missing/page-type",
+        json={"pageType": "legal"},
+    )
+    assert r.status_code == 404

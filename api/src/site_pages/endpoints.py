@@ -12,6 +12,7 @@ from src.site_pages.schemas.llm_extraction import (
     PageLlmExtractionDeleteResponse,
     PageLlmExtractionListQuery,
     PageLlmExtractionListResponse,
+    PageLlmExtractionPageTypeRequest,
     PageLlmExtractionResponse,
     PageLlmExtractionStatsResponse,
 )
@@ -226,6 +227,20 @@ async def save_extraction(
     response.status_code = 201
     return PageLlmExtractionResponse.model_validate(
         await llm_extraction_service.save(db, ctx.user_id, ctx.site_id, body)
+    )
+
+
+@router.post("/site/page-llm-extractions/by-page/{page_id}/page-type")
+async def set_extraction_page_type(
+    page_id: str,
+    body: PageLlmExtractionPageTypeRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> PageLlmExtractionResponse:
+    return PageLlmExtractionResponse.model_validate(
+        await llm_extraction_service.set_page_type(
+            db, ctx.user_id, ctx.site_id, page_id, body.page_type
+        )
     )
 
 

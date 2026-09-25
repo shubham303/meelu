@@ -5,6 +5,11 @@ from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.core.pagination import PaginationParams
 from src.site_pages import service
+from src.site_pages.llm_extraction import service as llm_extraction_service
+from src.site_pages.schemas.llm_extraction import (
+    PAGE_TYPES,
+    PageLlmExtractionResponse,
+)
 from src.site_pages.schemas import (
     MISSING_FIELDS,
     STATUS_CLASSES,
@@ -107,3 +112,16 @@ async def search_page(
     ctx = require_site()
     async with unit_of_work() as db:
         return await service.pages(db, ctx.site_id, filters, paging, view, search_text)
+
+
+@tool(writes=True, desk="pages")
+async def set_page_type(page_id: str, page_type: Literal[PAGE_TYPES]) -> PageLlmExtractionResponse:
+    """Set the page type for a page the classifier left unset because it was not
+    confident. Only call it for a page whose type you can see is missing — it
+    refuses a page that already has one."""
+    ctx = require_site()
+    async with unit_of_work() as db:
+        saved = await llm_extraction_service.set_page_type(
+            db, ctx.user_id, ctx.site_id, page_id, page_type
+        )
+    return PageLlmExtractionResponse.model_validate(saved)

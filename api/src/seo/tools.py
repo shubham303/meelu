@@ -18,8 +18,6 @@ from src.seo.schemas import (
     RankRequest,
     RankResult,
     ReconcileResult,
-    ReviewRequest,
-    ReviewResult,
     SavePageSuggestionRequest,
     ScreenRequest,
     ScreenResult,
@@ -152,24 +150,6 @@ async def screen_page_suggestions(
             ctx.user_id,
             ctx.site_id,
             ScreenRequest(job_id=job_id, ids=ids, question=question, limit=limit),
-        )
-
-
-@tool(writes=True, desk="seo")
-async def review_page_suggestions(
-    job_id: str, prompt: str, ids: list[str] | None = None, limit: int = 200
-) -> ReviewResult:
-    """Have the review model read each draft against your prompt with the live page,
-    keyword and search-result facts, rewrite the suggestion and settle it reviewed or
-    llm_rejected. Adds without a search snapshot come back in needs_serp; run it after
-    screening and before rank_page_suggestions."""
-    ctx = require_site()
-    async with unit_of_work() as db:
-        return await service.review_suggestions(
-            db,
-            ctx.user_id,
-            ctx.site_id,
-            ReviewRequest(job_id=job_id, prompt=prompt, ids=ids, limit=limit),
         )
 
 

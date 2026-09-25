@@ -8,6 +8,7 @@ export {
   ScopeSummary,
   ScopeWrites,
   streamTurn,
+  usePinnedSite,
   useAbortOnUnmount,
   useAgentEnabled,
   useScopeInfo,

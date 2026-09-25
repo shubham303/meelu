@@ -285,35 +285,27 @@ async def test_competitors_gap_and_serps(client, email, vendor, monkeypatch):
     )
     assert r.status_code == 400
 
-    from src.providers.llm_judge.adapter import JUDGE, LlmJudgeAdapter
-    from src.providers.llm_judge.service import llm_judge
-    from src.providers.registry import VendorResponse
-
-    seen = []
-
-    class FakeJudge(LlmJudgeAdapter):
-        id = "fake-judge"
-        name = "fake"
-        capabilities = frozenset({JUDGE})
-        charges = False
-
-        async def judge(self, instructions, state, schema):
-            seen.append(state)
-            return VendorResponse(
-                {
-                    "model": "fake",
-                    "answer": {"verdict": "reviewed", "reason": "ok", "suggestion": "Brief."},
-                }
-            )
-
-    monkeypatch.setattr(llm_judge, "adapters", [FakeJudge()])
     r = await client.post(
-        f"{BASE}/page-suggestions/review", json={"jobId": job["id"], "prompt": "Gaps"}
+        f"{BASE}/page-suggestions/review-inputs", json={"jobId": job["id"], "prompt": "Gaps"}
     )
-    assert r.json()["data"]["reviewed"] == 1 and r.json()["data"]["needsSerp"] == []
-    assert seen[0]["serp"]["results"][0]["domain"] == "rival-one.com"
-    assert seen[0]["serp"]["results"][1]["ours"] is True
-    assert seen[0]["questions"] == ["what is burr grinder maintenance?"]
+    batch = r.json()["data"]
+    assert "Gaps" in batch["instructions"]
+    assert batch["needsSerp"] == []
+    assert len(batch["items"]) == 1
+    state = batch["items"][0]["state"]
+    assert state["serp"]["results"][0]["domain"] == "rival-one.com"
+    assert state["serp"]["results"][1]["ours"] is True
+    assert state["questions"] == ["what is burr grinder maintenance?"]
+
+    r = await client.post(
+        f"{BASE}/page-suggestions/verdicts",
+        json={
+            "verdicts": [
+                {"id": batch["items"][0]["id"], "verdict": "reviewed", "suggestion": "Brief."}
+            ]
+        },
+    )
+    assert r.json()["data"]["reviewed"] == 1
 
 
 async def test_topic_pages(client, email, vendor, monkeypatch):

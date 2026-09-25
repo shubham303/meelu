@@ -202,7 +202,7 @@ class ScreenResult(EntityModel):
     stopped: str | None = None
 
 
-class ReviewRequest(RequestModel):
+class ReviewInputsRequest(RequestModel):
     prompt: str = Field(default="", validate_default=True)
     job_id: str | None = None
     ids: list[str] | None = None
@@ -214,12 +214,32 @@ class ReviewRequest(RequestModel):
         return fields.prompt(value)
 
 
+class ReviewItem(EntityModel):
+    id: str
+    state: dict[str, Any]
+
+
+class ReviewBatch(EntityModel):
+    instructions: str
+    schema_: dict[str, Any] = Field(alias="schema")
+    items: list[ReviewItem]
+
+
+class Verdict(RequestModel):
+    id: str
+    verdict: str
+    suggestion: str | None = None
+
+
+class VerdictRequest(RequestModel):
+    verdicts: list[Verdict] = Field(default_factory=list)
+
+
 class ReviewResult(EntityModel):
     reviewed: int = 0
     ready: int = 0
     llm_rejected: int = 0
     failed: int = 0
-    stopped: str | None = None
 
 
 class RankRequest(RequestModel):

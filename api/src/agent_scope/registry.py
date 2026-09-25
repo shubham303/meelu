@@ -62,6 +62,7 @@ def desk_addition(desk_name: str) -> AgentScope:
     tables = list(dict.fromkeys(t for s in scopes if s.tables for t in s.tables))
     guides = tuple(dict.fromkeys(g for s in scopes for g in s.guides))
     mcp_servers = {k: v for s in scopes for k, v in s.mcp_servers.items()}
+    local_tools = list(dict.fromkeys(t for s in scopes for t in s.local_tools))
     silent = list(dict.fromkeys(w for s in scopes for w in s.silent_writes))
     return AgentScope(
         desk=desk_name,
@@ -70,6 +71,7 @@ def desk_addition(desk_name: str) -> AgentScope:
         guides=guides,
         writes=writes,
         mcp_servers=mcp_servers,
+        local_tools=local_tools,
         silent_writes=silent,
     )
 

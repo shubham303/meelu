@@ -51,6 +51,49 @@ def _pages_with_extraction(site_id: str):
     )
 
 
+async def set_page_type(
+    db: AsyncSession, user_id: str, site_id: str, page_id: str, page_type: str
+) -> PageLlmExtractionRecord | None:
+    content_hash = (
+        await db.execute(
+            select(SitePage.content_hash).where(SitePage.site_id == site_id, SitePage.id == page_id)
+        )
+    ).scalar_one_or_none()
+    now = datetime.now(UTC)
+    stmt = (
+        pg_insert(SitePageLlmExtraction)
+        .values(
+            id=uid("spx"),
+            user_id=user_id,
+            site_id=site_id,
+            page_id=page_id,
+            page_type=page_type,
+            extracted_from_hash=content_hash,
+            created_at=now,
+            extracted_at=now,
+            updated_at=now,
+            extract_attempts=0,
+        )
+        .on_conflict_do_update(
+            index_elements=[SitePageLlmExtraction.page_id],
+            set_={
+                "page_type": page_type,
+                "extracted_from_hash": content_hash,
+                "error": None,
+                "extract_attempts": 0,
+                "updated_at": now,
+            },
+            where=SitePageLlmExtraction.page_type.is_(None),
+        )
+        .returning(SitePageLlmExtraction.id)
+    )
+    saved = (await db.execute(stmt)).scalar_one_or_none()
+    if saved is None:
+        return None
+    await db.flush()
+    return await by_id(db, site_id, saved)
+
+
 async def page_exists(db: AsyncSession, site_id: str, page_id: str) -> bool:
     result = await db.execute(
         select(SitePage.id).where(SitePage.site_id == site_id, SitePage.id == page_id).limit(1)
@@ -122,9 +165,7 @@ async def upsert(
             index_elements=[SitePageLlmExtraction.page_id],
             set_={
                 **values,
-                "extract_attempts": (
-                    SitePageLlmExtraction.extract_attempts + 1 if failed else 0
-                ),
+                "extract_attempts": (SitePageLlmExtraction.extract_attempts + 1 if failed else 0),
             },
         )
         .returning(SitePageLlmExtraction.id)

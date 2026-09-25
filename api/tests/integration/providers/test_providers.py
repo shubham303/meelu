@@ -138,7 +138,6 @@ async def test_status_and_platform_listing(client, email):
         "social-listening",
         "prospect-sources",
         "json-data-extractor",
-        "llm-judge",
     }
     assert domains["seo-data"]["adapters"][0]["id"] == "dataforseo"
 

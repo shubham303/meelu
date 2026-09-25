@@ -24,22 +24,25 @@ from src.site_structure.schemas import (
     PillarPageSuggestionSummaryResponse,
     PillarPageSuggestionUpdateRequest,
     PillarRankRequest,
-    PillarReviewRequest,
+    PillarReviewInputsRequest,
     PillarScreenRequest,
     PillarsRequest,
     PillarsResult,
+    PillarVerdictRequest,
     RankRequest,
     RankResult,
     ReconcileResult,
     RemovalsRequest,
     RemovalsResult,
-    ReviewRequest,
+    ReviewBatch,
+    ReviewInputsRequest,
     ReviewResult,
     ScreenRequest,
     ScreenResult,
     StructureJobCreateRequest,
     StructureJobResponse,
     StructureJobUpdateRequest,
+    VerdictRequest,
     fields,
 )
 
@@ -158,13 +161,22 @@ async def screen_link_suggestions(
     return await service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
 
 
-@router.post("/link-suggestions/review")
-async def review_link_suggestions(
-    body: ReviewRequest,
+@router.post("/link-suggestions/review-inputs")
+async def link_suggestion_review_inputs(
+    body: ReviewInputsRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> ReviewBatch:
+    return await service.review_inputs(db, ctx.site_id, body)
+
+
+@router.post("/link-suggestions/verdicts")
+async def link_suggestion_verdicts(
+    body: VerdictRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await service.review_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await service.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/rank")
@@ -270,13 +282,22 @@ async def screen_pillar_suggestions(
     return await pillars.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
 
 
-@router.post("/pillar-suggestions/review")
-async def review_pillar_suggestions(
-    body: PillarReviewRequest,
+@router.post("/pillar-suggestions/review-inputs")
+async def pillar_suggestion_review_inputs(
+    body: PillarReviewInputsRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> ReviewBatch:
+    return await pillars.review_inputs(db, ctx.site_id, body)
+
+
+@router.post("/pillar-suggestions/verdicts")
+async def pillar_suggestion_verdicts(
+    body: PillarVerdictRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await pillars.review_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await pillars.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/pillar-suggestions/rank")

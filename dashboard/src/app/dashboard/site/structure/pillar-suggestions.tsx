@@ -14,13 +14,12 @@ import type {
 
 const PAGE_SIZE = 20;
 
-type TabState = Exclude<LinkSuggestionState, "draft">;
+type TabState = Exclude<LinkSuggestionState, "draft" | "llm_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
   ready: "Ready",
   done: "Done",
   user_rejected: "Turned down",
-  llm_rejected: "Screened out",
   stale: "Stale",
 };
 
@@ -38,7 +37,6 @@ const EMPTY: Record<TabState, string> = {
   ready: "No pillar pages ready. Ask the agent which topics lack a hub, and they land here.",
   done: "No pillar marked done yet.",
   user_rejected: "Nothing turned down yet.",
-  llm_rejected: "The agent has not screened anything out.",
   stale: "No suggestion has gone stale. One does when most of its pages leave the crawl.",
 };
 
@@ -83,11 +81,6 @@ export function PillarSuggestions() {
         </span>
       </div>
 
-      {counts.draft > 0 && (
-        <p className="mb-3 text-xs text-sub">
-          {counts.draft} suggestion{counts.draft === 1 ? "" : "s"} still being screened by the agent.
-        </p>
-      )}
 
       {nothingAtAll ? (
         <EmptyState
@@ -206,7 +199,6 @@ function PillarRow({ row, onChanged }: { row: PillarSuggestion; onChanged: () =>
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-faint">
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
-            {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
             {row.state === "stale" && <Badge tone="warn">Stale</Badge>}
             {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>

@@ -21,6 +21,7 @@ class AgentScopeResponse(EntityModel):
     limits: dict[str, Any]
     save_attachments: bool
     providers: list[str]
+    local_tools: list[str]
     silent_writes: list[str]
     desks: list[DeskOffer]
     system_prompt: str

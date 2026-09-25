@@ -27,13 +27,12 @@ import {
 
 const PAGE_SIZE = 50;
 
-type TabState = Exclude<LinkSuggestionState, "draft" | "stale">;
+type TabState = Exclude<LinkSuggestionState, "draft" | "stale" | "llm_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
   ready: "Ready",
   done: "Done",
   user_rejected: "Turned down",
-  llm_rejected: "Screened out",
 };
 
 const ACTION_LABEL: Record<LinkSuggestionAction, string> = {
@@ -52,7 +51,6 @@ const EMPTY: Record<TabState, string> = {
   ready: "No link suggestions ready. Ask the agent to find internal links worth adding, and they land here.",
   done: "Nothing marked done yet.",
   user_rejected: "Nothing turned down yet.",
-  llm_rejected: "The agent has not screened anything out.",
 };
 
 const EMPTY_SUMMARY: LinkSuggestionSummary = {
@@ -143,12 +141,6 @@ export function LinkSuggestions() {
         </span>
       </div>
 
-      {counts.draft > 0 && (
-        <p className="mb-3 text-xs text-sub">
-          {counts.draft} suggestion{counts.draft === 1 ? "" : "s"} still being screened by the
-          agent. Only the ones that pass show here.
-        </p>
-      )}
 
       {nothingAtAll ? (
         <EmptyState
@@ -303,7 +295,6 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
             {row.fromChunkHeading && <span className="truncate">in “{row.fromChunkHeading}”</span>}
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
-            {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
             {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>
         </div>

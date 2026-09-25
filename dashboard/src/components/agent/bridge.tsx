@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { isAppUserAgent } from "@/lib/app-mode";
 import { activeSiteId } from "@/lib/current-site";
 import { useApi } from "@/lib/use-api";
@@ -213,6 +213,11 @@ export function streamTurn(opts: StreamOptions): RunningTurn {
       settle();
     },
   };
+}
+
+export function usePinnedSite(): string | null {
+  const [siteId] = useState<string | null>(() => activeSiteId());
+  return siteId;
 }
 
 export function runAgentTurn(opts: StreamOptions): Promise<TurnResult> {

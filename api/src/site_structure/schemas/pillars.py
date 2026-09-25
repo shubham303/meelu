@@ -156,7 +156,7 @@ class PillarScreenRequest(RequestModel):
     limit: int = Field(default=100, ge=1, le=500)
 
 
-class PillarReviewRequest(RequestModel):
+class PillarReviewInputsRequest(RequestModel):
     prompt: str = Field(default="", validate_default=True)
     job_id: str | None = None
     ids: list[str] | None = None
@@ -166,6 +166,17 @@ class PillarReviewRequest(RequestModel):
     @classmethod
     def _prompt(cls, value: Any) -> str:
         return fields.prompt(value)
+
+
+class PillarVerdict(RequestModel):
+    id: str
+    verdict: str
+    title: str | None = None
+    suggestion: str | None = None
+
+
+class PillarVerdictRequest(RequestModel):
+    verdicts: list[PillarVerdict] = Field(default_factory=list)
 
 
 class PillarRankRequest(RequestModel):

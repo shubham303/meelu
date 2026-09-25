@@ -80,6 +80,7 @@ def scope_response(
     )
     guides = tuple(dict.fromkeys([*scope.guides] + [g for a in extra for g in a.guides]))
     mcp_servers = {k: v for a in extra for k, v in a.mcp_servers.items()} | scope.mcp_servers
+    local_tools = list(dict.fromkeys(scope.local_tools + [t for a in extra for t in a.local_tools]))
 
     return AgentScopeResponse(
         action=action,
@@ -91,6 +92,7 @@ def scope_response(
         limits=scope.limits,
         save_attachments=scope.save_attachments,
         providers=scope.providers,
+        local_tools=local_tools,
         silent_writes=silent,
         desks=[
             DeskOffer(name=name, blurb=blurb, brief=desk_brief(name))

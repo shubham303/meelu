@@ -31,6 +31,7 @@ export const SCOPES = {
   },
   "ask-seo": {
     desk: "seo",
+    localTools: ["review_page_suggestions"],
     writes: [...NOTE_WRITES, "start_seo_job", "screen_page_suggestions", "rank_page_suggestions"],
     silentWrites: ["screen_page_suggestions", "rank_page_suggestions"],
     systemPrompt: "SEO DESK PROMPT.\n\n## The database\n\n- seo_keywords: keyword text",
@@ -59,6 +60,7 @@ function scopeBody(action, desks) {
     limits: {},
     saveAttachments: false,
     providers: [],
+    localTools: base.localTools ?? [],
     silentWrites: base.silentWrites ?? [],
     desks: offers,
     systemPrompt: base.systemPrompt,
@@ -67,8 +69,31 @@ function scopeBody(action, desks) {
 
 export async function startScopeApi() {
   const calls = [];
-  const server = http.createServer((req, res) => {
+  const reviewCalls = [];
+  const reviewItems = [
+    { id: "sug_1", state: { action: "edit", topic: "grinders" } },
+    { id: "sug_2", state: { action: "add", topic: "cold brew" } },
+  ];
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
+    if (url.pathname.startsWith("/api/v1/seo/page-suggestions/")) {
+      let body = "";
+      for await (const c of req) body += c;
+      const step = url.pathname.split("/").pop();
+      reviewCalls.push({ step, body: JSON.parse(body || "{}") });
+      const data =
+        step === "review-inputs"
+          ? {
+              instructions: "Judge it.",
+              schema: { type: "object" },
+              items: reviewItems,
+              needsSerp: ["sug_3"],
+            }
+          : { reviewed: 2, llmRejected: 0, failed: 0, needsSerp: [] };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data }));
+      return;
+    }
     if (url.pathname === "/api/v1/agent/scope") {
       const action = url.searchParams.get("action");
       const desks = url.searchParams.get("desks");
@@ -81,7 +106,12 @@ export async function startScopeApi() {
     res.end(JSON.stringify({ error: { message: `no route ${url.pathname}` } }));
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, calls, close: () => server.close() };
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    calls,
+    reviewCalls,
+    close: () => server.close(),
+  };
 }
 
 export async function startMcp() {
@@ -159,6 +189,8 @@ function textResponse(text) {
 export async function startLlm() {
   const requests = [];
   const script = [];
+  const judge = { answer: () => '{"verdict": "reviewed", "reason": "ok", "suggestion": "Do it."}' };
+  const judgeRequests = [];
   const server = http.createServer(async (req, res) => {
     let body = "";
     for await (const c of req) body += c;
@@ -166,6 +198,13 @@ export async function startLlm() {
     try {
       parsed = JSON.parse(body);
     } catch {}
+    if (parsed && systemText(parsed).includes("one JSON object")) {
+      judgeRequests.push(parsed);
+      const answer = judge.answer(JSON.stringify(parsed.messages));
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(textResponse(answer));
+      return;
+    }
     if (!parsed || !(parsed.tools ?? []).length) {
       res.writeHead(400, { "content-type": "application/json" });
       res.end(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "not a model turn" } }));
@@ -177,7 +216,14 @@ export async function startLlm() {
     res.end(next.tool ? toolUseResponse(next.tool, next.input ?? {}) : textResponse(next.text));
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  return { url: `http://127.0.0.1:${server.address().port}`, requests, script, close: () => server.close() };
+  return {
+    url: `http://127.0.0.1:${server.address().port}`,
+    requests,
+    script,
+    judge,
+    judgeRequests,
+    close: () => server.close(),
+  };
 }
 
 export function meeluTools(request) {

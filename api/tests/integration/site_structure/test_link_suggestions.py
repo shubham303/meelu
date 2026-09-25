@@ -86,7 +86,7 @@ async def prepare(client, email):
     assert r.status_code == 201, r.text
     job = r.json()["data"]
     assert job["status"] == "RUNNING"
-    assert job["reconciled"] == {"done": 0, "stale": 0}
+    assert job["reconciled"] == {"done": 0, "stale": 0, "removed": 0}
     return site, user_id, pages, chunk, job
 
 
@@ -211,27 +211,28 @@ async def test_reconcile_marks_done_and_stale(client, email):
     await seed_link(site["id"], user_id, blog, pricing)
 
     r = await client.post(f"{BASE}/jobs", json={"prompt": "Second run"})
-    assert r.json()["data"]["reconciled"] == {"done": 1, "stale": 0}
+    assert r.json()["data"]["reconciled"] == {"done": 0, "stale": 0, "removed": 1}
 
     r = await client.get(f"{BASE}/link-suggestions/{linked['id']}")
-    assert r.json()["data"]["state"] == "done"
+    assert r.status_code == 404
     r = await client.get(f"{BASE}/link-suggestions/{untouched['id']}")
     assert r.json()["data"]["state"] == "draft"
     r = await client.get(f"{BASE}/link-suggestions/{rejected['id']}")
     assert r.json()["data"]["state"] == "user_rejected"
 
+    from sqlalchemy import update
+
     from src.core.database import SessionLocal
     from src.site_pages.models.site_page import SitePage
-    from sqlalchemy import update
 
     async with SessionLocal() as db:
         await db.execute(update(SitePage).where(SitePage.id == blog).values(status=404))
         await db.commit()
 
     r = await client.post(f"{BASE}/link-suggestions/reconcile")
-    assert r.json()["data"] == {"done": 0, "stale": 1}
+    assert r.json()["data"] == {"done": 0, "stale": 0, "removed": 1}
     r = await client.get(f"{BASE}/link-suggestions/{untouched['id']}")
-    assert r.json()["data"]["state"] == "stale"
+    assert r.status_code == 404
 
 
 async def test_unlinked_mentions(client, email):
@@ -298,9 +299,10 @@ async def test_rank_scores_and_cuts_to_budget(client, email):
             {"url": f"{ORIGIN}/d", "inlinks": 30, "word_count": 0},
         ],
     )
+    from sqlalchemy import update
+
     from src.core.database import SessionLocal
     from src.site_pages.models.site_page import SitePage
-    from sqlalchemy import update
 
     async with SessionLocal() as db:
         await db.execute(update(SitePage).where(SitePage.id == blog).values(word_count=0))
@@ -382,7 +384,7 @@ async def test_hierarchy_links(client, email):
     assert r.json()["data"]["inserted"] == 0 and r.json()["data"]["skipped"] == 5
 
 
-async def test_screen_then_review(client, email, monkeypatch):
+async def test_screen_then_review(client, email, screener):
     _, _, pages, chunk, job = await prepare(client, email)
     r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, chunk))
     row = r.json()["data"]
@@ -404,50 +406,40 @@ async def test_screen_then_review(client, email, monkeypatch):
     assert r.json()["data"]["screened"] == 0
 
     r = await client.post(
-        f"{BASE}/link-suggestions/review", json={"prompt": "Related content", "jobId": job["id"]}
+        f"{BASE}/link-suggestions/review-inputs",
+        json={"prompt": "Related content", "jobId": job["id"]},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["data"]["reviewed"] == 0
-    assert "judge" in r.json()["data"]["stopped"]
-
-    from src.providers.llm_judge.adapter import JUDGE, LlmJudgeAdapter
-    from src.providers.llm_judge.service import llm_judge
-    from src.providers.registry import VendorResponse
-
-    seen = []
-
-    class FakeJudge(LlmJudgeAdapter):
-        id = "fake-judge"
-        name = "fake"
-        capabilities = frozenset({JUDGE})
-        charges = False
-
-        async def judge(self, instructions, state, schema):
-            seen.append((instructions, state, schema))
-            verdict = "ready" if "pricing" in state["target"]["url"] else "llm_rejected"
-            return VendorResponse({"model": "fake", "answer": {"verdict": verdict, "reason": "ok"}})
-
-    monkeypatch.setattr(llm_judge, "adapters", [FakeJudge()])
+    batch = r.json()["data"]
+    assert "Related content" in batch["instructions"]
+    assert batch["schema"]["properties"]["verdict"]["enum"] == ["ready", "llm_rejected"]
+    assert [item["id"] for item in batch["items"]] == [row["id"]]
+    assert "pricing" in batch["items"][0]["state"]["target"]["url"]
 
     r = await client.post(
-        f"{BASE}/link-suggestions/review", json={"prompt": "Related content", "jobId": job["id"]}
+        f"{BASE}/link-suggestions/verdicts",
+        json={"verdicts": [{"id": row["id"], "verdict": "ready"}]},
     )
-    assert r.json()["data"] == {
-        "reviewed": 1,
-        "ready": 1,
-        "llmRejected": 0,
-        "failed": 0,
-        "stopped": None,
-    }
-    assert "Related content" in seen[0][0]
-    assert seen[0][2]["properties"]["verdict"]["enum"] == ["ready", "llm_rejected"]
+    assert r.json()["data"] == {"reviewed": 1, "ready": 1, "llmRejected": 0, "failed": 0}
     r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
     assert r.json()["data"]["state"] == "ready"
 
     r = await client.post(
-        f"{BASE}/link-suggestions/review", json={"prompt": "Related content", "jobId": job["id"]}
+        f"{BASE}/link-suggestions/review-inputs",
+        json={"prompt": "Related content", "jobId": job["id"]},
     )
-    assert r.json()["data"]["reviewed"] == 0
+    assert r.json()["data"]["items"] == []
 
-    r = await client.post(f"{BASE}/link-suggestions/review", json={"prompt": " "})
+    r = await client.post(
+        f"{BASE}/link-suggestions/verdicts",
+        json={
+            "verdicts": [
+                {"id": row["id"], "verdict": "sideways"},
+                {"id": "nope", "verdict": "ready"},
+            ]
+        },
+    )
+    assert r.json()["data"]["failed"] == 2
+
+    r = await client.post(f"{BASE}/link-suggestions/review-inputs", json={"prompt": " "})
     assert r.status_code == 400

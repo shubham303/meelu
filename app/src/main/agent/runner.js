@@ -4,6 +4,7 @@ import path from "node:path";
 import { createSdkMcpServer, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { PROVIDERS_SERVER, providersMcpServer } from "../providers/index.js";
+import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
 import { ENV_DEFAULTS, LLAMACPP_BASE_URL, OPENROUTER_BASE_URL, meeluAuthHeaders } from "../config.js";
 import { serverLimits } from "../integrations/llm/llamacpp.js";
 import { modelLimits } from "../integrations/llm/openrouter.js";
@@ -106,8 +107,8 @@ Run in this order:
    clear noes. Pass a question only when the strategy needs a different bar
    than "would a reader of the source want the target next".
 5. review_link_suggestions with the job_id and the user's strategy as the
-   prompt. A stronger model reads every remaining draft one by one and is the
-   only step that marks a row ready. Do not judge rows yourself; do not skip
+   prompt. It reads every remaining draft one by one on your own model, off
+   your context, and is the only step that marks a row ready. Do not judge rows yourself; do not skip
    this step; do not paraphrase the strategy — pass it as the user wrote it,
    plus any sharpening the strategy itself asked for.
 6. rank_link_suggestions. It scores every open row on the site and cuts each
@@ -477,6 +478,31 @@ export function llmEnv(gateway, anthropicKey, limits) {
   };
 }
 
+function oneShotJudge({ model, gateway, anthropicKey, limits, cwd }) {
+  return async (prompt) => {
+    const q = query({
+      prompt,
+      options: {
+        model,
+        cwd,
+        systemPrompt: "You answer with one JSON object and nothing else.",
+        mcpServers: {},
+        tools: [],
+        allowedTools: [],
+        settingSources: [],
+        permissionMode: "default",
+        maxTurns: 1,
+        env: llmEnv(gateway, anthropicKey, limits),
+      },
+    });
+    let text = "";
+    for await (const m of q) {
+      if (m.type === "result" && typeof m.result === "string") text = m.result;
+    }
+    return text;
+  };
+}
+
 const IDLE_CLOSE_MS = 15 * 60 * 1000;
 const SESSIONS = new Map();
 
@@ -622,6 +648,13 @@ async function buildConfig(session) {
         ? await serverLimits(gateway.baseUrl, gateway.apiKey)
         : null;
 
+  const reviewServer = reviewMcpServer(readOnly ? [] : (scope.localTools ?? []), {
+    cookieHeader,
+    siteId,
+    judge: oneShotJudge({ model, gateway, anthropicKey, limits, cwd: session.options.cwd }),
+  });
+  const reviewTools = reviewServer ? reviewServer.allowed : new Set();
+
   const withWeb = webAllowed(scope);
   const agents = {
     reader: readerAgent(readTools, siteId, withWeb),
@@ -640,8 +673,10 @@ async function buildConfig(session) {
   const canUseTool = async (toolName, input) => {
     const server = extraNames.find((n) => toolName.startsWith(`mcp__${n}__`));
     const providerTool = toolName.startsWith(`mcp__${PROVIDERS_SERVER}__`);
+    const reviewTool = toolName.startsWith(`mcp__${REVIEW_SERVER}__`);
     const inScope =
       toolName.startsWith("mcp__meelu__") ||
+      reviewTool ||
       (addDeskServer && toolName === "mcp__desks__add_desk") ||
       server !== undefined ||
       providerTool ||
@@ -691,14 +726,21 @@ async function buildConfig(session) {
       };
     }
 
+    if (reviewTool && !reviewTools.has(short)) {
+      return {
+        behavior: "deny",
+        message: `${short} is not a review tool this task registered. Do not try it again.`,
+      };
+    }
+
     const askPermission = session.turn?.askPermission;
-    if (!askPermission || (!liveWrites.includes(short) && !providerTool)) {
+    if (!askPermission || (!liveWrites.includes(short) && !providerTool && !reviewTool)) {
       return { behavior: "allow", updatedInput: input };
     }
 
     const silent = session.access.silentWrites ?? new Set();
     const jobId = typeof input?.job_id === "string" ? input.job_id : null;
-    if (!providerTool && silent.has(short) && jobId && session.approvedJobs.has(jobId)) {
+    if (!providerTool && jobId && session.approvedJobs.has(jobId) && (reviewTool || silent.has(short))) {
       return { behavior: "allow", updatedInput: input };
     }
 
@@ -742,6 +784,7 @@ async function buildConfig(session) {
       },
       ...extraServers,
       ...(providerServer ? { [PROVIDERS_SERVER]: providerServer.server } : {}),
+      ...(reviewServer ? { [REVIEW_SERVER]: reviewServer.server } : {}),
       ...(addDeskServer ? { desks: addDeskServer } : {}),
     },
     agents,
@@ -752,6 +795,7 @@ async function buildConfig(session) {
       writes,
       servers: extraNames,
       providerTools: [...providerTools],
+    reviewTools: [...reviewTools],
       notices: serverNotices,
     },
   };
@@ -976,6 +1020,11 @@ class LiveSession {
 export async function runAgentTurn(payload, emit, options) {
   const { sessionId } = payload;
   let session = sessionId ? SESSIONS.get(sessionId) : null;
+  if (session && (session.siteId ?? null) !== (payload.siteId ?? null)) {
+    throw new Error(
+      "This task is pinned to another website. Start a new task on the website you are on.",
+    );
+  }
   if (!session) {
     session = new LiveSession(payload, options);
     session.sessionId = sessionId ?? null;

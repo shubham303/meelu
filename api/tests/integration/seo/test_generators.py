@@ -170,7 +170,7 @@ async def test_cannibalisation_pairs(client, email):
     assert len(r.json()["data"]["collided"]) == 2
 
 
-async def test_screen_review_rank(client, email, monkeypatch):
+async def test_screen_review_rank(client, email, screener, monkeypatch):
     site, _, pages, job = await prepare(client, email)
     await client.post(
         f"{BASE}/page-suggestions/propose-cannibalisation",
@@ -207,49 +207,40 @@ async def test_screen_review_rank(client, email, monkeypatch):
     r = await client.post(f"{BASE}/page-suggestions/screen", json={"jobId": job["id"]})
     assert r.json()["data"]["screened"] == 4, r.json()
 
-    from src.providers.llm_judge.adapter import JUDGE, LlmJudgeAdapter
-    from src.providers.llm_judge.service import llm_judge
-    from src.providers.registry import VendorResponse
-
-    seen = []
-
-    class FakeJudge(LlmJudgeAdapter):
-        id = "fake-judge"
-        name = "fake"
-        capabilities = frozenset({JUDGE})
-        charges = False
-
-        async def judge(self, instructions, state, schema):
-            seen.append(state)
-            verdict = (
-                "llm_rejected"
-                if state["action"] == "edit" and "questions" in state["strategies"]
-                else "reviewed"
-            )
-            return VendorResponse(
-                {
-                    "model": "fake",
-                    "answer": {
-                        "verdict": verdict,
-                        "reason": "ok",
-                        "suggestion": "Rewritten brief.",
-                    },
-                }
-            )
-
-    monkeypatch.setattr(llm_judge, "adapters", [FakeJudge()])
     r = await client.post(
-        f"{BASE}/page-suggestions/review", json={"jobId": job["id"], "prompt": "Highest return"}
+        f"{BASE}/page-suggestions/review-inputs",
+        json={"jobId": job["id"], "prompt": "Highest return"},
     )
-    body = r.json()["data"]
-    assert body["reviewed"] == 1 and body["llmRejected"] == 1
-    assert len(body["needsSerp"]) == 1
-    assert len(seen) == 2
+    batch = r.json()["data"]
+    assert len(batch["needsSerp"]) == 1
+    states = [item["state"] for item in batch["items"]]
+    assert len(states) == 2
     pair_state = next(
-        s for s in seen if s["action"] == "edit" and "cannibalisation" in s["strategies"]
+        st for st in states if st["action"] == "edit" and "cannibalisation" in st["strategies"]
     )
     assert pair_state["pair"]["action"] == "delete"
     assert pair_state["page"]["title"] == "Grinder guide"
+
+    r = await client.post(
+        f"{BASE}/page-suggestions/verdicts",
+        json={
+            "verdicts": [
+                {
+                    "id": item["id"],
+                    "verdict": (
+                        "llm_rejected"
+                        if item["state"]["action"] == "edit"
+                        and "questions" in item["state"]["strategies"]
+                        else "reviewed"
+                    ),
+                    "suggestion": "Rewritten brief.",
+                }
+                for item in batch["items"]
+            ]
+        },
+    )
+    body = r.json()["data"]
+    assert body["reviewed"] == 1 and body["llmRejected"] == 1
 
     r = await client.post(
         f"{BASE}/page-suggestions/rank", json={"jobId": job["id"], "budgetDelete": 1}

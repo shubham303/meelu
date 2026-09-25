@@ -29,6 +29,7 @@ class AgentScope:
     limits: dict[str, Any] = field(default_factory=dict)
     save_attachments: bool = False
     providers: list[str] = field(default_factory=list)
+    local_tools: list[str] = field(default_factory=list)
     silent_writes: list[Tool] = field(default_factory=list)
 
     @property

@@ -4,6 +4,7 @@ from src.providers.json_data_extractor.adapter import Question, choice
 from src.site_pages.schemas.llm_extraction import PAGE_TYPES
 
 MAX_BODY_CHARS = 8000
+MIN_CONFIDENCE = 0.7
 
 PAGE_TYPE_GUIDE = {
     "money": "anything the owner wants users to land on and act on: a product, service, tool, pricing, signup, booking or location page, and the home or landing page",
@@ -35,4 +36,6 @@ def page_state(url: str, title: str | None, meta_description: str | None, body: 
 
 def read_answers(answers: dict[str, Any]) -> dict[str, Any]:
     page_type = answers["page_type"]
-    return {"page_type": page_type["choice"], "confidence": page_type.get("confidence")}
+    confidence = page_type.get("confidence")
+    settled = confidence is not None and confidence >= MIN_CONFIDENCE
+    return {"page_type": page_type["choice"] if settled else None, "confidence": confidence}

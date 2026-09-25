@@ -326,7 +326,28 @@ class ReviewResult(EntityModel):
     llm_rejected: int = 0
     failed: int = 0
     needs_serp: list[str] = Field(default_factory=list)
-    stopped: str | None = None
+
+
+class ReviewItem(EntityModel):
+    id: str
+    state: dict[str, Any]
+
+
+class ReviewBatch(EntityModel):
+    instructions: str
+    schema_: dict[str, Any] = Field(alias="schema")
+    items: list[ReviewItem]
+    needs_serp: list[str] = Field(default_factory=list)
+
+
+class Verdict(RequestModel):
+    id: str
+    verdict: str
+    suggestion: str | None = None
+
+
+class VerdictRequest(RequestModel):
+    verdicts: list[Verdict] = Field(default_factory=list)
 
 
 class RankResult(EntityModel):
@@ -368,7 +389,7 @@ class ScreenRequest(RequestModel):
     limit: int = 200
 
 
-class ReviewRequest(RequestModel):
+class ReviewInputsRequest(RequestModel):
     job_id: str
     prompt: str = Field(default="", validate_default=True)
     ids: list[str] | None = None

@@ -134,3 +134,48 @@ test("silent writes of an approved job skip the permission prompt", async () => 
   assert.equal(res.done.ok, true, res.done.error);
   assert.deepEqual(asked, ["start_seo_job", "screen_page_suggestions", "rank_page_suggestions"]);
 });
+
+test("the local review tool judges every suggestion and returns counts, not rows", async () => {
+  llm.script.push(
+    {
+      tool: "mcp__review__review_page_suggestions",
+      input: { job_id: "sjob_9", prompt: "Highest return" },
+    },
+    { text: "done" },
+  );
+  llm.judge.answer = (text) =>
+    text.includes("cold brew")
+      ? '```json\n{"verdict": "llm_rejected", "reason": "too thin", "suggestion": ""}\n```'
+      : '{"verdict": "reviewed", "reason": "worth it", "suggestion": "Rewrite the intro."}';
+  const before = llm.judgeRequests.length;
+  const res = await turn("review the drafts", undefined, { action: "ask-seo" });
+  assert.equal(res.done.ok, true, res.done.error);
+
+  assert.equal(llm.judgeRequests.length - before, 2, "one model call per suggestion");
+  const steps = scopeApi.reviewCalls.map((c) => c.step);
+  assert.deepEqual(steps, ["review-inputs", "verdicts"]);
+  assert.equal(scopeApi.reviewCalls[0].body.jobId, "sjob_9");
+  assert.equal(scopeApi.reviewCalls[0].body.prompt, "Highest return");
+  assert.deepEqual(scopeApi.reviewCalls[1].body.verdicts, [
+    { id: "sug_1", verdict: "reviewed", suggestion: "Rewrite the intro." },
+    { id: "sug_2", verdict: "llm_rejected", suggestion: "" },
+  ]);
+
+  const toolResult = JSON.stringify(llm.requests.at(-1).messages);
+  assert.ok(!toolResult.includes("cold brew"), "no suggestion data reaches the main model");
+  assert.ok(toolResult.includes("worth it"), "sample reasons come back");
+});
+
+test("a live session refuses a turn sent for another website", async () => {
+  llm.script.push({ text: "pinned" });
+  const first = await turn("turn one");
+  await assert.rejects(
+    () =>
+      runner.runAgentTurn(
+        { action: "ask-pages", siteId: "site_other", message: "again", sessionId: first.sessionId, form: {} },
+        () => {},
+        { cwd, abortController: new AbortController(), askPermission: async () => "allow" },
+      ),
+    /pinned to another website/,
+  );
+});

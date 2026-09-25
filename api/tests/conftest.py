@@ -90,3 +90,36 @@ async def signup(client, email, password="secret123", name="Test User"):
     r = await client.post("/api/auth/login", json={"email": email, "password": password})
     assert r.status_code == 204, r.text
     return r
+
+
+@pytest.fixture
+def screener(monkeypatch):
+    from src.providers.json_data_extractor.adapter import DECIDE, JsonDataExtractorAdapter
+    from src.providers.json_data_extractor.service import json_data_extractor
+    from src.providers.registry import VendorResponse
+
+    class YesScreener(JsonDataExtractorAdapter):
+        id = "fake-screener"
+        name = "Fake screener"
+        capabilities = frozenset({DECIDE})
+        charges = False
+
+        async def decide(self, state, questions):
+            return VendorResponse(
+                {
+                    "model": "fake",
+                    "answers": {
+                        key: {
+                            "type": "choice",
+                            "choice": "yes",
+                            "probabilities": {"yes": 0.9, "no": 0.1},
+                            "confidence": 0.9,
+                        }
+                        for key in questions
+                    },
+                }
+            )
+
+    fake = YesScreener()
+    monkeypatch.setattr(json_data_extractor, "adapters", [fake])
+    return fake
