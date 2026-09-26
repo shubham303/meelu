@@ -1,466 +1,227 @@
-from datetime import UTC, datetime
-
-from tests.conftest import signup
-from tests.integration.technical_seo.conftest import seed_pages, user_id_of
+from tests.integration.site_structure.helpers import (
+    BASE,
+    drop_links,
+    prepare_site,
+    seed_chunk,
+    seed_link,
+    set_page,
+)
+from tests.integration.technical_seo.conftest import seed_pages
 
 ORIGIN = "https://links.example.com"
 
-BASE = "/api/v1/site/structure"
-
-
-async def seed_chunk(site_id, user_id, page_id, ordinal, heading, text=None) -> str:
-    from src.core.database import SessionLocal
-    from src.core.ids import uid
-    from src.site_pages.models.site_chunk import SiteChunk
-
-    async with SessionLocal() as db:
-        now = datetime.now(UTC)
-        row = SiteChunk(
-            id=uid("chn"),
-            user_id=user_id,
-            site_id=site_id,
-            page_id=page_id,
-            ordinal=ordinal,
-            heading_path=heading,
-            text=text or f"Chunk {ordinal} of {page_id}",
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(row)
-        await db.commit()
-        return row.id
-
-
-async def seed_link(site_id, user_id, src, dst, region="body") -> None:
-    from sqlalchemy import select
-
-    from src.core.database import SessionLocal
-    from src.core.ids import uid
-    from src.site_pages.models.site_page import SitePage
-    from src.site_pages.models.site_page_link import SitePageLink
-
-    async with SessionLocal() as db:
-        now = datetime.now(UTC)
-        dst_url = (await db.execute(select(SitePage.url).where(SitePage.id == dst))).scalar_one()
-        db.add(
-            SitePageLink(
-                id=uid("lnk"),
-                user_id=user_id,
-                site_id=site_id,
-                src_page_id=src,
-                dst_page_id=dst,
-                dst_url=dst_url,
-                external=False,
-                region=region,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-        await db.commit()
+PAGES = [
+    {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 40},
+    {"url": f"{ORIGIN}/blog/how-to", "page_type": "informational", "depth": 2, "inlinks": 5},
+    {"url": f"{ORIGIN}/pricing", "page_type": "money", "depth": 1, "inlinks": 1},
+    {"url": f"{ORIGIN}/features", "page_type": "money", "depth": 1, "inlinks": 2},
+]
 
 
 async def prepare(client, email):
-    await signup(client, email)
-    user_id = await user_id_of(email)
-    r = await client.post("/api/v1/sites", json={"domain": "links.example.com", "name": "Links"})
-    assert r.status_code == 201, r.text
-    site = r.json()["data"]
-    pages = await seed_pages(
-        site["id"],
-        user_id,
-        [
-            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 40},
-            {
-                "url": f"{ORIGIN}/blog/how-to",
-                "page_type": "informational",
-                "depth": 2,
-                "inlinks": 5,
-            },
-            {"url": f"{ORIGIN}/pricing", "page_type": "money", "depth": 1, "inlinks": 1},
-        ],
-    )
-    chunk = await seed_chunk(
-        site["id"], user_id, pages[f"{ORIGIN}/blog/how-to"], 2, "Pricing tiers"
-    )
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "Related content"})
-    assert r.status_code == 201, r.text
-    job = r.json()["data"]
-    assert job["status"] == "RUNNING"
-    assert job["reconciled"] == {"done": 0, "stale": 0, "removed": 0}
-    return site, user_id, pages, chunk, job
+    site, user_id, pages, job = await prepare_site(client, email, "links.example.com", PAGES)
+    blog = pages[f"{ORIGIN}/blog/how-to"]
+    chunks = [await seed_chunk(site["id"], user_id, blog, i, f"Section {i}") for i in (1, 2)]
+    return site, user_id, pages, chunks, job
 
 
-def suggestion(job, chunk=None, **extra):
-    body = {
+def body(job, **extra):
+    return {
         "jobId": job["id"],
         "fromUrl": f"{ORIGIN}/blog/how-to",
         "toUrl": f"{ORIGIN}/pricing",
-        "suggestion": "The how-to article ranks well and never links to pricing.",
+        "suggestion": "The how-to article never links to pricing.",
+        **extra,
     }
-    if chunk:
-        body["fromChunkId"] = chunk
-    return {**body, **extra}
-
-
-async def test_jobs(client, email):
-    _, _, _, _, job = await prepare(client, email)
-
-    r = await client.get(f"{BASE}/jobs/{job['id']}")
-    assert r.status_code == 200
-    assert r.json()["data"]["prompt"] == "Related content"
-
-    r = await client.get(f"{BASE}/jobs")
-    assert r.json()["pagination"]["total"] == 1
-
-    r = await client.patch(f"{BASE}/jobs/{job['id']}", json={"status": "completed"})
-    assert r.status_code == 200, r.text
-    assert r.json()["data"]["status"] == "COMPLETED"
-
-    r = await client.patch(f"{BASE}/jobs/{job['id']}", json={"status": "later"})
-    assert r.status_code == 400
-
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "  "})
-    assert r.status_code == 400
 
 
 async def test_create_get_update_delete(client, email):
-    site, user_id, pages, chunk, job = await prepare(client, email)
+    _, _, pages, chunks, job = await prepare(client, email)
+    blog, pricing = pages[f"{ORIGIN}/blog/how-to"], pages[f"{ORIGIN}/pricing"]
 
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, chunk))
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[0]))
     assert r.status_code == 201, r.text
     row = r.json()["data"]
-    assert row["siteId"] == site["id"]
-    assert row["jobId"] == job["id"]
-    assert row["fromPageId"] == pages[f"{ORIGIN}/blog/how-to"]
-    assert row["toPageId"] == pages[f"{ORIGIN}/pricing"]
-    assert row["fromChunkId"] == chunk
-    assert row["fromChunkHeading"] == "Pricing tiers"
-    assert row["action"] == "create"
     assert row["state"] == "draft"
-    assert row.get("score") is None
-    assert "userId" not in row
+    assert (row["fromPageId"], row["toPageId"]) == (blog, pricing)
+    assert row["fromUrl"] == f"{ORIGIN}/blog/how-to"
+    assert row["toUrl"] == f"{ORIGIN}/pricing"
+    assert row["fromChunkHeading"] == "Section 1"
+    assert row["fromChunkOrdinal"] == 1
 
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job))
-    assert r.status_code == 409
+    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
+    assert r.json()["data"]["id"] == row["id"]
 
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, action="delete"))
-    assert r.status_code == 400
-    home = pages[f"{ORIGIN}/"]
-    await seed_link(site["id"], user_id, home, pages[f"{ORIGIN}/pricing"])
-    r = await client.post(
-        f"{BASE}/link-suggestions", json=suggestion(job, fromPageId=home, action="delete")
+    r = await client.patch(
+        f"{BASE}/link-suggestions/{row['id']}",
+        json={"state": "user_rejected", "suggestion": "Not now."},
     )
-    assert r.status_code == 201, r.text
-    r = await client.post(
-        f"{BASE}/link-suggestions", json=suggestion(job, fromPageId=home, action="create")
-    )
-    assert r.status_code == 409
-
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, jobId="sjb_nope"))
-    assert r.status_code == 404
-
-    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "user_rejected"})
     assert r.status_code == 200, r.text
     assert r.json()["data"]["state"] == "user_rejected"
+    assert r.json()["data"]["suggestion"] == "Not now."
 
-    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "later"})
+    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "ready"})
+    assert r.status_code == 400
+    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={})
+    assert r.status_code == 400
+    r = await client.patch(f"{BASE}/link-suggestions/lks_missing", json={"state": "draft"})
+    assert r.status_code == 404
+
+    r = await client.delete(f"{BASE}/link-suggestions/{row['id']}")
+    assert r.json()["data"] == {"id": row["id"], "deleted": True}
+    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
+    assert r.status_code == 404
+    r = await client.delete(f"{BASE}/link-suggestions/{row['id']}")
+    assert r.status_code == 404
+
+
+async def test_create_validates_pages_chunks_and_links(client, email):
+    site, user_id, pages, chunks, job = await prepare(client, email)
+    blog, pricing, home = (pages[f"{ORIGIN}/{p}"] for p in ("blog/how-to", "pricing", ""))
+    other_chunk = await seed_chunk(site["id"], user_id, pricing, 1, "Elsewhere")
+
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, toUrl=f"{ORIGIN}/blog/how-to"))
+    assert r.status_code == 400
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, toUrl=f"{ORIGIN}/nowhere"))
+    assert r.status_code == 404
+    r = await client.post(
+        f"{BASE}/link-suggestions", json=body(job, toUrl=None, toPageId="spg_missing")
+    )
+    assert r.status_code == 404
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, jobId="sjb_missing"))
+    assert r.status_code == 404
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=other_chunk))
+    assert r.status_code == 400
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId="chn_missing"))
+    assert r.status_code == 404
+
+    await set_page(pricing, status=404)
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job))
+    assert r.status_code == 400
+    await set_page(pricing, status=200)
+
+    await seed_link(site["id"], user_id, blog, pricing)
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job))
+    assert r.status_code == 409
+    r = await client.post(
+        f"{BASE}/link-suggestions",
+        json=body(job, toUrl=f"{ORIGIN}/", action="delete"),
+    )
+    assert r.status_code == 400
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, action="delete"))
+    assert r.status_code == 201, r.text
+    assert home
+
+
+async def test_duplicates_follow_the_chunk_rule(client, email):
+    _, _, _, chunks, job = await prepare(client, email)
+    first = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[0]))
+    assert first.status_code == 201, first.text
+
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[0]))
+    assert r.status_code == 409
+    assert first.json()["data"]["id"] in r.json()["error"]["message"]
+
+    second = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[1]))
+    assert second.status_code == 201, second.text
+
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job))
+    assert r.status_code == 409
+
+    r = await client.patch(
+        f"{BASE}/link-suggestions/{second.json()['data']['id']}", json={"fromChunkId": chunks[0]}
+    )
+    assert r.status_code == 409
+    r = await client.patch(
+        f"{BASE}/link-suggestions/{second.json()['data']['id']}", json={"fromChunkId": None}
+    )
+    assert r.status_code == 409
+
+    r = await client.delete(f"{BASE}/link-suggestions/{first.json()['data']['id']}")
+    r = await client.patch(
+        f"{BASE}/link-suggestions/{second.json()['data']['id']}", json={"fromChunkId": None}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"].get("fromChunkId") is None
+
+
+async def test_rejected_rows_block_the_same_suggestion(client, email):
+    _, _, _, chunks, job = await prepare(client, email)
+    row = (
+        await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[0]))
+    ).json()["data"]
+    await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "user_rejected"})
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[0]))
+    assert r.status_code == 409
+    r = await client.post(f"{BASE}/link-suggestions", json=body(job, fromChunkId=chunks[1]))
+    assert r.status_code == 201
+
+
+async def test_list_states_filters_and_summary(client, email):
+    _, _, pages, chunks, job = await prepare(client, email)
+    made = {}
+    for state, target in (
+        ("draft", "pricing"),
+        ("review_approved", "features"),
+        ("user_rejected", ""),
+    ):
+        r = await client.post(
+            f"{BASE}/link-suggestions",
+            json=body(job, toUrl=f"{ORIGIN}/{target}", state=state),
+        )
+        assert r.status_code == 201, r.text
+        made[state] = r.json()["data"]["id"]
+
+    async def ids(**params):
+        r = await client.get(f"{BASE}/link-suggestions", params=params)
+        assert r.status_code == 200, r.text
+        return {row["id"] for row in r.json()["data"]}
+
+    assert await ids() == {made["review_approved"], made["user_rejected"]}
+    assert await ids(state="any") == set(made.values())
+    assert await ids(state="draft") == {made["draft"]}
+    assert await ids(state=["draft", "user_rejected"]) == {made["draft"], made["user_rejected"]}
+    r = await client.get(f"{BASE}/link-suggestions", params={"state": "ready"})
     assert r.status_code == 400
 
-    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={})
+    assert await ids(state="any", url="/pricing") == {made["draft"]}
+    assert await ids(state="any", url="how-to") == set(made.values())
+    assert await ids(state="any", toUrl="features") == {made["review_approved"]}
+    assert await ids(state="any", fromUrl="features") == set()
+    assert await ids(state="any", pageId=pages[f"{ORIGIN}/features"]) == {made["review_approved"]}
+    assert await ids(state="any", jobId=job["id"], action="create") == set(made.values())
+    r = await client.get(f"{BASE}/link-suggestions", params={"action": "edit"})
     assert r.status_code == 400
 
     r = await client.get(f"{BASE}/link-suggestions/summary")
     assert r.json()["data"] == {
         "draft": 1,
-        "ready": 0,
-        "llmRejected": 0,
+        "screeningRejected": 0,
+        "screeningApproved": 0,
+        "reviewApproved": 1,
+        "reviewRejected": 0,
         "userRejected": 1,
-        "done": 0,
-        "stale": 0,
     }
-
-    r = await client.get(f"{BASE}/link-suggestions", params={"state": "any", "jobId": job["id"]})
-    assert r.json()["pagination"]["total"] == 2
-
-    r = await client.delete(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.json()["data"] == {"id": row["id"], "deleted": True}
-    r = await client.delete(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.status_code == 404
-
-
-async def test_reconcile_marks_done_and_stale(client, email):
-    site, user_id, pages, chunk, job = await prepare(client, email)
-    home, blog, pricing = (
-        pages[f"{ORIGIN}/"],
-        pages[f"{ORIGIN}/blog/how-to"],
-        pages[f"{ORIGIN}/pricing"],
-    )
-
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, chunk))
-    linked = r.json()["data"]
-    r = await client.post(
-        f"{BASE}/link-suggestions", json=suggestion(job, fromPageId=home, toPageId=blog)
-    )
-    untouched = r.json()["data"]
-    r = await client.post(
-        f"{BASE}/link-suggestions",
-        json=suggestion(job, fromPageId=pricing, toPageId=home, state="user_rejected"),
-    )
-    rejected = r.json()["data"]
-
-    await seed_link(site["id"], user_id, blog, pricing)
-
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "Second run"})
-    assert r.json()["data"]["reconciled"] == {"done": 0, "stale": 0, "removed": 1}
-
-    r = await client.get(f"{BASE}/link-suggestions/{linked['id']}")
-    assert r.status_code == 404
-    r = await client.get(f"{BASE}/link-suggestions/{untouched['id']}")
-    assert r.json()["data"]["state"] == "draft"
-    r = await client.get(f"{BASE}/link-suggestions/{rejected['id']}")
-    assert r.json()["data"]["state"] == "user_rejected"
-
-    from sqlalchemy import update
-
-    from src.core.database import SessionLocal
-    from src.site_pages.models.site_page import SitePage
-
-    async with SessionLocal() as db:
-        await db.execute(update(SitePage).where(SitePage.id == blog).values(status=404))
-        await db.commit()
-
-    r = await client.post(f"{BASE}/link-suggestions/reconcile")
-    assert r.json()["data"] == {"done": 0, "stale": 0, "removed": 1}
-    r = await client.get(f"{BASE}/link-suggestions/{untouched['id']}")
-    assert r.status_code == 404
-
-
-async def test_unlinked_mentions(client, email):
-    site, user_id, pages, _, job = await prepare(client, email)
-    home, blog, pricing = (
-        pages[f"{ORIGIN}/"],
-        pages[f"{ORIGIN}/blog/how-to"],
-        pages[f"{ORIGIN}/pricing"],
-    )
-    await seed_chunk(site["id"], user_id, home, 1, "Intro", "Compare our Pricing Plans today.")
-    await seed_chunk(site["id"], user_id, blog, 1, "Costs", "See the pricing plans before you buy.")
-    await seed_chunk(site["id"], user_id, blog, 3, "More", "pricing plans again on the same page")
-    await seed_chunk(site["id"], user_id, pricing, 1, "Self", "pricing plans on the target itself")
-    await seed_link(site["id"], user_id, home, pricing)
-
-    body = {"jobId": job["id"], "toIds": [pricing], "phrases": ["pricing plans"]}
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json=body)
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"inserted": 1, "skipped": 0, "targetsWithoutMatch": []}
-
-    r = await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})
-    rows = r.json()["data"]
-    assert len(rows) == 1
-    assert rows[0]["fromPageId"] == blog
-    assert rows[0]["fromChunkOrdinal"] == 1
-    assert "pricing plans" in rows[0]["suggestion"]
-
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json=body)
-    assert r.json()["data"] == {"inserted": 0, "skipped": 1, "targetsWithoutMatch": []}
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/mentions",
-        json={"jobId": job["id"], "toIds": [home], "phrases": ["nothing says this"]},
-    )
-    assert r.json()["data"]["targetsWithoutMatch"] == [home]
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/mentions",
-        json={"jobId": job["id"], "toIds": ["pg_missing"], "phrases": ["x"]},
-    )
-    assert r.status_code == 404
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/mentions",
-        json={"jobId": job["id"], "toIds": [], "phrases": ["x"]},
-    )
-    assert r.status_code == 400
-
-
-async def test_rank_scores_and_cuts_to_budget(client, email):
-    site, user_id, pages, _, job = await prepare(client, email)
-    blog = pages[f"{ORIGIN}/blog/how-to"]
-    extra = await seed_pages(
-        site["id"],
-        user_id,
-        [
-            {"url": f"{ORIGIN}/a", "inlinks": 0, "word_count": 0},
-            {"url": f"{ORIGIN}/b", "inlinks": 0, "word_count": 0},
-            {"url": f"{ORIGIN}/c", "inlinks": 0, "word_count": 0},
-            {"url": f"{ORIGIN}/d", "inlinks": 30, "word_count": 0},
-        ],
-    )
-    from sqlalchemy import update
-
-    from src.core.database import SessionLocal
-    from src.site_pages.models.site_page import SitePage
-
-    async with SessionLocal() as db:
-        await db.execute(update(SitePage).where(SitePage.id == blog).values(word_count=0))
-        await db.commit()
-
-    made = {}
-    for name, score in (("a", 0.9), ("b", 0.9), ("c", 0.9), ("d", 0.95)):
-        r = await client.post(
-            f"{BASE}/link-suggestions",
-            json=suggestion(
-                job, toPageId=extra[f"{ORIGIN}/{name}"], searchScore=score, state="ready"
-            ),
-        )
-        assert r.status_code == 201, r.text
-        made[name] = r.json()["data"]["id"]
-
-    r = await client.post(f"{BASE}/link-suggestions/rank", json={})
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"scored": 4, "kept": 3, "llmRejected": 1}
-
-    r = await client.get(f"{BASE}/link-suggestions", params={"state": "any", "jobId": job["id"]})
-    rows = {row["id"]: row for row in r.json()["data"]}
-    assert all(0.0 <= row["score"] <= 1.0 for row in rows.values())
-    assert rows[made["d"]]["state"] == "llm_rejected"
-    assert {rows[made[k]]["state"] for k in "abc"} == {"ready"}
-    scores = [row["score"] for row in r.json()["data"]]
-    assert scores == sorted(scores, reverse=True)
-
-    r = await client.post(f"{BASE}/link-suggestions/rank", json={"maxPerTarget": 0})
-    assert r.status_code == 400
-
-
-async def test_hierarchy_links(client, email):
-    site, user_id, pages, _, job = await prepare(client, email)
-    home = pages[f"{ORIGIN}/"]
-    extra = await seed_pages(
-        site["id"], user_id, [{"url": f"{ORIGIN}/blog"}, {"url": f"{ORIGIN}/blog/guides"}]
-    )
-    blog, guides = extra[f"{ORIGIN}/blog"], extra[f"{ORIGIN}/blog/guides"]
-
-    from datetime import UTC, datetime
-
-    from src.core.database import SessionLocal
-    from src.core.ids import uid
-    from src.site_pages.models.site_page_llm_extraction import (
-        SitePageLlmExtraction,
-    )
-
-    async with SessionLocal() as db:
-        now = datetime.now(UTC)
-        for pid in (blog, guides):
-            db.add(
-                SitePageLlmExtraction(
-                    id=uid("ext"),
-                    user_id=user_id,
-                    site_id=site["id"],
-                    page_id=pid,
-                    page_type="hub",
-                    extracted_from_hash="h",
-                    extracted_at=now,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-        await db.commit()
-    await seed_link(site["id"], user_id, home, blog, region="nav")
-
-    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"inserted": 5, "skipped": 0, "homeFound": True, "hubs": 2}
-
-    r = await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})
-    edges = {(row["fromPageId"], row["toPageId"]) for row in r.json()["data"]}
-    assert (home, blog) not in edges
-    assert edges == {(blog, home), (home, guides), (guides, home), (blog, guides), (guides, blog)}
-    assert all(row.get("searchScore") is None for row in r.json()["data"])
-
-    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
-    assert r.json()["data"]["inserted"] == 0 and r.json()["data"]["skipped"] == 5
-
-
-async def test_screen_then_review(client, email, screener):
-    _, _, pages, chunk, job = await prepare(client, email)
-    r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job, chunk))
-    row = r.json()["data"]
-
-    r = await client.post(f"{BASE}/link-suggestions/screen", json={"jobId": job["id"]})
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {
-        "screened": 1,
-        "passed": 1,
-        "llmRejected": 0,
-        "failed": 0,
-    }
-    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "draft"
-    assert r.json()["data"]["confidence"] == 0.9
-
-    r = await client.post(f"{BASE}/link-suggestions/screen", json={"jobId": job["id"]})
-    assert r.json()["data"]["screened"] == 0
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/review-inputs",
-        json={"prompt": "Related content", "jobId": job["id"]},
-    )
-    assert r.status_code == 200, r.text
-    batch = r.json()["data"]
-    assert "Related content" in batch["instructions"]
-    assert batch["schema"]["properties"]["verdict"]["enum"] == ["ready", "llm_rejected"]
-    assert [item["id"] for item in batch["items"]] == [row["id"]]
-    assert "pricing" in batch["items"][0]["state"]["target"]["url"]
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/verdicts",
-        json={"verdicts": [{"id": row["id"], "verdict": "ready"}]},
-    )
-    assert r.json()["data"] == {"reviewed": 1, "ready": 1, "llmRejected": 0, "failed": 0}
-    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "ready"
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/review-inputs",
-        json={"prompt": "Related content", "jobId": job["id"]},
-    )
-    assert r.json()["data"]["items"] == []
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/verdicts",
-        json={
-            "verdicts": [
-                {"id": row["id"], "verdict": "sideways"},
-                {"id": "nope", "verdict": "ready"},
-            ]
-        },
-    )
-    assert r.json()["data"]["failed"] == 2
-
-    r = await client.post(f"{BASE}/link-suggestions/review-inputs", json={"prompt": " "})
-    assert r.status_code == 400
 
 
 async def test_list_sorts(client, email):
-    site, user_id, _, _, job = await prepare(client, email)
-    extra = await seed_pages(
-        site["id"], user_id, [{"url": f"{ORIGIN}/{name}"} for name in ("a", "b", "c")]
-    )
-    made = {}
-    for name, search, confidence in (("a", 0.2, 0.9), ("b", 0.8, 0.1), ("c", 0.5, None)):
-        r = await client.post(
-            f"{BASE}/link-suggestions",
-            json=suggestion(
-                job, toPageId=extra[f"{ORIGIN}/{name}"], searchScore=search, state="ready"
-            ),
-        )
-        assert r.status_code == 201, r.text
-        made[r.json()["data"]["id"]] = confidence
-
     from sqlalchemy import update
 
     from src.core.database import SessionLocal
     from src.site_structure.models.link_suggestion import LinkSuggestion
 
+    _, _, _, _, job = await prepare(client, email)
+    made = {}
+    for target, search, confidence in (
+        ("pricing", 0.2, 0.9),
+        ("features", 0.8, 0.1),
+        ("", 0.5, None),
+    ):
+        r = await client.post(
+            f"{BASE}/link-suggestions",
+            json=body(job, toUrl=f"{ORIGIN}/{target}", searchScore=search),
+        )
+        made[r.json()["data"]["id"]] = confidence
     async with SessionLocal() as db:
         for sid, confidence in made.items():
             await db.execute(
@@ -469,24 +230,165 @@ async def test_list_sorts(client, email):
         await db.commit()
 
     async def listed(**params):
-        r = await client.get(
-            f"{BASE}/link-suggestions", params={"state": "any", "jobId": job["id"], **params}
-        )
+        r = await client.get(f"{BASE}/link-suggestions", params={"state": "any", **params})
         assert r.status_code == 200, r.text
         return r.json()["data"]
 
-    rows = await listed(sortBy="searchScore")
-    assert [row["searchScore"] for row in rows] == [0.8, 0.5, 0.2]
-    rows = await listed(sortBy="searchScore", sortOrder="asc")
-    assert [row["searchScore"] for row in rows] == [0.2, 0.5, 0.8]
-    rows = await listed(sortBy="confidence")
-    assert [row.get("confidence") for row in rows] == [0.9, 0.1, None]
-    rows = await listed(sortBy="confidence", sortOrder="asc")
-    assert [row.get("confidence") for row in rows] == [0.1, 0.9, None]
-
+    assert [r["searchScore"] for r in await listed(sortBy="searchScore")] == [0.8, 0.5, 0.2]
+    assert [r["searchScore"] for r in await listed(sortBy="searchScore", sortOrder="asc")] == [
+        0.2,
+        0.5,
+        0.8,
+    ]
+    assert [r.get("confidence") for r in await listed(sortBy="confidence")] == [0.9, 0.1, None]
+    assert [r.get("confidence") for r in await listed(sortBy="confidence", sortOrder="asc")] == [
+        0.1,
+        0.9,
+        None,
+    ]
     r = await client.get(f"{BASE}/link-suggestions", params={"sortBy": "nope"})
     assert r.status_code == 400
-    r = await client.get(f"{BASE}/pillar-suggestions", params={"sortOrder": "sideways"})
-    assert r.status_code == 400
-    r = await client.get(f"{BASE}/pillar-suggestions", params={"sortBy": "confidence"})
+
+
+async def test_reconcile_deletes_invalid_rows(client, email):
+    site, user_id, pages, _, job = await prepare(client, email)
+    blog, pricing, features, home = (
+        pages[f"{ORIGIN}/{p}"] for p in ("blog/how-to", "pricing", "features", "")
+    )
+    await seed_link(site["id"], user_id, blog, home)
+    added = (await client.post(f"{BASE}/link-suggestions", json=body(job))).json()["data"]
+    removal = (
+        await client.post(
+            f"{BASE}/link-suggestions", json=body(job, toUrl=f"{ORIGIN}/", action="delete")
+        )
+    ).json()["data"]
+    gone = (
+        await client.post(
+            f"{BASE}/link-suggestions",
+            json=body(job, toUrl=f"{ORIGIN}/features", state="user_rejected"),
+        )
+    ).json()["data"]
+    keep = (
+        await client.post(
+            f"{BASE}/link-suggestions",
+            json=body(job, fromUrl=f"{ORIGIN}/features", toUrl=f"{ORIGIN}/pricing"),
+        )
+    ).json()["data"]
+
+    r = await client.post(f"{BASE}/link-suggestions/reconcile")
+    assert r.json()["data"] == {"removed": 0}
+
+    await seed_link(site["id"], user_id, blog, pricing)
+    await drop_links(blog, home)
+    await set_page(features, status=404)
+    r = await client.post(f"{BASE}/link-suggestions/reconcile")
+    assert r.json()["data"] == {"removed": 4}
+    for row in (added, removal, gone, keep):
+        assert (await client.get(f"{BASE}/link-suggestions/{row['id']}")).status_code == 404
+
+
+async def test_hierarchy_links(client, email):
+    site, user_id, pages, job = await prepare_site(
+        client,
+        email,
+        "tree.example.com",
+        [
+            {"url": "https://tree.example.com/", "page_type": "money", "depth": 0},
+            {"url": "https://tree.example.com/blog", "page_type": "hub", "depth": 1},
+            {"url": "https://tree.example.com/blog/guides", "page_type": "hub", "depth": 2},
+            {"url": "https://tree.example.com/login", "page_type": "utility", "depth": 1},
+            {"url": "https://tree.example.com/post", "page_type": "informational", "depth": 1},
+        ],
+    )
+    home, blog = pages["https://tree.example.com/"], pages["https://tree.example.com/blog"]
+    await seed_link(site["id"], user_id, home, blog)
+
+    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
     assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert data["homeFound"] is True
+    assert data["hubs"] == 2
+    assert data["inserted"] + data["skipped"] == 8
+    assert data["skipped"] == 1
+
+    rows = (await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})).json()["data"]
+    pairs = {(r["fromPageId"], r["toPageId"]) for r in rows}
+    assert (home, blog) not in pairs
+    assert (blog, home) in pairs
+    post = pages["https://tree.example.com/post"]
+    assert not any(post in pair for pair in pairs)
+    assert all(r.get("fromChunkId") is None for r in rows)
+
+    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
+    assert r.json()["data"]["inserted"] == 0
+    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": "sjb_missing"})
+    assert r.status_code == 404
+    r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={})
+    assert r.status_code == 400
+
+
+async def test_create_many_applies_every_rule_in_one_batch(client, email):
+    from src.core.database import unit_of_work
+    from src.site_structure.links.schemas import LinkAction, NewLinkSuggestion
+    from src.site_structure.links.service import link_suggestion_service
+
+    site, user_id, pages, chunks, job = await prepare(client, email)
+    blog, pricing, features, home = (
+        pages[f"{ORIGIN}/{p}"] for p in ("blog/how-to", "pricing", "features", "")
+    )
+    extra = await seed_pages(
+        site["id"], user_id, [{"url": f"{ORIGIN}/contact"}, {"url": f"{ORIGIN}/about"}]
+    )
+    contact, about = extra[f"{ORIGIN}/contact"], extra[f"{ORIGIN}/about"]
+    await seed_link(site["id"], user_id, blog, features)
+    await set_page(features, word_count=0)
+    for target in ("pricing", "blog/how-to", ""):
+        r = await client.post(
+            f"{BASE}/link-suggestions",
+            json=body(
+                job,
+                fromUrl=f"{ORIGIN}/features",
+                toUrl=f"{ORIGIN}/{target}",
+                state="review_approved",
+            ),
+        )
+        assert r.status_code == 201, r.text
+
+    def row(src, dst, chunk=None, action=LinkAction.CREATE):
+        return NewLinkSuggestion(
+            job_id=job["id"],
+            from_page_id=src,
+            to_page_id=dst,
+            from_chunk_id=chunk,
+            action=action,
+            suggestion="s",
+        )
+
+    rows = [
+        row(blog, blog),
+        row(blog, "spg_missing"),
+        row(blog, features),
+        row(blog, home, action=LinkAction.DELETE),
+        row(blog, pricing, chunks[0]),
+        row(blog, pricing, chunks[0]),
+        row(blog, pricing, chunks[1]),
+        row(blog, pricing),
+        row(pricing, blog, chunks[0]),
+        row(features, contact),
+        row(about, contact),
+        row(blog, features, action=LinkAction.DELETE),
+    ]
+    async with unit_of_work() as db:
+        inserted = await link_suggestion_service.create_many(db, user_id, site["id"], rows)
+    assert inserted == 4
+
+    listed = (await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})).json()[
+        "data"
+    ]
+    keys = {(r["fromPageId"], r["toPageId"], r["action"], r.get("fromChunkId")) for r in listed}
+    assert keys == {
+        (blog, pricing, "create", chunks[0]),
+        (blog, pricing, "create", chunks[1]),
+        (blog, features, "delete", None),
+        (about, contact, "create", None),
+    }

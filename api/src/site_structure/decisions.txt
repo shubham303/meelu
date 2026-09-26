@@ -1,0 +1,77 @@
+WHY THIS MODULE EXISTS
+
+The rebuild of site_structure, written bottom-up beside the original to fix
+the defects found while reading it, then swapped in over it (migration
+b3e9d1c4a7f2). Every table has one owning repository; services compose
+across repositories; every service and repository is a class singleton.
+
+
+LAYOUT
+
+- jobs/: structure_jobs. The stale-jobs cron (cron/) fails RUNNING jobs
+  older than an hour; app.py registers it in the lifespan.
+- links/: link_suggestions. Generators (hierarchy, unlinked mentions,
+  removals), screening, review, ranking (links/ranking.py).
+- pillars/: pillar_page_suggestions. Clustering, propose, screening,
+  review, ranking.
+- pipeline/: the shared tier. Result shapes (ScreenResult, ReviewBatch,
+  ReviewItem, ReviewResult, RankResult), the screening confidence rule
+  (screened_state), the review verdict set, page facts and link capacity
+  (pipeline/ranking.py, pipeline/page_facts.py), is_home, the workspace-table
+  and review-prompt checks. links/ and pillars/ never import each other.
+- service.py, tools.py at the top: what spans both kinds of suggestion,
+  reconcile and delete-by-id (routed by the id prefix, lks_ or plr_).
+
+
+RULES
+
+- The lifecycle is the one quoted verbatim at the end: draft ->
+  screening_approved | screening_rejected -> review_approved |
+  review_rejected, plus user_rejected. Each step reads only the rows the
+  previous step approved. There is no ready, done or stale.
+- Rejected rows are memory: generators skip any suggestion that already
+  exists in any state, so a rejection is not drafted again.
+- Invalid suggestions are deleted, never marked. Reconcile deletes a link
+  suggestion whose link now exists (create), is already gone (delete), or
+  whose page is gone; a pillar whose members mostly left the crawl, that a
+  newer page already links, or whose covering page is gone. Rank deletes
+  review_approved rows that miss the budget, so they can return once budget
+  frees up. Ranking runs site-wide.
+- Drafting skips a create suggestion from a page already at its link
+  capacity (review_approved create suggestions count against it).
+- Duplicates: unique per (site_id, from_page_id, from_chunk_id, to_page_id,
+  action) NULLS NOT DISTINCT. Another chunk may suggest the same link; a
+  suggestion without a chunk is a duplicate of any suggestion on that pair.
+  create and create_many apply the same rule.
+- from_chunk_id cascades on delete: the embed worker recreates a page's
+  chunks whenever its content changes, so a suggestion anchored to a chunk
+  is deleted with it (a chunk-scoped rejection does not survive a re-chunk).
+- Higher is better for every score column, enforced at the write. A removal
+  stores 1 - relevance. Nothing coalesces a NULL to 1.0; a missing
+  confidence ranks as the worst case, a missing search_score (hierarchy
+  links) ranks on structure alone. List queries order NULLS LAST.
+- pillar_page_suggestions.member_key is sha256 of the sorted, de-duplicated
+  member_page_ids joined by ","; its one definition is
+  pillars/repository.py member_key(), and migration b3e9d1c4a7f2 backfilled
+  the same value.
+
+
+OPEN
+
+- Unlinked mentions still runs one text query per target x phrase; folding
+  it needs a multi-phrase search on site_chunks.
+- Links that were actually added no longer count against a page's budget
+  (reconcile deletes their suggestion), so capacity only limits pending
+  approved suggestions.
+- save_link_suggestion and save_pillar_suggestion exist but are not in the
+  site desk's writes: the desk prompt routes every suggestion through a
+  generator.
+
+
+SUGGESTION STATES (the user's words, verbatim)
+
+dont keep the stale suggestion in db.. ideally lets not have stale as a suggestion state.. reason is our db will get filled with stale suggestions which are of no use.. i would prefer the suggestions state  as  draft , screening_rejected, screening_approved these two will be suggestion state after screening step , review_approved, review_rejected, and user_rejected .. no need to track the done.. it will be directly known after crawling.. user rejected we can keep to avoid generating same recommendation again, same for screening rejected and screening approved which will lower the cost of rechecking.. in draft state itself we will remove all existing suggestions in different state.. also each step will only review the suggestions which were approved by previsou step.. e.g screening will only look at draft. review will only look at screening_approved.. on ui we will only show the review_approved and user rejected suggestions..
+
+On chunks and duplicates, also verbatim:
+
+btw, chunk id is important.. if some link is rejected for a different chunk does not mean other chunk cannot suggest the link. but once we have the link we should not suggest more link from same page.. to same to page..

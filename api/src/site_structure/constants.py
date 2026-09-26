@@ -1,22 +1,30 @@
-JOB_STATUSES = ("RUNNING", "COMPLETED", "FAILED")
+from enum import StrEnum
 
-SUGGESTION_STATES = ("draft", "ready", "llm_rejected", "user_rejected", "done", "stale")
 
-OPEN_STATES = ("draft", "ready")
+class SuggestionState(StrEnum):
+    DRAFT = "draft"
+    SCREENING_REJECTED = "screening_rejected"
+    SCREENING_APPROVED = "screening_approved"
+    REVIEW_APPROVED = "review_approved"
+    REVIEW_REJECTED = "review_rejected"
+    USER_REJECTED = "user_rejected"
 
-REVIVABLE_STATES = ("llm_rejected", "stale")
 
-LINK_ACTIONS = ("create", "delete", "edit")
+VISIBLE_STATES = frozenset({SuggestionState.REVIEW_APPROVED, SuggestionState.USER_REJECTED})
 
-PILLAR_ACTIONS = ("create", "expand")
 
-SUGGESTION_SORTS = ("score", "searchScore", "confidence", "createdAt", "updatedAt")
+class PillarAction(StrEnum):
+    CREATE = "create"
+    EXPAND = "expand"
 
-SORT_ORDERS = ("asc", "desc")
 
 SCREEN_CONFIDENCE = 0.8
 
-HIERARCHY_TYPES = ("hub", "utility")
+HIERARCHY_TYPES = frozenset({"hub", "utility"})
+
+STRUCTURAL_TYPES = frozenset({"utility", "legal", "company"})
+
+STRUCTURAL_SHARE = 0.5
 
 REMOVAL_REGION = "body"
 
@@ -35,7 +43,5 @@ PILLAR_BUDGET = 5
 PILLAR_DONE_FRACTION = 0.6
 
 PILLAR_STALE_FRACTION = 0.5
-
-STRUCTURAL_TYPES = ("utility", "legal", "company")
 
 WORKSPACE_TABLE = r"^[a-z_][a-z0-9_]{0,62}$"

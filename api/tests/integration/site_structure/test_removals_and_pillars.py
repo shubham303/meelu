@@ -1,114 +1,31 @@
-from datetime import UTC, datetime
+from tests.integration.site_structure.helpers import (
+    BASE,
+    DIMS,
+    drop_links,
+    prepare_site,
+    seed_embedded_chunk,
+    seed_link,
+    set_page,
+    vector,
+    workspace_table,
+)
+from tests.integration.technical_seo.conftest import seed_pages
 
-from sqlalchemy import text
-
-from tests.conftest import signup
-from tests.integration.site_structure.test_link_suggestions import seed_link
-from tests.integration.technical_seo.conftest import seed_pages, user_id_of
+__all__ = ["seed_embedded_chunk"]
 
 ORIGIN = "https://pillars.example.com"
 
-BASE = "/api/v1/site/structure"
-
-DIMS = 384
-
-
-def vector(axis: int, wobble: float = 0.0) -> list[float]:
-    v = [0.0] * DIMS
-    v[axis] = 1.0
-    v[(axis + 1) % DIMS] = wobble
-    return v
-
-
-async def seed_embedded_chunk(site_id, user_id, page_id, embedding, text_="A passage") -> str:
-    from src.core.database import SessionLocal
-    from src.core.ids import uid
-    from src.site_pages.models.site_chunk import SiteChunk
-
-    async with SessionLocal() as db:
-        now = datetime.now(UTC)
-        row = SiteChunk(
-            id=uid("chn"),
-            user_id=user_id,
-            site_id=site_id,
-            page_id=page_id,
-            ordinal=1,
-            text=text_,
-            embedding=embedding,
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(row)
-        await db.commit()
-        return row.id
-
-
-async def workspace_table(user_id: str, name: str, columns: str, rows: list[tuple]) -> None:
-    from src.agent.context import tenant_names
-    from src.core.database import SessionLocal
-
-    _, schema = tenant_names(user_id)
-    async with SessionLocal() as db:
-        await db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-        await db.execute(text(f'DROP TABLE IF EXISTS "{schema}"."{name}"'))
-        await db.execute(text(f'CREATE TABLE "{schema}"."{name}" ({columns})'))
-        width = len(rows[0]) if rows else 0
-        marks = ", ".join(f":c{i}" for i in range(width))
-        for row in rows:
-            await db.execute(
-                text(f'INSERT INTO "{schema}"."{name}" VALUES ({marks})'),
-                {f"c{i}": v for i, v in enumerate(row)},
-            )
-        await db.commit()
-
 
 async def prepare(client, email, pages):
-    await signup(client, email)
-    user_id = await user_id_of(email)
-    r = await client.post("/api/v1/sites", json={"domain": "pillars.example.com", "name": "P"})
-    assert r.status_code == 201, r.text
-    site = r.json()["data"]
-    made = await seed_pages(site["id"], user_id, pages)
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "Prune and pillar"})
-    return site, user_id, made, r.json()["data"]
+    return await prepare_site(client, email, "pillars.example.com", pages)
 
 
-async def test_generators_revive_llm_rejected_rows(client, email):
-    site, user_id, pages, job = await prepare(
-        client,
-        email,
-        [
-            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 4},
-            {"url": f"{ORIGIN}/guide", "page_type": "informational", "depth": 1, "inlinks": 2},
-        ],
-    )
-    home, guide = pages[f"{ORIGIN}/"], pages[f"{ORIGIN}/guide"]
-    await seed_embedded_chunk(site["id"], user_id, home, vector(0), "Read the buying guide now.")
-    body = {"jobId": job["id"], "toIds": [guide], "phrases": ["buying guide"]}
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json=body)
-    assert r.json()["data"]["inserted"] == 1
-    row = (await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})).json()["data"][
-        0
-    ]
+async def test_link_removals(client, email):
+    from sqlalchemy import update
 
-    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "llm_rejected"})
-    assert r.status_code == 200
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "Another strategy"})
-    job2 = r.json()["data"]
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json={**body, "jobId": job2["id"]})
-    assert r.json()["data"]["inserted"] == 1
-    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "draft"
-    assert r.json()["data"]["jobId"] == job2["id"]
+    from src.core.database import SessionLocal
+    from src.site_pages.models.site_page_link import SitePageLink
 
-    r = await client.patch(f"{BASE}/link-suggestions/{row['id']}", json={"state": "user_rejected"})
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json={**body, "jobId": job2["id"]})
-    assert r.json()["data"] == {"inserted": 0, "skipped": 1, "targetsWithoutMatch": []}
-    r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "user_rejected"
-
-
-async def test_link_removals(client, email, screener):
     site, user_id, pages, job = await prepare(
         client,
         email,
@@ -134,12 +51,6 @@ async def test_link_removals(client, email, screener):
     await seed_link(site["id"], user_id, home, a)
     await seed_embedded_chunk(site["id"], user_id, a, vector(0), "Our terms of use are strict.")
     await seed_embedded_chunk(site["id"], user_id, b, vector(5))
-
-    from sqlalchemy import update
-
-    from src.core.database import SessionLocal
-    from src.site_pages.models.site_page_link import SitePageLink
-
     async with SessionLocal() as db:
         await db.execute(
             update(SitePageLink)
@@ -160,10 +71,8 @@ async def test_link_removals(client, email, screener):
             (a, "pg_missing", None),
         ],
     )
-
-    r = await client.post(
-        f"{BASE}/link-suggestions/removals", json={"jobId": job["id"], "sourceTable": "prune"}
-    )
+    removal = {"jobId": job["id"], "sourceTable": "prune"}
+    r = await client.post(f"{BASE}/link-suggestions/removals", json=removal)
     assert r.status_code == 200, r.text
     assert r.json()["data"] == {
         "read": 5,
@@ -173,43 +82,163 @@ async def test_link_removals(client, email, screener):
         "lastInlink": 1,
         "toHubOrHome": 0,
     }
-
     r = await client.get(f"{BASE}/link-suggestions", params={"state": "draft", "action": "delete"})
     rows = {(row["fromPageId"], row["toPageId"]): row for row in r.json()["data"]}
     assert set(rows) == {(a, b), (home, b)}
     assert "Generic anchor" in rows[(a, b)]["suggestion"]
     assert rows[(a, b)]["fromChunkId"] is not None
-    assert rows[(a, b)]["searchScore"] is not None and rows[(a, b)]["searchScore"] < 0.5
+    assert rows[(a, b)]["searchScore"] > 0.5
     assert rows[(home, b)].get("searchScore") is None
 
-    r = await client.post(
-        f"{BASE}/link-suggestions/removals", json={"jobId": job["id"], "sourceTable": "prune"}
-    )
+    r = await client.post(f"{BASE}/link-suggestions/removals", json=removal)
     assert r.json()["data"]["inserted"] == 0
     r = await client.post(
-        f"{BASE}/link-suggestions/removals", json={"jobId": job["id"], "sourceTable": "no such"}
+        f"{BASE}/link-suggestions/removals", json={**removal, "sourceTable": "no such"}
     )
     assert r.status_code == 400
 
+    for row in rows.values():
+        await client.patch(
+            f"{BASE}/link-suggestions/{row['id']}", json={"state": "review_approved"}
+        )
     r = await client.post(f"{BASE}/link-suggestions/rank", json={})
     assert r.json()["data"]["scored"] == 2
     r = await client.get(f"{BASE}/link-suggestions/{rows[(a, b)]['id']}")
     assert r.json()["data"]["score"] is not None
 
-    async with SessionLocal() as db:
-        from sqlalchemy import delete
-
-        await db.execute(
-            delete(SitePageLink).where(SitePageLink.src_page_id == a, SitePageLink.dst_page_id == b)
-        )
-        await db.commit()
+    await drop_links(a, b)
     r = await client.post(f"{BASE}/link-suggestions/reconcile")
-    assert r.json()["data"] == {"done": 0, "stale": 0, "removed": 1}
+    assert r.json()["data"] == {"removed": 1}
     r = await client.get(f"{BASE}/link-suggestions/{rows[(a, b)]['id']}")
     assert r.status_code == 404
 
 
-async def test_pillar_pages(client, email, screener):
+def pillar(job, members, **extra):
+    return {
+        "jobId": job["id"],
+        "topic": "SEO",
+        "memberPageIds": members,
+        "suggestion": "Build a hub.",
+        **extra,
+    }
+
+
+SIMPLE = [{"url": f"{ORIGIN}/"}] + [{"url": f"{ORIGIN}/p{i}"} for i in range(5)]
+
+
+async def test_pillar_create_get_update_delete(client, email):
+    site, user_id, pages, job = await prepare(client, email, SIMPLE)
+    home = pages[f"{ORIGIN}/"]
+    p = [pages[f"{ORIGIN}/p{i}"] for i in range(5)]
+
+    r = await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[1], p[0], p[1]]))
+    assert r.status_code == 201, r.text
+    row = r.json()["data"]
+    assert row["memberPageIds"] == sorted([p[0], p[1]])
+    assert row["action"] == "create" and row["state"] == "draft"
+    assert {m["id"] for m in row["members"]} == {p[0], p[1]}
+    assert "memberKey" not in row
+
+    r = await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[0], p[1]]))
+    assert r.status_code == 409
+    r = await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[0]]))
+    assert r.status_code == 400
+    r = await client.post(
+        f"{BASE}/pillar-suggestions", json=pillar(job, [p[2], p[3]], action="expand")
+    )
+    assert r.status_code == 400
+    r = await client.post(
+        f"{BASE}/pillar-suggestions", json=pillar(job, [p[2], p[3]], coveringPageId=home)
+    )
+    assert r.status_code == 400
+    r = await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[2], "spg_missing"]))
+    assert r.status_code == 404
+    await set_page(p[4], status=410)
+    r = await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[2], p[4]]))
+    assert r.status_code == 400
+
+    r = await client.post(
+        f"{BASE}/pillar-suggestions",
+        json=pillar(
+            job, [p[2], p[3]], action="expand", coveringPageId=home, state="review_approved"
+        ),
+    )
+    assert r.status_code == 201, r.text
+    expand = r.json()["data"]
+    assert expand["coveringUrl"] == f"{ORIGIN}/"
+
+    async def ids(**params):
+        r = await client.get(f"{BASE}/pillar-suggestions", params=params)
+        assert r.status_code == 200, r.text
+        return {x["id"] for x in r.json()["data"]}
+
+    assert await ids() == {expand["id"]}
+    assert await ids(state="any") == {row["id"], expand["id"]}
+    assert await ids(state="any", pageId=home) == {expand["id"]}
+    assert await ids(state="any", pageId=p[0]) == {row["id"]}
+    assert await ids(state="any", action="create") == {row["id"]}
+    r = await client.get(f"{BASE}/pillar-suggestions", params={"state": "stale"})
+    assert r.status_code == 400
+
+    r = await client.patch(
+        f"{BASE}/pillar-suggestions/{row['id']}",
+        json={"topic": " Links ", "state": "user_rejected"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["topic"] == "Links"
+    assert r.json()["data"]["state"] == "user_rejected"
+    r = await client.get(f"{BASE}/pillar-suggestions/summary")
+    assert r.json()["data"] == {
+        "draft": 0,
+        "screeningRejected": 0,
+        "screeningApproved": 0,
+        "reviewApproved": 1,
+        "reviewRejected": 0,
+        "userRejected": 1,
+    }
+    r = await client.delete(f"{BASE}/pillar-suggestions/{row['id']}")
+    assert r.json()["data"] == {"id": row["id"], "deleted": True}
+    assert (await client.get(f"{BASE}/pillar-suggestions/{row['id']}")).status_code == 404
+
+
+async def test_pillar_reconcile_deletes_outgrown_rows(client, email):
+    site, user_id, pages, job = await prepare(client, email, SIMPLE)
+    home = pages[f"{ORIGIN}/"]
+    p = [pages[f"{ORIGIN}/p{i}"] for i in range(5)]
+    broken = (await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, p[:3]))).json()[
+        "data"
+    ]
+    built = (
+        await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[3], p[4]]))
+    ).json()["data"]
+    covered = (
+        await client.post(
+            f"{BASE}/pillar-suggestions",
+            json=pillar(job, [p[0], p[4]], action="expand", coveringPageId=home),
+        )
+    ).json()["data"]
+    keep = (await client.post(f"{BASE}/pillar-suggestions", json=pillar(job, [p[3], p[0]]))).json()[
+        "data"
+    ]
+
+    r = await client.post(f"{BASE}/pillar-suggestions/reconcile")
+    assert r.json()["data"] == {"removed": 0}
+
+    await set_page(p[1], status=404)
+    await set_page(p[2], status=404)
+    hub = await seed_pages(site["id"], user_id, [{"url": f"{ORIGIN}/hub"}])
+    await seed_link(site["id"], user_id, hub[f"{ORIGIN}/hub"], p[3])
+    await seed_link(site["id"], user_id, hub[f"{ORIGIN}/hub"], p[4])
+    await set_page(home, redirect_to=f"{ORIGIN}/new")
+
+    r = await client.post(f"{BASE}/pillar-suggestions/reconcile")
+    assert r.json()["data"] == {"removed": 3}
+    for row in (broken, built, covered):
+        assert (await client.get(f"{BASE}/pillar-suggestions/{row['id']}")).status_code == 404
+    assert (await client.get(f"{BASE}/pillar-suggestions/{keep['id']}")).status_code == 200
+
+
+async def test_pillar_pages_pipeline(client, email, screener):
     urls = [f"{ORIGIN}/seo/{i}" for i in range(5)] + [f"{ORIGIN}/ads/{i}" for i in range(4)]
     site, user_id, pages, job = await prepare(
         client,
@@ -252,95 +281,81 @@ async def test_pillar_pages(client, email, screener):
     )
     assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert data["groups"] == 2
-    assert data["tooSmall"] == 1
-    assert data["inserted"] == 1
-    r = await client.get(
-        f"{BASE}/pillar-suggestions", params={"state": "draft", "action": "expand"}
-    )
-    expand = r.json()["data"][0]
+    assert (data["groups"], data["tooSmall"], data["inserted"]) == (2, 1, 1)
+    expand = (
+        await client.get(
+            f"{BASE}/pillar-suggestions", params={"state": "draft", "action": "expand"}
+        )
+    ).json()["data"][0]
     assert expand["coveringPageId"] == home
-    assert expand["coveringUrl"] == f"{ORIGIN}/"
     assert expand["topic"] == "Paid ads"
     assert "Expand" in expand["suggestion"]
 
     r = await client.post(f"{BASE}/pillar-suggestions/propose", json={"jobId": job["id"]})
-    assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert data["groups"] == 2
-    assert data["inserted"] == 1
-    assert data["overlapsOpen"] == 1
-
-    r = await client.get(
-        f"{BASE}/pillar-suggestions", params={"state": "draft", "action": "create"}
-    )
-    rows = r.json()["data"]
-    assert len(rows) == 1
-    row = rows[0]
+    assert (data["groups"], data["inserted"], data["overlapsOpen"]) == (2, 1, 1)
+    row = (
+        await client.get(
+            f"{BASE}/pillar-suggestions", params={"state": "draft", "action": "create"}
+        )
+    ).json()["data"][0]
     assert set(row["memberPageIds"]) == set(seo)
     assert "seo" in row["topic"].split(", ")
-    assert len(row["members"]) == 5
     assert row["searchScore"] > 0.9
 
-    r = await client.post(f"{BASE}/pillar-suggestions/propose", json={"jobId": job["id"]})
-    assert r.json()["data"]["overlapsOpen"] == 2
-
     r = await client.post(f"{BASE}/pillar-suggestions/screen", json={"jobId": job["id"]})
-    assert r.json()["data"]["screened"] == 2
-    assert r.json()["data"]["llmRejected"] == 0
+    assert r.json()["data"] == {"screened": 2, "approved": 2, "rejected": 0, "failed": 0}
+    r = await client.post(f"{BASE}/pillar-suggestions/screen", json={"jobId": job["id"]})
+    assert r.json()["data"]["screened"] == 0
 
     r = await client.post(
         f"{BASE}/pillar-suggestions/review-inputs", json={"prompt": "Pillars", "jobId": job["id"]}
     )
     batch = r.json()["data"]
     assert "Pillars" in batch["instructions"]
+    assert batch["schema"]["properties"]["verdict"]["enum"] == [
+        "review_approved",
+        "review_rejected",
+    ]
     assert len(batch["items"]) == 2
     verdicts = [
         {
             "id": item["id"],
-            "verdict": "ready" if item["state"]["action"] == "create" else "llm_rejected",
+            "verdict": "review_approved"
+            if item["state"]["action"] == "create"
+            else "review_rejected",
             "title": "The SEO hub",
             "suggestion": "Build it.",
         }
         for item in batch["items"]
     ]
+    r = await client.post(
+        f"{BASE}/pillar-suggestions/verdicts",
+        json={"verdicts": verdicts + [{"id": "plr_missing", "verdict": "review_approved"}]},
+    )
+    assert r.json()["data"] == {"reviewed": 2, "approved": 1, "rejected": 1, "failed": 1}
+    approved = (await client.get(f"{BASE}/pillar-suggestions/{row['id']}")).json()["data"]
+    assert approved["state"] == "review_approved"
+    assert approved["topic"] == "The SEO hub"
+    assert approved["suggestion"] == "Build it."
+    rejected = (await client.get(f"{BASE}/pillar-suggestions/{expand['id']}")).json()["data"]
+    assert rejected["state"] == "review_rejected"
+    assert rejected["topic"] == "Paid ads"
 
-    r = await client.post(f"{BASE}/pillar-suggestions/verdicts", json={"verdicts": verdicts})
-    assert r.json()["data"] == {"reviewed": 2, "ready": 1, "llmRejected": 1, "failed": 0}
-    r = await client.get(f"{BASE}/pillar-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "ready"
-    assert r.json()["data"]["topic"] == "The SEO hub"
-    assert r.json()["data"]["suggestion"] == "Build it."
+    r = await client.post(f"{BASE}/pillar-suggestions/propose", json={"jobId": job["id"]})
+    data = r.json()["data"]
+    assert (data["inserted"], data["overlapsOpen"], data["overlapsRejected"]) == (0, 1, 1)
 
+    extra = (
+        await client.post(
+            f"{BASE}/pillar-suggestions",
+            json=pillar(job, [ads[0], seo[0]], state="review_approved", searchScore=0.1),
+        )
+    ).json()["data"]
     r = await client.post(f"{BASE}/pillar-suggestions/rank", json={"budget": 1})
-    assert r.json()["data"] == {"scored": 1, "kept": 1, "llmRejected": 0}
-    r = await client.get(f"{BASE}/pillar-suggestions/summary")
-    assert r.json()["data"] == {
-        "draft": 0,
-        "ready": 1,
-        "llmRejected": 1,
-        "userRejected": 0,
-        "done": 0,
-        "stale": 0,
-    }
-
-    hub = await seed_pages(
-        site["id"],
-        user_id,
-        [{"url": f"{ORIGIN}/seo/", "page_type": "utility", "depth": 1, "inlinks": 1}],
-    )
-    for p in seo[:4]:
-        await seed_link(site["id"], user_id, hub[f"{ORIGIN}/seo/"], p)
-    r = await client.post(f"{BASE}/jobs", json={"prompt": "Next run"})
-    assert r.json()["data"]["reconciled"] == {"done": 1, "stale": 0, "removed": 0}
-    r = await client.get(f"{BASE}/pillar-suggestions/{row['id']}")
-    assert r.json()["data"]["state"] == "done"
-
-    r = await client.patch(
-        f"{BASE}/pillar-suggestions/{row['id']}", json={"state": "user_rejected"}
-    )
-    assert r.json()["data"]["state"] == "user_rejected"
-    r = await client.delete(f"{BASE}/pillar-suggestions/{row['id']}")
-    assert r.json()["data"] == {"id": row["id"], "deleted": True}
-    r = await client.get(f"{BASE}/pillar-suggestions/{row['id']}")
-    assert r.status_code == 404
+    assert r.json()["data"] == {"scored": 2, "kept": 1, "removed": 1}
+    assert (await client.get(f"{BASE}/pillar-suggestions/{extra['id']}")).status_code == 404
+    kept = (await client.get(f"{BASE}/pillar-suggestions/{row['id']}")).json()["data"]
+    assert kept["score"] > 0
+    r = await client.post(f"{BASE}/pillar-suggestions/rank", json={"budget": 0})
+    assert r.status_code == 400

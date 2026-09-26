@@ -474,8 +474,13 @@ class SitePageRepository:
         rows = await db.execute(select(SitePage.id).where(SitePage.site_id == site_id, LIVE))
         return set(rows.scalars().all())
 
-    async def gone_ids(self, db: AsyncSession, site_id: str) -> set[str]:
-        rows = await db.execute(select(SitePage.id).where(SitePage.site_id == site_id, GONE))
+    async def gone_ids(
+        self, db: AsyncSession, site_id: str, ids: list[str] | None = None
+    ) -> set[str]:
+        conditions = [SitePage.site_id == site_id, GONE]
+        if ids is not None:
+            conditions.append(SitePage.id.in_(set(ids)))
+        rows = await db.execute(select(SitePage.id).where(*conditions))
         return set(rows.scalars().all())
 
     async def home_page_id(self, db: AsyncSession, site_id: str) -> str | None:
@@ -517,11 +522,16 @@ class SitePageRepository:
         ).mappings()
         return {str(r["key"]): (str(r["id"]), bool(r["canonical"])) for r in rows}
 
-    async def changed_at_by_id(self, db: AsyncSession, site_id: str) -> dict[str, datetime]:
+    async def changed_at_by_id(
+        self, db: AsyncSession, site_id: str, ids: list[str] | None = None
+    ) -> dict[str, datetime]:
+        conditions = [SitePage.site_id == site_id]
+        if ids is not None:
+            conditions.append(SitePage.id.in_(set(ids)))
         rows = await db.execute(
             select(
                 SitePage.id, func.coalesce(SitePage.content_changed_at, SitePage.created_at)
-            ).where(SitePage.site_id == site_id)
+            ).where(*conditions)
         )
         return {r[0]: r[1] for r in rows}
 

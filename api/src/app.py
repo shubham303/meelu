@@ -27,6 +27,7 @@ from src.seo.endpoints import router as seo_router
 from src.settings import settings
 from src.site_pages.endpoints import router as site_pages_router
 from src.site_search.endpoints import router as site_search_router
+from src.site_structure import cron as site_structure_cron
 from src.site_structure.endpoints import router as site_structure_router
 from src.site_traffic.endpoints import router as site_traffic_router
 from src.sites.endpoints import router as sites_router
@@ -40,6 +41,7 @@ configure_logging()
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     credits_cron.register(scheduler.scheduler)
+    site_structure_cron.register(scheduler.scheduler)
     async with scheduler.running():
         yield
 

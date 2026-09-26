@@ -106,33 +106,40 @@ Rules:
   `status` is RUNNING, COMPLETED or FAILED.
 - `link_suggestions`: one row per proposed change to an internal link,
   from_page_id -> to_page_id, both joined to `site_pages`, `job_id` to the
-  job that made it. `action` is 'create', 'delete' or 'edit'; `from_chunk_id`
+  job that made it. `action` is 'create' or 'delete'; `from_chunk_id`
   points at the `site_chunks` passage the link belongs in, when known;
-  `suggestion` is the text a person acts on. `search_score` is the retrieval
-  score it was found with, `confidence` the screening model's, `score` the
-  importance rank sets (the Structure screen sorts by it).
-- `state` is the row's life: 'draft' (saved, not yet screened or ranked),
-  'ready' (shown on the Structure screen), 'llm_rejected' (screened, reviewed
-  or ranked out; never shown), 'user_rejected' (turned down by the user),
-  'done' (the crawl found the link on the page), 'stale' (a page in the edge
-  is gone). Unique per (from_page_id, to_page_id, action).
+  `suggestion` is the text a person acts on. `search_score`, `confidence`
+  (the screening model's) and `score` (the importance rank sets; the
+  Structure screen sorts by it) are all higher-is-better; NULL means not
+  measured yet.
+- `state` is the row's life: 'draft' (saved, not yet screened),
+  'screening_approved' or 'screening_rejected' (the cheap screen's call),
+  'review_approved' (review kept it; shown on the Structure screen),
+  'review_rejected' (review dropped it; never shown), 'user_rejected'
+  (turned down by the user). Each step reads only the rows the previous
+  step approved. Unique per (from_page_id, from_chunk_id, to_page_id,
+  action): another chunk may suggest the same link, but a suggestion with
+  no chunk blocks every other on that pair.
 - For `action` 'delete' the edge is a link the crawl found (`from_chunk_id`
   is the passage holding the anchor when it could be located) and
-  `search_score` is how related the anchor's passage is to the target: low
-  means the link is a stronger removal candidate.
+  `search_score` is how unrelated the anchor's passage is to the target:
+  high means a stronger removal candidate.
 - `pillar_page_suggestions`: one row per proposed pillar page, the same
   `state` values. `action` is 'create' (a new hub) or 'expand'
   (`covering_page_id` partly covers the group already); `member_page_ids`
   are the pages the hub should introduce and link; `topic` and `suggestion`
   are what the reviewer wrote; `search_score` is the group's cohesion.
-- `site_page_links` holds the links that exist today. At the start of the
-  next job a 'create' suggestion whose edge appears there, a 'delete'
-  suggestion whose edge is gone, and a pillar suggestion whose members a
-  page newer than it now links are marked done.
+  Unique per member set.
+- Nothing is marked done. Reconciling deletes a suggestion the site has
+  outgrown: a 'create' whose link now exists in `site_page_links`, a
+  'delete' whose link is gone, a page on either end gone, a pillar whose
+  members mostly left the crawl or that a newer page already links, an
+  expand whose covering page is gone. Rank deletes review_approved rows
+  that miss a page's link budget, so they can come back later.
 
 Rejections are the user's standing decisions — surface the reason before
-re-recommending the same link, and never reject or mark done without their
-instruction.
+re-recommending the same link, and never turn a suggestion down or restore
+one without their instruction.
 """,
     "seo": """\
 ## SEO desk tables

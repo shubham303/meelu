@@ -1,22 +1,41 @@
-from src.site_structure.ranking import (
+import pytest
+
+from src.site_structure.links.ranking import (
     Candidate,
-    PageFacts,
     RankParams,
-    SiteDistribution,
     intent,
+    rank,
+    score_additions,
+)
+from src.site_structure.links.schemas import LinkAction
+from src.site_structure.pipeline.ranking import (
+    UNLIMITED_CAPACITY,
+    PageFacts,
+    SiteDistribution,
+    is_home,
     link_capacity,
     percentile,
-    rank_link_suggestions,
-    score_candidates,
 )
 
 
-def page(pid, inlinks=5, outlinks=5, words=900, page_type="informational", existing=0):
-    return PageFacts(pid, inlinks, outlinks, words, page_type, existing)
+def page(pid, inlinks=5, outlinks=5, words=900, page_type="informational", home=False):
+    return PageFacts(pid, inlinks, outlinks, words, page_type, is_home=home)
+
+
+def add(sid, src, dst, score=0.9, confidence=1.0):
+    return Candidate(sid, src, dst, LinkAction.CREATE, score, confidence)
+
+
+def remove(sid, src, dst, score, confidence=1.0):
+    return Candidate(sid, src, dst, LinkAction.DELETE, score, confidence)
 
 
 def site_of(*pages):
     return {p.page_id: p for p in pages}, SiteDistribution.from_pages(pages)
+
+
+def kept_ids(ranked):
+    return {r.candidate.suggestion_id for r in ranked if r.kept}
 
 
 def test_link_capacity_grows_with_words_and_caps():
@@ -33,6 +52,12 @@ def test_percentile_is_midrank_and_bounded():
     assert percentile([], 7) == 0.5
 
 
+def test_is_home_matches_root_only():
+    assert is_home("https://x.example.com")
+    assert is_home("https://x.example.com/")
+    assert not is_home("https://x.example.com/blog")
+
+
 def test_intent_prefers_informational_to_money():
     assert intent("informational", "money") == 1.0
     assert intent("hub", "money") == 0.7
@@ -46,39 +71,48 @@ def test_scores_stay_in_unit_interval_and_favour_needy_money_targets():
         page("orphan_money", inlinks=0, outlinks=4, page_type="money"),
         page("popular_legal", inlinks=60, outlinks=0, page_type="legal"),
     )
-    cands = [
-        Candidate("s1", "src", "orphan_money", 0.9),
-        Candidate("s2", "src", "popular_legal", 0.9),
-    ]
-    scored = {r.candidate.suggestion_id: r for r in score_candidates(cands, pages, site)}
+    cands = [add("s1", "src", "orphan_money"), add("s2", "src", "popular_legal")]
+    scored = {r.candidate.suggestion_id: r for r in score_additions(cands, pages, site)}
     for r in scored.values():
         assert 0.0 <= r.score <= 1.0
         assert all(0.0 <= v <= 1.0 for v in r.factors.values())
     assert scored["s1"].score > scored["s2"].score
 
 
-def test_relevance_is_a_multiplier_not_an_addend():
+def test_search_score_is_a_multiplier_not_an_addend():
     pages, site = site_of(
         page("src", inlinks=40),
         page("t", inlinks=0, outlinks=9, page_type="money"),
         page("u", inlinks=0, outlinks=9, page_type="money"),
     )
-    cands = [Candidate("hi", "src", "t", 0.9), Candidate("zero", "src", "u", 0.0)]
-    scored = {r.candidate.suggestion_id: r for r in score_candidates(cands, pages, site)}
+    scored = {
+        r.candidate.suggestion_id: r
+        for r in score_additions(
+            [add("hi", "src", "t", 0.9), add("zero", "src", "u", 0.0)], pages, site
+        )
+    }
     assert scored["zero"].score == 0.0
     assert scored["hi"].score > 0.0
-    assert scored["hi"].factors["relevance"] == 0.9
+    assert "relevance" not in scored["hi"].factors
 
 
-def test_confidence_only_damps():
+def test_missing_search_score_scores_on_structure_alone():
     pages, site = site_of(page("src"), page("t", inlinks=0, page_type="money"))
-    base = score_candidates([Candidate("a", "src", "t", 0.8)], pages, site)[0].score
-    damped = score_candidates([Candidate("a", "src", "t", 0.8, confidence=0.2)], pages, site)[
-        0
-    ].score
-    full = score_candidates([Candidate("a", "src", "t", 0.8, confidence=1.0)], pages, site)[0].score
-    assert damped < base
-    assert full == base
+    without = score_additions([add("a", "src", "t", None)], pages, site)[0]
+    full = score_additions([add("a", "src", "t", 1.0)], pages, site)[0]
+    assert without.score > 0.0
+    assert without.score == pytest.approx(full.score)
+
+
+def test_missing_confidence_is_the_worst_case():
+    pages, site = site_of(page("src"), page("t", inlinks=0, page_type="money"))
+
+    def score(confidence):
+        return score_additions([add("a", "src", "t", 0.8, confidence)], pages, site)[0].score
+
+    assert score(None) == pytest.approx(score(0.0))
+    assert score(None) < score(0.2) < score(1.0)
+    assert score(None) == pytest.approx(score(1.0) * 0.5)
 
 
 def test_budget_cut_happens_after_scoring_and_drops_the_weakest():
@@ -90,68 +124,56 @@ def test_budget_cut_happens_after_scoring_and_drops_the_weakest():
         page("d", inlinks=50, outlinks=0, page_type="legal"),
     )
     cands = [
-        Candidate("d", "src", "d", 0.95),
-        Candidate("c", "src", "c", 0.90),
-        Candidate("b", "src", "b", 0.90),
-        Candidate("a", "src", "a", 0.90),
+        add("d", "src", "d", 0.95),
+        add("c", "src", "c", 0.90),
+        add("b", "src", "b", 0.90),
+        add("a", "src", "a", 0.90),
     ]
-    out = {r.candidate.suggestion_id: r for r in rank_link_suggestions(cands, pages, site)}
-    kept = {k for k, r in out.items() if r.kept}
+    kept = kept_ids(rank(cands, pages, site))
     assert len(kept) == 3
     assert "d" not in kept
 
 
-def test_existing_suggestions_reduce_capacity():
+def test_rank_time_capacity_ignores_approved_suggestions():
     pages, site = site_of(
-        page("src", words=0, existing=2),
+        page("src", words=0),
         page("a", inlinks=0),
         page("b", inlinks=0),
         page("c", inlinks=0),
     )
-    cands = [Candidate(t, "src", t, 0.9) for t in ("a", "b", "c")]
-    out = rank_link_suggestions(cands, pages, site)
-    assert sum(r.kept for r in out) == 1
+    out = rank([add(t, "src", t) for t in ("a", "b", "c")], pages, site)
+    assert sum(r.kept for r in out) == 3
+
+
+def _star_setup():
+    fillers = [
+        page(f"f{s}{i}", inlinks=0, outlinks=9, page_type="money")
+        for s in range(3)
+        for i in range(2)
+    ]
+    pages, site = site_of(
+        *[page(f"s{s}", words=0) for s in range(3)],
+        page("star", inlinks=0, outlinks=9, page_type="money"),
+        page("other", inlinks=3, outlinks=9, page_type="money"),
+        *fillers,
+    )
+    cands = []
+    for s in range(3):
+        cands += [add(f"s{s}-f{i}", f"s{s}", f"f{s}{i}", 1.0) for i in range(2)]
+        cands.append(add(f"s{s}-star", f"s{s}", "star", 0.9))
+        cands.append(add(f"s{s}-other", f"s{s}", "other", 0.85))
+    return pages, site, cands
 
 
 def test_target_discount_spreads_links_across_targets():
-    pages, site = site_of(
-        page("s1", words=0, existing=2),
-        page("s2", words=0, existing=2),
-        page("s3", words=0, existing=2),
-        page("star", inlinks=0, outlinks=9, page_type="money"),
-        page("other", inlinks=3, outlinks=9, page_type="money"),
-    )
-    cands = []
-    for s in ("s1", "s2", "s3"):
-        cands.append(Candidate(f"{s}-star", s, "star", 0.9))
-        cands.append(Candidate(f"{s}-other", s, "other", 0.85))
-    params = RankParams(target_discount=1.0)
-    out = {r.candidate.suggestion_id: r for r in rank_link_suggestions(cands, pages, site, params)}
-    to_star = sum(r.kept for k, r in out.items() if k.endswith("star"))
-    to_other = sum(r.kept for k, r in out.items() if k.endswith("other"))
-    assert to_star == 2
-    assert to_other == 1
+    pages, site, cands = _star_setup()
 
+    def to_star(discount):
+        kept = kept_ids(rank(cands, pages, site, RankParams(target_discount=discount)))
+        return sum(1 for k in kept if k.endswith("star"))
 
-def test_no_discount_lets_the_top_target_take_every_slot():
-    pages, site = site_of(
-        page("s1", words=0, existing=2),
-        page("s2", words=0, existing=2),
-        page("star", inlinks=0, outlinks=9, page_type="money"),
-        page("other", inlinks=3, outlinks=9, page_type="money"),
-    )
-    cands = [
-        Candidate("s1-star", "s1", "star", 0.9),
-        Candidate("s1-other", "s1", "other", 0.85),
-        Candidate("s2-star", "s2", "star", 0.9),
-        Candidate("s2-other", "s2", "other", 0.85),
-    ]
-    out = {
-        r.candidate.suggestion_id: r
-        for r in rank_link_suggestions(cands, pages, site, RankParams(target_discount=0.0))
-    }
-    assert out["s1-star"].kept and out["s2-star"].kept
-    assert not out["s1-other"].kept and not out["s2-other"].kept
+    assert to_star(0.0) == 3
+    assert to_star(1.0) < 3
 
 
 def test_max_per_target_is_a_hard_cap():
@@ -161,18 +183,15 @@ def test_max_per_target_is_a_hard_cap():
         page("s3", words=0),
         page("star", inlinks=0, outlinks=9, page_type="money"),
     )
-    cands = [Candidate(s, s, "star", 0.9) for s in ("s1", "s2", "s3")]
-    out = rank_link_suggestions(cands, pages, site, RankParams(max_per_target=2))
+    out = rank(
+        [add(s, s, "star") for s in ("s1", "s2", "s3")], pages, site, RankParams(max_per_target=2)
+    )
     assert sum(r.kept for r in out) == 2
 
 
 def test_home_and_hub_pages_link_out_without_limit():
-    from src.site_structure.ranking import UNLIMITED_CAPACITY
-
     assert link_capacity(page("h", words=0, page_type="hub")) == UNLIMITED_CAPACITY
-    assert (
-        link_capacity(PageFacts("home", 0, 0, 50, "money", 0, is_home=True)) == UNLIMITED_CAPACITY
-    )
+    assert link_capacity(page("home", words=50, page_type="money", home=True)) == UNLIMITED_CAPACITY
     assert link_capacity(page("u", words=0, page_type="utility")) == 3
 
 
@@ -181,44 +200,40 @@ def test_hub_source_is_never_cut():
         page("hub", words=0, page_type="hub"),
         *[page(f"t{i}", inlinks=i) for i in range(20)],
     )
-    cands = [Candidate(f"t{i}", "hub", f"t{i}", 0.9) for i in range(20)]
-    out = rank_link_suggestions(cands, pages, site)
+    out = rank([add(f"t{i}", "hub", f"t{i}") for i in range(20)], pages, site)
     assert all(r.kept for r in out)
 
 
-def test_removals_prefer_unrelated_links_and_respect_floors():
-    from src.site_structure.ranking import rank_link_removals
+def test_candidates_on_unknown_pages_are_skipped():
+    pages, site = site_of(page("src"), page("t", inlinks=0))
+    out = rank([add("ok", "src", "t"), add("gone", "src", "missing")], pages, site)
+    assert [r.candidate.suggestion_id for r in out] == ["ok"]
 
+
+def test_removals_prefer_unrelated_links_and_respect_floors():
     src = page("src", outlinks=10, words=300, page_type="money")
     weak = page("weak", inlinks=2, page_type="legal")
     strong = page("strong", inlinks=9, page_type="money")
-    pages, _ = site_of(src, weak, strong)
-    ranked = rank_link_removals(
+    pages, site = site_of(src, weak, strong)
+    ranked = rank(
         [
-            Candidate("unrelated", "src", "strong", search_score=0.1, action="delete"),
-            Candidate("related", "src", "strong", search_score=0.9, action="delete"),
-            Candidate("last-ish", "src", "weak", search_score=0.0, action="delete"),
+            remove("unrelated", "src", "strong", 0.9),
+            remove("related", "src", "strong", 0.1),
+            remove("last-ish", "src", "weak", 1.0),
         ],
         pages,
+        site,
     )
     by_id = {r.candidate.suggestion_id: r for r in ranked}
     assert by_id["unrelated"].score > by_id["related"].score
     assert by_id["last-ish"].kept is False
-    assert sum(1 for r in ranked if r.kept) <= 3
     assert by_id["unrelated"].kept is True
 
 
 def test_removal_budget_is_a_third_of_outlinks():
-    from src.site_structure.ranking import rank_link_removals
-
     src = page("src", outlinks=10, words=0)
     targets = [page(f"t{i}", inlinks=5) for i in range(5)]
-    pages, _ = site_of(src, *targets)
-    ranked = rank_link_removals(
-        [
-            Candidate(f"c{i}", "src", f"t{i}", search_score=0.1 * i, action="delete")
-            for i in range(5)
-        ],
-        pages,
-    )
+    pages, site = site_of(src, *targets)
+    ranked = rank([remove(f"c{i}", "src", f"t{i}", 0.1 * i) for i in range(5)], pages, site)
     assert sum(1 for r in ranked if r.kept) == 3
+    assert kept_ids(ranked) == {"c2", "c3", "c4"}

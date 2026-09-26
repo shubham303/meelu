@@ -427,18 +427,27 @@ export interface SitePageIssue extends SiteIssue {
   url?: string;
 }
 
-export const LINK_SUGGESTION_STATES = [
+export const SUGGESTION_STATES = [
   "draft",
-  "ready",
-  "llm_rejected",
+  "screening_rejected",
+  "screening_approved",
+  "review_approved",
+  "review_rejected",
   "user_rejected",
-  "done",
-  "stale",
 ] as const;
 
-export type LinkSuggestionState = (typeof LINK_SUGGESTION_STATES)[number];
+export type SuggestionState = (typeof SUGGESTION_STATES)[number];
 
-export const LINK_SUGGESTION_ACTIONS = ["create", "delete", "edit"] as const;
+export interface SuggestionSummary {
+  draft: number;
+  screeningRejected: number;
+  screeningApproved: number;
+  reviewApproved: number;
+  reviewRejected: number;
+  userRejected: number;
+}
+
+export const LINK_SUGGESTION_ACTIONS = ["create", "delete"] as const;
 
 export type LinkSuggestionAction = (typeof LINK_SUGGESTION_ACTIONS)[number];
 
@@ -448,7 +457,7 @@ export interface LinkSuggestion extends BaseEntity, SiteScoped {
   fromChunkId?: string | null;
   toPageId: string;
   action: LinkSuggestionAction;
-  state: LinkSuggestionState;
+  state: SuggestionState;
   suggestion: string;
   searchScore?: number | null;
   confidence?: number | null;
@@ -458,8 +467,6 @@ export interface LinkSuggestion extends BaseEntity, SiteScoped {
   fromChunkHeading?: string | null;
   fromChunkOrdinal?: number | null;
 }
-
-export type LinkSuggestionSummary = Record<LinkSuggestionState, number>;
 
 export const PILLAR_SUGGESTION_ACTIONS = ["create", "expand"] as const;
 
@@ -477,7 +484,7 @@ export interface PillarSuggestion extends BaseEntity, SiteScoped {
   topic: string;
   memberPageIds: string[];
   coveringPageId?: string | null;
-  state: LinkSuggestionState;
+  state: SuggestionState;
   suggestion: string;
   searchScore?: number | null;
   confidence?: number | null;
@@ -485,8 +492,6 @@ export interface PillarSuggestion extends BaseEntity, SiteScoped {
   coveringUrl?: string | null;
   members: PillarMember[];
 }
-
-export type PillarSuggestionSummary = Record<LinkSuggestionState, number>;
 
 export type SiteIssueScope = "site" | "pages";
 

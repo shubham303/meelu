@@ -1,4 +1,5 @@
-from src.site_structure.screening import rejected, yes_confidence
+from src.site_structure.constants import SuggestionState
+from src.site_structure.pipeline.screening import screened_state, yes_confidence
 
 
 def test_yes_confidence_reads_probabilities_first():
@@ -9,7 +10,7 @@ def test_yes_confidence_reads_probabilities_first():
 
 
 def test_only_a_confident_no_rejects():
-    assert rejected(0.1)
-    assert rejected(0.2)
-    assert not rejected(0.3)
-    assert not rejected(0.9)
+    assert screened_state(0.1) is SuggestionState.SCREENING_REJECTED
+    assert screened_state(0.2) is SuggestionState.SCREENING_REJECTED
+    assert screened_state(0.3) is SuggestionState.SCREENING_APPROVED
+    assert screened_state(0.9) is SuggestionState.SCREENING_APPROVED

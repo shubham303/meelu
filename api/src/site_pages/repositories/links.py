@@ -155,6 +155,19 @@ class SitePageLinkRepository:
         )
         return {(r.src_page_id, r.dst_page_id) for r in rows}
 
+    async def pairs_into(
+        self, db: AsyncSession, site_id: str, dst_ids: list[str]
+    ) -> set[tuple[str, str]]:
+        if not dst_ids:
+            return set()
+        rows = await db.execute(
+            select(SitePageLink.src_page_id, SitePageLink.dst_page_id).where(
+                SitePageLink.site_id == site_id,
+                SitePageLink.dst_page_id.in_(set(dst_ids)),
+            )
+        )
+        return {(r.src_page_id, r.dst_page_id) for r in rows}
+
     async def src_ids_linking_to(
         self, db: AsyncSession, site_id: str, dst_page_id: str
     ) -> set[str]:

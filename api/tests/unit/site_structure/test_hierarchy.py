@@ -1,5 +1,5 @@
-from src.site_structure.hierarchy import hierarchy_edges, parent_of, path_of
-from src.site_structure.schemas import HierarchyPage
+from src.site_structure.links.schemas import HierarchyPage
+from src.site_structure.links.service import link_suggestion_service, parent_of, path_of
 
 O = "https://x.example.com"
 
@@ -9,8 +9,13 @@ def hp(pid, path, is_home=False, page_type="hub"):
 
 
 def edges_of(pages):
-    rows, home, hubs = hierarchy_edges(pages, "job")
-    return {(r.from_page_id, r.to_page_id) for r in rows}, home, hubs
+    home = next((p for p in pages if p.is_home), None)
+    hubs = [p for p in pages if p.page_type == "hub" and p is not home]
+    utilities = [p for p in pages if p.page_type == "utility" and p is not home]
+    return {
+        (src, dst)
+        for src, dst, _ in link_suggestion_service._hierarchy_edges(home, hubs, utilities)
+    }
 
 
 def test_paths():
@@ -22,14 +27,13 @@ def test_paths():
 
 
 def test_home_links_to_and_from_hubs_and_utilities():
-    edges, home, hubs = edges_of(
+    edges = edges_of(
         [
             hp("home", "/", is_home=True, page_type="money"),
             hp("blog", "/blog"),
             hp("login", "/login", page_type="utility"),
         ]
     )
-    assert home is not None and hubs == 1
     assert edges == {
         ("home", "blog"),
         ("blog", "home"),
@@ -39,7 +43,7 @@ def test_home_links_to_and_from_hubs_and_utilities():
 
 
 def test_hub_hierarchy_parent_child_and_siblings():
-    edges, home, hubs = edges_of(
+    edges = edges_of(
         [
             hp("blog", "/blog"),
             hp("guides", "/blog/guides"),
@@ -47,7 +51,6 @@ def test_hub_hierarchy_parent_child_and_siblings():
             hp("shop", "/shop"),
         ]
     )
-    assert home is None and hubs == 4
     assert ("blog", "guides") in edges and ("guides", "blog") in edges
     assert ("blog", "reviews") in edges and ("reviews", "blog") in edges
     assert ("guides", "reviews") in edges and ("reviews", "guides") in edges

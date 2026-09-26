@@ -10,14 +10,14 @@ const CONCURRENCY = 4;
 const PIPELINES = {
   review_link_suggestions: {
     description:
-      "Read every draft link suggestion of a job one by one against your prompt and settle each: ready shows it to the user, llm_rejected hides it. The only step that makes a row ready; run it after screening. It returns counts, never the suggestions.",
+      "Read every screening_approved link suggestion of a job one by one against your prompt and settle each: review_approved shows it to the user, review_rejected hides it. Run it after screening and before ranking. It returns counts, never the suggestions.",
     inputs: "/site/structure/link-suggestions/review-inputs",
     verdicts: "/site/structure/link-suggestions/verdicts",
     fields: [],
   },
   review_pillar_suggestions: {
     description:
-      "Read every draft pillar suggestion of a job one by one against your prompt and settle each: ready (writing the page title and the brief the user acts on) or llm_rejected. The only step that makes a pillar row ready; run it after screening. It returns counts, never the suggestions.",
+      "Read every screening_approved pillar suggestion of a job one by one against your prompt and settle each: review_approved (writing the page title and the brief the user acts on) shows it to the user, review_rejected hides it. Run it after screening and before ranking. It returns counts, never the suggestions.",
     inputs: "/site/structure/pillar-suggestions/review-inputs",
     verdicts: "/site/structure/pillar-suggestions/verdicts",
     fields: ["title", "suggestion"],

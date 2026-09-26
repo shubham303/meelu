@@ -1,15 +1,16 @@
 from typing import Any
 
 from src.providers.json_data_extractor.adapter import Question, choice
-from src.site_structure.schemas import PillarReviewInput
+from src.site_structure.constants import PillarAction
+from src.site_structure.pillars.schemas import PillarReviewInput
 
 ASK = {
-    "create": "Do these pages form one coherent topic that deserves a single hub page introducing and linking all of them?",
-    "expand": "Should the existing page be expanded into the hub that introduces and links all of these pages?",
+    PillarAction.CREATE: "Do these pages form one coherent topic that deserves a single hub page introducing and linking all of them?",
+    PillarAction.EXPAND: "Should the existing page be expanded into the hub that introduces and links all of these pages?",
 }
 
 
-def questions(action: str) -> dict[str, Question]:
+def questions(action: PillarAction) -> dict[str, Question]:
     return {
         "apply": choice(
             f"{ASK[action]} Judge from the page titles, descriptions and URLs. Say yes only "
@@ -22,7 +23,7 @@ def questions(action: str) -> dict[str, Question]:
     }
 
 
-def screening_state(item: PillarReviewInput) -> dict[str, Any]:
+def item_state(item: PillarReviewInput) -> dict[str, Any]:
     return {
         "action": item.action,
         "topic": item.topic,

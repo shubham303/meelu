@@ -86,6 +86,8 @@ def test_desk_writes_union_the_desks_actions():
         "screen_pillar_suggestions",
         "rank_pillar_suggestions",
         "finish_structure_job",
+        "reconcile_structure_suggestions",
+        "delete_structure_suggestion",
         "save_note",
         "update_note",
         "delete_note",

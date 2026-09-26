@@ -87,6 +87,9 @@ async def test_page_lookups(seeded):
         assert set(await site_pages.ids_by_url_substring(db, site_id, "/a")) == {a}
         assert await site_pages.home_page_id(db, site_id) == home
         assert await site_pages.gone_ids(db, site_id) == {gone}
+        assert await site_pages.gone_ids(db, site_id, [home, gone]) == {gone}
+        assert await site_pages.gone_ids(db, site_id, [home]) == set()
+        assert set(await site_pages.changed_at_by_id(db, site_id, [a])) == {a}
         assert await site_pages.live_ids(db, site_id) == {home, a}
         by_path = await site_pages.list_by_paths(db, site_id, ["/a/", "/"])
         assert {p.id for p in by_path} == {home, a}
@@ -116,6 +119,8 @@ async def test_link_queries_and_graph_writes(seeded):
             (home, a)
         }
         assert await site_page_links.pairs_among(db, site_id, [home, a]) == {(home, a)}
+        assert await site_page_links.pairs_into(db, site_id, [a]) == {(home, a)}
+        assert await site_page_links.pairs_into(db, site_id, []) == set()
         assert await site_page_links.src_ids_linking_to(db, site_id, a) == {home}
         assert await site_page_links.inlink_counts(db, site_id, [a]) == {a: 1}
         assert (await site_page_links.outlink_counts(db, site_id, "body"))[home] == 3

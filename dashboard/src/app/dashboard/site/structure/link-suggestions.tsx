@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  Check,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -21,55 +20,57 @@ import {
   LINK_SUGGESTION_ACTIONS,
   type LinkSuggestion,
   type LinkSuggestionAction,
-  type LinkSuggestionState,
-  type LinkSuggestionSummary,
+  type SuggestionState,
+  type SuggestionSummary,
 } from "@/lib/types";
 
 const PAGE_SIZE = 50;
 
-type TabState = Exclude<LinkSuggestionState, "draft" | "stale" | "llm_rejected">;
+type TabState = Extract<SuggestionState, "review_approved" | "user_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
-  ready: "Ready",
-  done: "Done",
+  review_approved: "Approved",
   user_rejected: "Turned down",
+};
+
+const SUMMARY_KEY: Record<TabState, keyof SuggestionSummary> = {
+  review_approved: "reviewApproved",
+  user_rejected: "userRejected",
 };
 
 const ACTION_LABEL: Record<LinkSuggestionAction, string> = {
   create: "Add link",
   delete: "Remove link",
-  edit: "Change link",
 };
 
 const ACTION_TONE: Record<LinkSuggestionAction, BadgeTone> = {
   create: "good",
   delete: "bad",
-  edit: "accent",
 };
 
 const EMPTY: Record<TabState, string> = {
-  ready: "No link suggestions ready. Ask the agent to find internal links worth adding, and they land here.",
-  done: "Nothing marked done yet.",
+  review_approved:
+    "No approved link suggestions. Ask the agent to find internal links worth adding, and the ones that pass review land here.",
   user_rejected: "Nothing turned down yet.",
 };
 
-const EMPTY_SUMMARY: LinkSuggestionSummary = {
+const EMPTY_SUMMARY: SuggestionSummary = {
   draft: 0,
-  ready: 0,
-  llm_rejected: 0,
-  user_rejected: 0,
-  done: 0,
-  stale: 0,
+  screeningRejected: 0,
+  screeningApproved: 0,
+  reviewApproved: 0,
+  reviewRejected: 0,
+  userRejected: 0,
 };
 
 export function LinkSuggestions() {
-  const [state, setState] = useState<TabState>("ready");
+  const [state, setState] = useState<TabState>("review_approved");
   const [action, setAction] = useState<LinkSuggestionAction | "">("");
   const [q, setQ] = useState("");
   const [needle, setNeedle] = useState("");
   const [page, setPage] = useState(1);
 
-  const { data: summary, refresh: refreshSummary } = useApi<LinkSuggestionSummary>(
+  const { data: summary, refresh: refreshSummary } = useApi<SuggestionSummary>(
     "/api/v1/site/structure/link-suggestions/summary",
   );
 
@@ -118,7 +119,7 @@ export function LinkSuggestions() {
   };
 
   const counts = summary ?? EMPTY_SUMMARY;
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const total = counts.reviewApproved + counts.userRejected;
   const nothingAtAll = summary !== null && total === 0;
 
   return (
@@ -131,13 +132,13 @@ export function LinkSuggestions() {
             size="sm"
             disabled={refreshing}
             onClick={refreshSuggestions}
-            title="Remove suggestions no longer valid: the link already exists, or a page left the crawl"
+            title="Clear suggestions the site has caught up with: the link now exists, is already gone, or a page left the crawl"
           >
             <RefreshCw size={13} className={cn(refreshing && "animate-spin")} /> Refresh
           </Button>
         </div>
         <span className="text-xs text-faint">
-          Internal links the agent proposes. You make the change on the site, then mark it done.
+          Internal links the agent proposes. Make the change on the site; after the next crawl, Refresh clears it.
         </span>
       </div>
 
@@ -156,7 +157,7 @@ export function LinkSuggestions() {
             tabs={(Object.keys(STATE_LABEL) as TabState[]).map((k) => ({
               key: k,
               label: STATE_LABEL[k],
-              count: counts[k],
+              count: counts[SUMMARY_KEY[k]],
             }))}
           />
 
@@ -238,7 +239,7 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const move = async (to: LinkSuggestionState) => {
+  const move = async (to: SuggestionState) => {
     setBusy(true);
     try {
       await api(`/api/v1/site/structure/link-suggestions/${row.id}`, {
@@ -295,23 +296,17 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
             {row.fromChunkHeading && <span className="truncate">in “{row.fromChunkHeading}”</span>}
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
-            {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1" onClick={stop} onKeyDown={stop}>
-          {row.state === "ready" && (
-            <>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => move("done")}>
-                <Check size={13} /> Done
-              </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
-                <X size={13} /> Turn down
-              </Button>
-            </>
+          {row.state === "review_approved" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
+              <X size={13} /> Turn down
+            </Button>
           )}
-          {row.state !== "ready" && (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("ready")}>
-              <RotateCcw size={13} /> Reopen
+          {row.state === "user_rejected" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("review_approved")}>
+              <RotateCcw size={13} /> Restore
             </Button>
           )}
           <Button

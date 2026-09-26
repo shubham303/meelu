@@ -86,43 +86,49 @@ save does not exist.
 
 Run in this order:
 
-1. start_structure_job with the user's strategy text as the prompt. It hands
-   back the job_id every later call needs and settles old rows first
-   (suggestions whose link now exists become done; suggestions on gone pages
-   become stale).
-2. Pick the pages. Use run_sql over site_pages, site_page_links,
+1. start_structure_job with the user's strategy text as the prompt. It only
+   opens the job and hands back the job_id every later call needs.
+2. reconcile_structure_suggestions. It deletes link and pillar suggestions the
+   site has caught up with: the link now exists, a removal's link is already
+   gone, or a page is gone.
+3. Pick the pages. Use run_sql over site_pages, site_page_links,
    site_page_llm_extraction and site_search_daily to select the from set and
    the to set the strategy describes (page types, inlinks, depth, freshness,
    rankings). Select only page_id columns you will hand to a generator. Do
    not read body_text to choose — the generators read the passages.
-3. Generate draft rows with the generator that fits:
+4. Generate draft suggestions with the generator that fits:
    - propose_unlinked_mentions when the strategy is about a target page that
      other passages already talk about: give it the target page ids and the
      phrases a passage would use for each (title, H1, queries it ranks for).
    - propose_hierarchy_links when the strategy is about the site's skeleton:
      home to and from hubs and utility pages, hub to hub. Text similarity is
      useless for these pages, so this tool ignores it and uses URL structure.
-   Every generator skips edges that already exist or already have a row.
-4. screen_link_suggestions with the job_id. A cheap model throws out the
-   clear noes. Pass a question only when the strategy needs a different bar
-   than "would a reader of the source want the target next".
-5. review_link_suggestions with the job_id and the user's strategy as the
-   prompt. It reads every remaining draft one by one on your own model, off
-   your context, and is the only step that marks a row ready. Do not judge rows yourself; do not skip
-   this step; do not paraphrase the strategy — pass it as the user wrote it,
-   plus any sharpening the strategy itself asked for.
-6. rank_link_suggestions. It scores every open row on the site and cuts each
-   source page to its link budget, weakest first. Run it once, after review.
-7. finish_structure_job with the job_id and COMPLETED, or FAILED if a step
-   could not run. Then tell the user, in a few lines, how many rows are ready
-   on the Structure screen, what was rejected and why in one sentence, and
-   what the strategy could not cover.
+   Every generator skips links that already exist, suggestions that already
+   exist in any state, and source pages already at their link budget.
+5. screen_link_suggestions with the job_id. A cheap model settles every draft
+   as screening_approved or screening_rejected. Pass a question only when the
+   strategy needs a different bar than "would a reader of the source want the
+   target next".
+6. review_link_suggestions with the job_id and the user's strategy as the
+   prompt. It reads every screening_approved suggestion one by one on your
+   own model, off your context, and settles each as review_approved or
+   review_rejected; only review_approved ones reach the user. Do not judge
+   suggestions yourself; do not skip this step; do not paraphrase the
+   strategy — pass it as the user wrote it, plus any sharpening the strategy
+   itself asked for.
+7. rank_link_suggestions. It scores every review_approved suggestion on the
+   site and deletes the ones that miss each source page's link budget, so they
+   can come back once budget frees up. Run it once, after review.
+8. finish_structure_job with the job_id and COMPLETED, or FAILED if a step
+   could not run. Then tell the user, in a few lines, how many suggestions are
+   approved on the Structure screen, what was rejected and why in one
+   sentence, and what the strategy could not cover.
 
 Rules that hold for every strategy:
-- Never mark a row done or user_rejected; those are the user's decisions on
-  the Structure screen.
+- Never turn a suggestion down or restore one; those are the user's decisions
+  on the Structure screen.
 - Never save a suggestion by hand for a pair you found in chat; route it
-  through a generator so it is deduplicated and scored like every other row.
+  through a generator so it is deduplicated and scored like every other one.
 - If a tool reports stopped (no provider, no credits), say so and stop the
   pipeline there rather than improvising the step yourself.
 - Numbers about the site (how many orphans, how many hubs) come from run_sql,
