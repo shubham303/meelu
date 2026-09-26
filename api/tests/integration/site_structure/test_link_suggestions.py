@@ -137,7 +137,7 @@ async def test_create_get_update_delete(client, email):
     assert row["fromChunkHeading"] == "Pricing tiers"
     assert row["action"] == "create"
     assert row["state"] == "draft"
-    assert row["score"] is None
+    assert row.get("score") is None
     assert "userId" not in row
 
     r = await client.post(f"{BASE}/link-suggestions", json=suggestion(job))
@@ -284,11 +284,7 @@ async def test_unlinked_mentions(client, email):
 
 async def test_rank_scores_and_cuts_to_budget(client, email):
     site, user_id, pages, _, job = await prepare(client, email)
-    home, blog, pricing = (
-        pages[f"{ORIGIN}/"],
-        pages[f"{ORIGIN}/blog/how-to"],
-        pages[f"{ORIGIN}/pricing"],
-    )
+    blog = pages[f"{ORIGIN}/blog/how-to"]
     extra = await seed_pages(
         site["id"],
         user_id,
@@ -378,7 +374,7 @@ async def test_hierarchy_links(client, email):
     edges = {(row["fromPageId"], row["toPageId"]) for row in r.json()["data"]}
     assert (home, blog) not in edges
     assert edges == {(blog, home), (home, guides), (guides, home), (blog, guides), (guides, blog)}
-    assert all(row["searchScore"] is None for row in r.json()["data"])
+    assert all(row.get("searchScore") is None for row in r.json()["data"])
 
     r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
     assert r.json()["data"]["inserted"] == 0 and r.json()["data"]["skipped"] == 5
@@ -396,7 +392,6 @@ async def test_screen_then_review(client, email, screener):
         "passed": 1,
         "llmRejected": 0,
         "failed": 0,
-        "stopped": None,
     }
     r = await client.get(f"{BASE}/link-suggestions/{row['id']}")
     assert r.json()["data"]["state"] == "draft"
@@ -443,3 +438,55 @@ async def test_screen_then_review(client, email, screener):
 
     r = await client.post(f"{BASE}/link-suggestions/review-inputs", json={"prompt": " "})
     assert r.status_code == 400
+
+
+async def test_list_sorts(client, email):
+    site, user_id, _, _, job = await prepare(client, email)
+    extra = await seed_pages(
+        site["id"], user_id, [{"url": f"{ORIGIN}/{name}"} for name in ("a", "b", "c")]
+    )
+    made = {}
+    for name, search, confidence in (("a", 0.2, 0.9), ("b", 0.8, 0.1), ("c", 0.5, None)):
+        r = await client.post(
+            f"{BASE}/link-suggestions",
+            json=suggestion(
+                job, toPageId=extra[f"{ORIGIN}/{name}"], searchScore=search, state="ready"
+            ),
+        )
+        assert r.status_code == 201, r.text
+        made[r.json()["data"]["id"]] = confidence
+
+    from sqlalchemy import update
+
+    from src.core.database import SessionLocal
+    from src.site_structure.models.link_suggestion import LinkSuggestion
+
+    async with SessionLocal() as db:
+        for sid, confidence in made.items():
+            await db.execute(
+                update(LinkSuggestion).where(LinkSuggestion.id == sid).values(confidence=confidence)
+            )
+        await db.commit()
+
+    async def listed(**params):
+        r = await client.get(
+            f"{BASE}/link-suggestions", params={"state": "any", "jobId": job["id"], **params}
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["data"]
+
+    rows = await listed(sortBy="searchScore")
+    assert [row["searchScore"] for row in rows] == [0.8, 0.5, 0.2]
+    rows = await listed(sortBy="searchScore", sortOrder="asc")
+    assert [row["searchScore"] for row in rows] == [0.2, 0.5, 0.8]
+    rows = await listed(sortBy="confidence")
+    assert [row.get("confidence") for row in rows] == [0.9, 0.1, None]
+    rows = await listed(sortBy="confidence", sortOrder="asc")
+    assert [row.get("confidence") for row in rows] == [0.1, 0.9, None]
+
+    r = await client.get(f"{BASE}/link-suggestions", params={"sortBy": "nope"})
+    assert r.status_code == 400
+    r = await client.get(f"{BASE}/pillar-suggestions", params={"sortOrder": "sideways"})
+    assert r.status_code == 400
+    r = await client.get(f"{BASE}/pillar-suggestions", params={"sortBy": "confidence"})
+    assert r.status_code == 200, r.text

@@ -30,7 +30,7 @@ async def graph(client, site):
     assert r.status_code == 200
     assert r.json()["data"] == {"rebuilt": True}
     body = await list_pages(client, view="full", page_size=100)
-    return {p["url"]: p for p in body}
+    return {p["url"]: p for p in body["data"]}
 
 
 async def test_graph_counts_inlinks_and_depth(client, graph):
@@ -42,7 +42,7 @@ async def test_graph_counts_inlinks_and_depth(client, graph):
     assert graph["https://example.com/"]["depth"] == 0
     assert graph["https://example.com/a"]["depth"] == 1
     assert graph["https://example.com/b"]["depth"] == 1
-    assert graph["https://example.com/orphan"]["depth"] is None
+    assert graph["https://example.com/orphan"].get("depth") is None
 
 
 async def test_page_links_route_reports_both_directions(client, graph):
@@ -84,10 +84,10 @@ async def test_graph_rebuild_clears_stale_scores(client, site):
     assert r.status_code == 200
 
     body = await list_pages(client, view="full", page_size=100)
-    pages = {p["url"]: p for p in body}
+    pages = {p["url"]: p for p in body["data"]}
     assert pages["https://example.com/b"]["inlinks"] == 1
     assert pages["https://example.com/a"]["inlinks"] == 0
-    assert pages["https://example.com/a"]["depth"] is None
+    assert pages["https://example.com/a"].get("depth") is None
     assert pages["https://example.com/"]["depth"] == 0
 
 
@@ -158,7 +158,7 @@ async def test_link_scores_use_traffic_teleport(client, site):
     assert r.status_code == 200
 
     body = await list_pages(client, view="full", page_size=100)
-    pages = {p["url"]: p for p in body}
+    pages = {p["url"]: p for p in body["data"]}
     assert pages["https://example.com/orphan"]["linkScore"] == 100.0
 
 
@@ -215,15 +215,15 @@ async def test_graph_stores_regions_and_edge_facts(client, site):
     await save_pages(client, REGIONS)
     r = await client.post("/api/v1/site/pages/graph", json={})
     assert r.status_code == 200
-    pages = {p["url"]: p for p in await list_pages(client, view="full", page_size=100)}
+    pages = {p["url"]: p for p in (await list_pages(client, view="full", page_size=100))["data"]}
 
     hub = pages["https://example.com/hub"]
     assert hub["inlinks"] == 1
     assert hub["depth"] == 1
 
     assert pages["https://example.com/spoke"]["inlinks"] == 1
-    assert pages["https://example.com/page/2"]["depth"] is None
-    assert pages["https://example.com/deep"]["depth"] is None
+    assert pages["https://example.com/page/2"].get("depth") is None
+    assert pages["https://example.com/deep"].get("depth") is None
 
     async with unit_of_work() as db:
         rows = (

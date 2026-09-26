@@ -7,7 +7,6 @@ from src.auth import AuthContext, any_site, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.crawl_jobs import service
 from src.crawl_jobs.schemas import (
     CRAWL_JOB_STATUSES,
     SETTLED_JOB_STATUSES,
@@ -25,6 +24,7 @@ from src.crawl_jobs.schemas import (
     CrawlJobUpdateRequest,
     CrawlPlanResponse,
 )
+from src.crawl_jobs.service import STALE_JOB_MS, crawl_job_service
 
 router = APIRouter()
 
@@ -62,11 +62,11 @@ async def list_crawl_jobs(
         created_before=created_before,
         sort=sort,
     )
-    page = await service.list_crawls(db, ctx.site_id, filters, paging)
+    page = await crawl_job_service.list_crawls(db, ctx.site_id, filters, paging)
     return CrawlJobListResponse(
         data=[CrawlJobListItemResponse.model_validate(j) for j in page.data],
         pagination=page.pagination,
-        status=await service.crawl_status(db, ctx.user_id, ctx.site_id),
+        status=await crawl_job_service.status(db, ctx.user_id, ctx.site_id),
     )
 
 
@@ -77,7 +77,7 @@ async def open_crawl_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CrawlJobStartResponse:
-    started = await service.start_crawl(db, ctx.user_id, ctx.site_id, body)
+    started = await crawl_job_service.start(db, ctx.user_id, ctx.site_id, body)
     response.status_code = 202 if started.started else 409
     return started
 
@@ -89,10 +89,10 @@ async def reap_crawl_jobs(
     ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobReapResponse:
     stale = body.stale_ms
-    reaped = await service.reap_crawls(
+    reaped = await crawl_job_service.reap(
         db,
         [ctx.site_id],
-        stale if stale is not None and (stale == 0 or stale >= 60_000) else service.STALE_JOB_MS,
+        stale if stale is not None and (stale == 0 or stale >= 60_000) else STALE_JOB_MS,
         reason=(
             "the process running it went away"
             if stale == 0
@@ -119,7 +119,7 @@ async def get_crawl_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobResponse:
-    return CrawlJobResponse.model_validate(await service.read_crawl(db, ctx.site_id, job_id))
+    return CrawlJobResponse.model_validate(await crawl_job_service.get(db, ctx.site_id, job_id))
 
 
 @router.patch("/site/crawl-jobs/{job_id}")
@@ -132,7 +132,7 @@ async def patch_crawl_job(
     status = body.status or ""
 
     if status == "cancelling":
-        stopped = await service.stop_crawl(
+        stopped = await crawl_job_service.stop(
             db,
             ctx.user_id,
             ctx.site_id,
@@ -141,9 +141,9 @@ async def patch_crawl_job(
         )
         return CrawlJobResponse.model_validate(stopped)
     if status == "running" or body.heartbeat is True:
-        return await service.beat_crawl(db, ctx.site_id, job_id, body)
+        return await crawl_job_service.beat(db, ctx.site_id, job_id, body)
     if status in SETTLED_JOB_STATUSES:
-        settled = await service.settle_crawl(db, ctx.user_id, ctx.site_id, job_id, body)
+        settled = await crawl_job_service.settle(db, ctx.user_id, ctx.site_id, job_id, body)
         return CrawlJobResponse.model_validate(settled)
 
     raise HTTPException(
@@ -160,7 +160,7 @@ async def delete_crawl_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(any_site),
 ) -> CrawlJobDeleteResponse:
-    return await service.remove_crawl(db, ctx.user_id, ctx.site_id, job_id)
+    return await crawl_job_service.delete(db, ctx.user_id, ctx.site_id, job_id)
 
 
 @router.post("/site/crawl-jobs/{job_id}/claim")
@@ -169,4 +169,4 @@ async def claim_crawl_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(any_site),
 ) -> CrawlPlanResponse:
-    return await service.claim_crawl(db, ctx.user_id, ctx.site_id, job_id)
+    return await crawl_job_service.claim(db, ctx.user_id, ctx.site_id, job_id)

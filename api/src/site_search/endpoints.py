@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
-from src.site_search import service
+from src.site_search.service import site_search_service
 from src.site_search.schemas import (
     SearchChangesResponse,
     SearchInspectionsIngestRequest,
@@ -48,7 +48,7 @@ async def overview(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchOverviewResponse:
-    return await service.overview(db, ctx.user_id, ctx.site_id)
+    return await site_search_service.overview(db, ctx.user_id, ctx.site_id)
 
 
 @router.post("/site/search-data/property")
@@ -57,7 +57,7 @@ async def set_property(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchPropertyResponse:
-    return await service.set_property(db, ctx.user_id, ctx.site_id, body)
+    return await site_search_service.set_property(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/site/search-data/rows")
@@ -66,7 +66,7 @@ async def ingest_rows(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchRowsIngestResponse:
-    return await service.ingest_days(db, ctx.user_id, ctx.site_id, body)
+    return await site_search_service.ingest_days(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/site/search-data/queries")
@@ -80,7 +80,7 @@ async def queries(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchQueriesResponse:
-    return await service.queries(
+    return await site_search_service.queries(
         db,
         ctx.user_id,
         ctx.site_id,
@@ -106,8 +106,8 @@ async def pages(
     ctx: AuthContext = Depends(require_site),
 ) -> SearchPagesResponse | SearchPageDetailResponse:
     if url:
-        return await service.page_detail(db, ctx.user_id, ctx.site_id, url, days)
-    return await service.pages(
+        return await site_search_service.page_detail(db, ctx.user_id, ctx.site_id, url, days)
+    return await site_search_service.pages(
         db,
         ctx.user_id,
         ctx.site_id,
@@ -127,7 +127,7 @@ async def series(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSeriesResponse:
-    return await service.series(
+    return await site_search_service.series(
         db, ctx.user_id, ctx.site_id, days=_positive(days), pages=_split_pages(pages)
     )
 
@@ -138,7 +138,7 @@ async def changes(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchChangesResponse:
-    return await service.changes(db, ctx.user_id, ctx.site_id, _positive(days))
+    return await site_search_service.changes(db, ctx.user_id, ctx.site_id, _positive(days))
 
 
 @router.get("/site/search-data/inspections")
@@ -147,7 +147,7 @@ async def inspection_targets(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchInspectionTargetsResponse:
-    return await service.inspection_targets(db, ctx.user_id, ctx.site_id, limit)
+    return await site_search_service.inspection_targets(db, ctx.user_id, ctx.site_id, limit)
 
 
 @router.post("/site/search-data/inspections")
@@ -156,7 +156,7 @@ async def ingest_inspections(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchInspectionsIngestResponse:
-    return await service.ingest_inspections(db, ctx.user_id, ctx.site_id, body)
+    return await site_search_service.ingest_inspections(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/site/search-data/sync-jobs")
@@ -164,7 +164,7 @@ async def sync_jobs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSyncJobsResponse:
-    return await service.sync_jobs(db, ctx.user_id, ctx.site_id)
+    return await site_search_service.sync_jobs(db, ctx.user_id, ctx.site_id)
 
 
 @router.post("/site/search-data/sync-jobs")
@@ -175,7 +175,7 @@ async def start_sync(
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSyncStartResponse:
     trigger = body.trigger if body is not None else "user"
-    started = await service.start_sync(db, ctx.user_id, ctx.site_id, trigger)
+    started = await site_search_service.start_sync(db, ctx.user_id, ctx.site_id, trigger)
     response.status_code = 202 if started.started else 409
     return started
 
@@ -186,7 +186,7 @@ async def get_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSyncResponse:
-    record = await service.get_sync(db, ctx.user_id, ctx.site_id, id)
+    record = await site_search_service.get_sync(db, ctx.user_id, ctx.site_id, id)
     return SearchSyncResponse.model_validate(record)
 
 
@@ -197,7 +197,7 @@ async def patch_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSyncResponse:
-    record = await service.patch_sync(db, ctx.user_id, ctx.site_id, id, body)
+    record = await site_search_service.patch_sync(db, ctx.user_id, ctx.site_id, id, body)
     return SearchSyncResponse.model_validate(record)
 
 
@@ -207,4 +207,4 @@ async def claim_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SearchSyncClaimResponse:
-    return await service.claim_sync(db, ctx.user_id, ctx.site_id, id)
+    return await site_search_service.claim_sync(db, ctx.user_id, ctx.site_id, id)

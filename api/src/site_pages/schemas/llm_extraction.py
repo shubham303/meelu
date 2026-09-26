@@ -62,6 +62,13 @@ class PendingPageRecord(EntityModel):
     body_text: str | None
 
 
+class ExtractionState(EntityModel):
+    page_type: str | None
+    extracted_from_hash: str | None
+    error: str | None
+    extract_attempts: int
+
+
 class PageLlmExtractionStatsRecord(EntityModel):
     eligible: int
     extracted: int

@@ -1,16 +1,6 @@
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.site_structure import repository as repo
-from src.site_structure.schemas import (
-    LinkSuggestionChanges,
-    ReviewBatch,
-    ReviewItem,
-    ReviewResult,
-    ScreeningInput,
-    Verdict,
-)
+from src.site_structure.schemas import ScreeningInput
 
 VERDICTS = ("ready", "llm_rejected")
 
@@ -50,36 +40,3 @@ def review_state(item: ScreeningInput) -> dict[str, Any]:
             "page_type": item.to_page_type or "",
         },
     }
-
-
-async def review_inputs(
-    db: AsyncSession,
-    site_id: str,
-    prompt: str,
-    job_id: str | None,
-    ids: list[str] | None,
-    limit: int,
-) -> ReviewBatch:
-    items = await repo.review_inputs(db, site_id, job_id, ids, limit)
-    return ReviewBatch(
-        instructions=INSTRUCTIONS.format(prompt=prompt),
-        schema=SCHEMA,
-        items=[ReviewItem(id=item.id, state=review_state(item)) for item in items],
-    )
-
-
-async def apply_verdicts(db: AsyncSession, site_id: str, verdicts: list[Verdict]) -> ReviewResult:
-    result = ReviewResult()
-    for given in verdicts:
-        if given.verdict not in VERDICTS:
-            result.failed += 1
-            continue
-        updated = await repo.update_one(
-            db, site_id, given.id, LinkSuggestionChanges(state=given.verdict)
-        )
-        if updated is None:
-            result.failed += 1
-            continue
-        result.reviewed += 1
-        setattr(result, given.verdict, getattr(result, given.verdict) + 1)
-    return result

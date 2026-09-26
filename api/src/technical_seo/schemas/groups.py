@@ -12,6 +12,17 @@ from src.technical_seo.schemas.issues import (
 from src.technical_seo.schemas.runs import AuditRunRecord
 
 
+class PageIssueKindGroup(BaseModel):
+    kind: str
+    issue: str
+    severity: str
+    matched: int
+    pages: int
+    page_ids: list[str]
+    reason: str | None
+    issue_type: str = "static"
+
+
 class PageIssueGroup(BaseModel):
     kind: str
     issue: str

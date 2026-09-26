@@ -37,7 +37,12 @@ class SeoKeyword(EntityMixin, SiteScopedMixin, Base):
         ForeignKey("seo_keywords.id", ondelete="SET NULL")
     )
     cluster_id: Mapped[str | None] = mapped_column(
-        ForeignKey("seo_keyword_clusters.id", ondelete="SET NULL", use_alter=True)
+        ForeignKey(
+            "seo_keyword_clusters.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="seo_keywords_cluster_id_fkey",
+        )
     )
     branded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     our_position: Mapped[int | None] = mapped_column(Integer)
@@ -60,7 +65,13 @@ class SeoKeywordCluster(EntityMixin, SiteScopedMixin, Base):
     __table_args__ = (Index("seo_keyword_clusters_site_idx", "site_id"),)
 
     head_keyword_id: Mapped[str] = mapped_column(
-        ForeignKey("seo_keywords.id", ondelete="CASCADE", use_alter=True), nullable=False
+        ForeignKey(
+            "seo_keywords.id",
+            ondelete="CASCADE",
+            use_alter=True,
+            name="seo_keyword_clusters_head_keyword_id_fkey",
+        ),
+        nullable=False,
     )
     centroid: Mapped[list[float] | None] = mapped_column(Vector(384))
     size: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))

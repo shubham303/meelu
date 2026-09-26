@@ -32,20 +32,3 @@ STAGE_LABEL = {
 }
 
 CRAWL_COMPLETE_STAGES = ("indexed", "skipped", "blocked")
-
-STAGE_SQL = {
-    "pending": "status is null and not blocked_by_robots",
-    "blocked": "blocked_by_robots",
-    "failed": "status >= 400 or status = 0",
-    "skipped": "status = 200 and shallow",
-    "crawled": """status = 200 and not shallow and (body_text is null
-             or chunked_from_hash is null
-             or chunked_from_hash is distinct from content_hash)""",
-    "indexed": """status = 200 and not shallow and body_text is not null
-             and chunked_from_hash is not distinct from content_hash""",
-}
-
-CRAWL_COMPLETE_SQL = f"""(({STAGE_SQL["indexed"]})
-      or ({STAGE_SQL["skipped"]})
-      or ({STAGE_SQL["blocked"]}))
-     and embed_state is distinct from 'failed'"""

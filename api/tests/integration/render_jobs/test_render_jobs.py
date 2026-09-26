@@ -58,7 +58,7 @@ async def test_render_job_lifecycle(client, email):
     assert status["renderedPages"] == 0
     assert status["eligiblePages"] == 3
     assert status["pendingPages"] == 3
-    assert status["lastRenderedAt"] is None
+    assert status.get("lastRenderedAt") is None
 
     r = await client.get("/api/v1/site/render-jobs", params={"device": "tablet"})
     assert r.status_code == 400
@@ -88,7 +88,7 @@ async def test_render_job_lifecycle(client, email):
     assert claimed["target"]["domain"] == "render.example.com"
     urls = {p["url"] for p in claimed["pages"]}
     assert urls == {f"{ORIGIN}/", f"{ORIGIN}/app", f"{ORIGIN}/docs"}
-    assert all(p["renderedFromHash"] is None for p in claimed["pages"])
+    assert all(p.get("renderedFromHash") is None for p in claimed["pages"])
 
     r = await client.post(f"/api/v1/site/render-jobs/{job['id']}/claim")
     assert r.status_code == 409
@@ -173,7 +173,7 @@ async def test_status_and_claim_are_per_device(client, email):
     r = await client.post(f"/api/v1/site/render-jobs/{job['id']}/claim")
     claimed = r.json()["data"]
     assert claimed["job"]["device"] == "mobile"
-    hashes = {p["url"]: p["renderedFromHash"] for p in claimed["pages"]}
+    hashes = {p["url"]: p.get("renderedFromHash") for p in claimed["pages"]}
     assert hashes[f"{ORIGIN}/docs"] == "h-docs"
     assert hashes[f"{ORIGIN}/app"] == "stale"
     assert hashes[f"{ORIGIN}/"] is None
@@ -265,10 +265,10 @@ async def test_page_render_upsert_read_and_delete(client, email):
     assert saved["title"] == "Rendered App"
     assert saved["wordCount"] == 640
     assert saved["consoleSamples"] == [{"level": "error", "text": "Uncaught TypeError"}]
-    assert saved["renderError"] is None
+    assert saved.get("renderError") is None
     assert saved["userAgentProfile"] == "googlebot"
     assert saved["device"] == "desktop"
-    assert saved["hiddenWordCount"] is None
+    assert saved.get("hiddenWordCount") is None
     assert saved["status"] == 200
     assert saved["settleReason"] == "idle"
     assert saved["internalLinkUrls"] == [f"{ORIGIN}/", f"{ORIGIN}/docs"]
@@ -319,7 +319,7 @@ async def test_page_render_upsert_read_and_delete(client, email):
     assert again["id"] == first_id
     assert again["renderError"] == "timed out"
     assert again["wordCount"] == 0
-    assert again["title"] is None
+    assert again.get("title") is None
 
     r = await client.get("/api/v1/site/page-renders", params={"pageId": page_id})
     assert r.status_code == 200
@@ -365,5 +365,5 @@ async def test_render_job_can_target_one_page_or_cap_the_count(client, email):
     r = await client.post("/api/v1/site/render-jobs", json={"url": "not a url", "limit": 0})
     assert r.status_code == 202, r.text
     job = r.json()["data"]["job"]
-    assert job["pageUrl"] is None
-    assert job["pageLimit"] is None
+    assert job.get("pageUrl") is None
+    assert job.get("pageLimit") is None

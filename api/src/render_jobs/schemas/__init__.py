@@ -19,6 +19,7 @@ SETTLE_REASONS = ("idle", "timeout")
 RENDER_SCOPES = ("sample", "all")
 USER_AGENT_PROFILES = ("googlebot", "generic", "ai_bot")
 RENDER_DEVICES = ("desktop", "mobile")
+ACTIVE_JOB_STATUSES = ("queued", "running", "cancelling")
 
 
 def _strings(raw: Any, cap: int) -> list[str]:

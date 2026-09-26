@@ -4,12 +4,7 @@ from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.core.pagination import PaginationParams
-from src.site_pages import service
-from src.site_pages.llm_extraction import service as llm_extraction_service
-from src.site_pages.schemas.llm_extraction import (
-    PAGE_TYPES,
-    PageLlmExtractionResponse,
-)
+from src.site_pages.llm_extraction.service import site_page_llm_extraction_service
 from src.site_pages.schemas import (
     MISSING_FIELDS,
     STATUS_CLASSES,
@@ -17,6 +12,11 @@ from src.site_pages.schemas import (
     SitePageFilters,
     SitePageListResult,
 )
+from src.site_pages.schemas.llm_extraction import (
+    PAGE_TYPES,
+    PageLlmExtractionResponse,
+)
+from src.site_pages.service import site_page_service
 from src.site_pages.stage import STAGES
 
 
@@ -111,7 +111,9 @@ async def search_page(
     paging = PaginationParams(page=page, page_size=page_size).validate()
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.pages(db, ctx.site_id, filters, paging, view, search_text)
+        return await site_page_service.list_pages(
+            db, ctx.site_id, filters, paging, view, search_text
+        )
 
 
 @tool(writes=True, desk="pages")
@@ -121,7 +123,7 @@ async def set_page_type(page_id: str, page_type: Literal[PAGE_TYPES]) -> PageLlm
     refuses a page that already has one."""
     ctx = require_site()
     async with unit_of_work() as db:
-        saved = await llm_extraction_service.set_page_type(
+        saved = await site_page_llm_extraction_service.set_page_type(
             db, ctx.user_id, ctx.site_id, page_id, page_type
         )
     return PageLlmExtractionResponse.model_validate(saved)

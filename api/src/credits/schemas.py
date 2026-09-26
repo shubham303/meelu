@@ -47,6 +47,15 @@ class GrantRequest(RequestModel):
     note: str | None = None
 
 
+class SiteBillingRecord(EntityModel):
+    user_id: str
+    domain: str
+    site_id: str | None
+    last_charged_at: JsDateTime | None
+    charge_count: int
+    charged_micros: int
+
+
 class SiteBillingResponse(EntityModel):
     site_id: str
     status: str

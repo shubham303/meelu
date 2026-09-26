@@ -1,7 +1,7 @@
 import pytest
 
 from src.agent.context import AgentContext, require_site, reset_context, set_context
-from src.credits import billing
+from src.credits.billing import site_billing_service
 from tests.conftest import signup
 from tests.integration.credits.test_site_billing import (
     add_site,
@@ -14,7 +14,7 @@ from tests.integration.credits.test_site_billing import (
 async def disable(client, site_id):
     await set_balance(await user_id_of(client), 0)
     await age_billing(site_id, 25)
-    await billing.sweep()
+    await site_billing_service.sweep()
 
 
 async def test_a_disabled_site_can_still_be_seen_and_paid_for(client, email):
@@ -88,7 +88,7 @@ async def test_each_site_is_gated_on_its_own(client, email):
 
     await set_balance(await user_id_of(client), 0.1)
     await age_billing(broke["id"], 25)
-    await billing.sweep()
+    await site_billing_service.sweep()
 
     r = await client.get("/api/v1/site/pages", headers={"x-meelu-site": broke["id"]})
     assert r.status_code == 402

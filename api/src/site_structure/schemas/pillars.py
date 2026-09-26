@@ -49,6 +49,8 @@ class PillarPageSuggestionFilter(BaseModel):
     state: str | None = "ready"
     action: str | None = None
     job_id: str | None = None
+    sort_by: str = "score"
+    sort_order: str = "desc"
 
 
 class NewPillarPageSuggestion(BaseModel):

@@ -235,11 +235,8 @@ async def test_overview_without_data(client, email):
     }
     assert body == {
         "connected": False,
-        "property": None,
         "hasData": False,
         "days": 28,
-        "firstDay": None,
-        "lastDay": None,
         "daysStored": 0,
         "totals": {"current": empty_totals, "previous": empty_totals},
         "organic": {
@@ -247,8 +244,6 @@ async def test_overview_without_data(client, email):
             "previous": {"sessions": 0, "engagedSessions": 0, "keyEvents": 0, "revenue": 0},
         },
         "channels": [],
-        "sync": None,
-        "active": None,
     }
 
     for path in (
@@ -259,7 +254,7 @@ async def test_overview_without_data(client, email):
     ):
         r = await client.get(path)
         assert r.status_code == 200, r.text
-        assert r.json()["data"]["lastDay"] is None
+        assert r.json()["data"].get("lastDay") is None
 
 
 async def test_property_get_and_put(client, email):
@@ -268,7 +263,7 @@ async def test_property_get_and_put(client, email):
 
     r = await client.get("/api/v1/site/traffic/property")
     assert r.status_code == 200
-    assert r.json()["data"] == {"property": None, "domain": "example.com"}
+    assert r.json()["data"] == {"domain": "example.com"}
 
     r = await client.put("/api/v1/site/traffic/property", json={"property": "   "})
     assert r.status_code == 400
@@ -428,7 +423,7 @@ async def test_ingest_and_aggregations(client, email):
     assert top["url"] == "https://example.com/pricing"
     assert top["title"] == "Pricing"
     assert other["landingPage"] == "/blog/beans"
-    assert other["pageId"] is None
+    assert other.get("pageId") is None
 
     body = (await client.get("/api/v1/site/traffic/pages", params={"channel": "Direct"})).json()[
         "data"
@@ -546,9 +541,7 @@ async def test_ingest_validation(client, email):
 
     r = await client.post("/api/v1/site/traffic/rows", json={"rows": TOTALS})
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == (
-        "report must be one of: totals, channels, landing, pages, events, geo, tech."
-    )
+    assert r.json()["error"]["message"] == "Missing required field(s): report"
 
     r = await client.post("/api/v1/site/traffic/rows", json={"report": "sessions", "rows": TOTALS})
     assert r.status_code == 400
@@ -616,15 +609,15 @@ async def test_sync_job_lifecycle(client, email):
     assert sync["status"] == "queued"
     assert sync["trigger"] == "schedule"
     assert sync["notes"] == []
-    assert sync["error"] is None
-    assert sync["finishedAt"] is None
+    assert sync.get("error") is None
+    assert sync.get("finishedAt") is None
     assert "pagesInspected" not in sync
     assert "userId" not in sync
     sync_id = sync["id"]
 
     r = await client.post("/api/v1/site/traffic/sync-jobs", json={})
     assert r.status_code == 409
-    blocked = r.json()["data"]
+    blocked = r.json()
     assert blocked["started"] is False
     assert blocked["sync"]["id"] == sync_id
     assert "A traffic sync for example.com is already running." == blocked["reason"]
@@ -642,9 +635,9 @@ async def test_sync_job_lifecycle(client, email):
     assert r.status_code == 200, r.text
     plan = r.json()["data"]
     assert plan["sync"]["status"] == "running"
-    assert plan["property"] is None
+    assert plan.get("property") is None
     assert plan["domain"] == "example.com"
-    assert plan["resumeFrom"] is None
+    assert plan.get("resumeFrom") is None
     assert plan["endDay"] == day_ago(2)
     assert plan["daysTotal"] > 400
     assert plan["sync"]["firstDay"] == plan["startDay"]
@@ -680,7 +673,7 @@ async def test_sync_job_lifecycle(client, email):
     r = await client.get("/api/v1/site/traffic/sync-jobs")
     listed = r.json()["data"]
     assert listed["latest"]["id"] == sync_id
-    assert listed["active"] is None
+    assert listed.get("active") is None
 
     r = await client.patch("/api/v1/site/traffic/sync-jobs/tsync_missing", json={"daysDone": 1})
     assert r.status_code == 404

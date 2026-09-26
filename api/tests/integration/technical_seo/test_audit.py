@@ -115,8 +115,8 @@ async def test_run_audit_finds_the_seeded_defects(client, email):
     assert r.status_code == 201, r.text
     body = r.json()["data"]
 
-    assert body["checks"] == 213
-    assert body["run"]["rulesRun"] == 213
+    assert body["checks"] == 219
+    assert body["run"]["rulesRun"] == 219
     assert body["run"]["trigger"] == "user"
     assert body["run"]["finishedAt"] is not None
     assert body["run"]["siteIssuesFound"] == 0
@@ -185,11 +185,11 @@ async def test_site_rules_land_as_site_issues(client, email):
 
     r = await client.get("/api/v1/site/technical-seo/issues", params={"severity": "p0"})
     assert r.status_code == 200
-    listed = r.json()["data"]
-    assert listed["total"] == 1
-    assert listed["issues"][0]["kind"] == "googlebot-blocked"
-    assert listed["issues"][0]["state"] == "open"
-    assert "rejectionReason" not in listed["issues"][0]
+    listed = r.json()
+    assert listed["pagination"]["total"] == 1
+    assert listed["data"][0]["kind"] == "googlebot-blocked"
+    assert listed["data"][0]["state"] == "open"
+    assert "rejectionReason" not in listed["data"][0]
 
 
 async def test_page_issue_listing_and_filters(client, email):
@@ -200,38 +200,39 @@ async def test_page_issue_listing_and_filters(client, email):
         "/api/v1/site/technical-seo/page-issues", params={"kind": "duplicate-title"}
     )
     assert r.status_code == 200
-    body = r.json()["data"]
-    assert body["total"] == 2
-    assert body["shown"] == 2
-    assert body["offset"] == 0
-    assert [i["url"] for i in body["issues"]] == [
+    body = r.json()
+    assert body["pagination"]["total"] == 2
+    assert body["pagination"]["page"] == 1
+    assert len(body["data"]) == 2
+    assert [i["url"] for i in body["data"]] == [
         f"{ORIGIN}/first-twin",
         f"{ORIGIN}/second-twin",
     ]
-    assert body["issues"][0]["matchedPages"] == 2
-    assert body["issues"][0]["pageId"] == pages[f"{ORIGIN}/first-twin"]
+    assert body["data"][0]["matchedPages"] == 2
+    assert body["data"][0]["pageId"] == pages[f"{ORIGIN}/first-twin"]
 
     r = await client.get(
         "/api/v1/site/technical-seo/page-issues",
         params={"url": f"{ORIGIN}/boom", "kind": "server-error"},
     )
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
     r = await client.get(
         "/api/v1/site/technical-seo/page-issues",
         params={"pageId": pages[f"{ORIGIN}/dead"], "kind": "sitemap-dead-page"},
     )
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
     r = await client.get(
-        "/api/v1/site/technical-seo/page-issues", params={"kind": "duplicate-title", "limit": 1}
+        "/api/v1/site/technical-seo/page-issues",
+        params={"kind": "duplicate-title", "page_size": 1},
     )
-    body = r.json()["data"]
-    assert body["total"] == 2
-    assert body["shown"] == 1
+    body = r.json()
+    assert body["pagination"]["total"] == 2
+    assert len(body["data"]) == 1
 
     r = await client.get("/api/v1/site/technical-seo/page-issues", params={"severity": "p0"})
-    assert {i["kind"] for i in r.json()["data"]["issues"]} == {
+    assert {i["kind"] for i in r.json()["data"]} == {
         "robots-blocked-but-linked",
         "server-error",
     }
@@ -260,14 +261,14 @@ async def test_csv_export_columns_and_filename(client, email):
     assert r.headers["cache-control"] == "no-store"
 
     lines = r.text.strip().split("\n")
-    assert lines[0] == "kind,severity,scope,state,url,issue"
+    assert lines[0] == "kind,severity,scope,type,state,url,issue"
     assert len(lines) == 4
-    assert lines[1].startswith(f'server-error,p0,pages,open,{ORIGIN}/boom,"')
-    assert lines[2].startswith(f"duplicate-title,p2,pages,open,{ORIGIN}/first-twin,")
-    assert lines[3].startswith(f"duplicate-title,p2,pages,open,{ORIGIN}/second-twin,")
+    assert lines[1].startswith(f'server-error,p0,pages,static,open,{ORIGIN}/boom,"')
+    assert lines[2].startswith(f"duplicate-title,p2,pages,static,open,{ORIGIN}/first-twin,")
+    assert lines[3].startswith(f"duplicate-title,p2,pages,static,open,{ORIGIN}/second-twin,")
 
     r = await client.get("/api/v1/site/technical-seo/download", params={"state": "rejected"})
-    assert r.text == "kind,severity,scope,state,url,issue\n\n"
+    assert r.text == "kind,severity,scope,type,state,url,issue\n\n"
 
 
 async def test_decisions_carry_forward_into_the_next_run(client, email):
@@ -277,7 +278,7 @@ async def test_decisions_carry_forward_into_the_next_run(client, email):
     first_run = r.json()["data"]["run"]["id"]
 
     r = await client.get("/api/v1/site/technical-seo/page-issues", params={"kind": "orphan-page"})
-    issue = r.json()["data"]["issues"][0]
+    issue = r.json()["data"][0]
 
     r = await client.patch(
         f"/api/v1/site/technical-seo/page-issues/{issue['id']}",
@@ -299,7 +300,7 @@ async def test_decisions_carry_forward_into_the_next_run(client, email):
         "/api/v1/site/technical-seo/page-issues",
         params={"kind": "orphan-page", "state": "rejected"},
     )
-    carried = r.json()["data"]["issues"][0]
+    carried = r.json()["data"][0]
     assert carried["runId"] == body["run"]["id"]
     assert carried["rejectionReason"] == "That page is meant to be unlinked."
 

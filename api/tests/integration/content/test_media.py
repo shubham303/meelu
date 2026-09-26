@@ -49,7 +49,7 @@ async def test_media_without_dimensions(client, workspace):
 async def test_media_rejects_bad_uploads(client, workspace):
     r = await client.post("/api/v1/content/media", json={"file": "nope"})
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == "Send the image as multipart/form-data."
+    assert r.json()["error"]["message"] == "Missing required field(s): file"
 
     r = await client.post(
         "/api/v1/content/media",
@@ -57,7 +57,7 @@ async def test_media_rejects_bad_uploads(client, workspace):
         files={"notes": ("notes.txt", b"hello", "text/plain")},
     )
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == "Missing the `file` field."
+    assert r.json()["error"]["message"] == "Missing required field(s): file"
 
     r = await upload(client, data=b"%PDF-1.4", name="brief.pdf", content_type="application/pdf")
     assert r.status_code == 400
@@ -111,8 +111,8 @@ async def test_piece_can_reference_an_upload(client, workspace):
     assert r.status_code == 200
     cleared = r.json()["data"]
     assert cleared["mediaSource"] == "none"
-    assert cleared["mediaUrl"] is None
-    assert cleared["mediaUploadId"] is None
+    assert cleared.get("mediaUrl") is None
+    assert cleared.get("mediaUploadId") is None
     assert cleared["status"] == "blocked"
     assert [c["code"] for c in cleared["checks"]] == ["requires_media"]
 

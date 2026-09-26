@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlsplit
 
 from src.site_structure.schemas import HierarchyPage, NewLinkSuggestion
@@ -8,6 +9,13 @@ BACK_TO_HOME = "This page should link back to the home page."
 PARENT_TO_CHILD = "This section should list its child section {child}."
 CHILD_TO_PARENT = "This section should link up to its parent section {parent}."
 SIBLINGS = "Sibling sections under {parent} should link to each other."
+
+
+HOST_PREFIX = re.compile(r"^[a-z]+://[^/]+")
+
+
+def is_home(url: str) -> bool:
+    return HOST_PREFIX.sub("", url, count=1) in ("", "/")
 
 
 def path_of(url: str) -> str:

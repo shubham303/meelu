@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
-from src.site_traffic import service
 from src.site_traffic.schemas import (
     ContentSort,
     LandingSort,
@@ -26,6 +25,7 @@ from src.site_traffic.schemas import (
     TrafficSyncStartResponse,
     TrafficSyncUpdateRequest,
 )
+from src.site_traffic.service import site_traffic_service
 
 router = APIRouter()
 
@@ -36,7 +36,7 @@ async def overview(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficOverviewResponse:
-    return await service.overview(db, ctx.user_id, ctx.site_id, days)
+    return await site_traffic_service.overview(db, ctx.user_id, ctx.site_id, days)
 
 
 @router.get("/site/traffic/property")
@@ -44,7 +44,7 @@ async def get_property(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficPropertyResponse:
-    return await service.get_property(db, ctx.user_id, ctx.site_id)
+    return await site_traffic_service.get_property(db, ctx.user_id, ctx.site_id)
 
 
 @router.put("/site/traffic/property")
@@ -53,7 +53,7 @@ async def put_property(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficPropertyUpdateResponse:
-    return await service.set_property(db, ctx.user_id, ctx.site_id, body)
+    return await site_traffic_service.set_property(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/site/traffic/rows")
@@ -64,7 +64,7 @@ async def export_rows(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficRowsExportResponse:
-    return await service.export_rows(
+    return await site_traffic_service.export_rows(
         db, ctx.user_id, ctx.site_id, report=report, limit=limit, offset=offset
     )
 
@@ -75,7 +75,7 @@ async def ingest_rows(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficRowsIngestResponse:
-    return await service.ingest_rows(db, ctx.user_id, ctx.site_id, body)
+    return await site_traffic_service.ingest_rows(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/site/traffic/series")
@@ -84,7 +84,7 @@ async def series(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSeriesResponse:
-    return await service.series(db, ctx.user_id, ctx.site_id, days)
+    return await site_traffic_service.series(db, ctx.user_id, ctx.site_id, days)
 
 
 @router.get("/site/traffic/pages")
@@ -98,7 +98,7 @@ async def landing_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficLandingPagesResponse:
-    return await service.landing_pages(
+    return await site_traffic_service.landing_pages(
         db,
         ctx.user_id,
         ctx.site_id,
@@ -121,7 +121,7 @@ async def content_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficContentPagesResponse:
-    return await service.content_pages(
+    return await site_traffic_service.content_pages(
         db,
         ctx.user_id,
         ctx.site_id,
@@ -143,7 +143,7 @@ async def breakdown(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficBreakdownResponse:
-    return await service.breakdown(
+    return await site_traffic_service.breakdown(
         db,
         ctx.user_id,
         ctx.site_id,
@@ -160,7 +160,7 @@ async def sync_jobs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSyncJobsResponse:
-    return await service.sync_jobs(db, ctx.site_id)
+    return await site_traffic_service.sync_jobs(db, ctx.site_id)
 
 
 @router.post("/site/traffic/sync-jobs")
@@ -170,7 +170,7 @@ async def start_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSyncStartResponse:
-    started = await service.start_sync(db, ctx.user_id, ctx.site_id, body.trigger)
+    started = await site_traffic_service.start_sync(db, ctx.user_id, ctx.site_id, body.trigger)
     response.status_code = 202 if started.started else 409
     return TrafficSyncStartResponse.model_validate(started)
 
@@ -181,7 +181,9 @@ async def get_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSyncResponse:
-    return TrafficSyncResponse.model_validate(await service.get_sync(db, ctx.site_id, id))
+    return TrafficSyncResponse.model_validate(
+        await site_traffic_service.get_sync(db, ctx.site_id, id)
+    )
 
 
 @router.patch("/site/traffic/sync-jobs/{id}")
@@ -191,7 +193,7 @@ async def patch_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSyncResponse:
-    record = await service.patch_sync(db, ctx.user_id, ctx.site_id, id, body)
+    record = await site_traffic_service.patch_sync(db, ctx.user_id, ctx.site_id, id, body)
     return TrafficSyncResponse.model_validate(record)
 
 
@@ -201,5 +203,5 @@ async def claim_sync(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TrafficSyncClaimResponse:
-    result = await service.claim_sync(db, ctx.user_id, ctx.site_id, id)
+    result = await site_traffic_service.claim_sync(db, ctx.user_id, ctx.site_id, id)
     return TrafficSyncClaimResponse.model_validate(result)

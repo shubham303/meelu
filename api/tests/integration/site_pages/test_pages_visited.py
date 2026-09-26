@@ -53,7 +53,7 @@ async def test_sweep_marks_and_prunes(client, site):
     assert r.json()["data"] == {"deleted": 1}
 
     body = await list_pages(client)
-    assert [p["url"] for p in body["pages"]] == [
+    assert [p["url"] for p in body["data"]] == [
         "https://example.com/also-keep",
         "https://example.com/keep",
     ]
@@ -96,7 +96,7 @@ async def test_mark_visited_validation(client, site):
 
     r = await client.post("/api/v1/site/pages/visited", json={"urls": [1, None]})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "`urls` held no usable URLs."}}
+    assert r.json() == {"error": {"message": "urls.0: Input should be a valid string"}}
 
 
 async def test_crawl_upsert_marks_visited(client, site):

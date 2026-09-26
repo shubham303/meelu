@@ -5,27 +5,26 @@ from starlette.responses import JSONResponse
 from src.agent.context import AgentContext, reset_context, set_context
 from src.agent.security import ensure_user
 from src.core.database import unit_of_work
-from src.keys.repository import find_user_by_api_key
-from src.sites import repository as sites_repository
+from src.keys.repository import api_keys
+from src.sites.repository import sites
 
 
 async def resolve(api_key: str, site_header: str | None) -> AgentContext:
     async with unit_of_work() as db:
-        owner = await find_user_by_api_key(db, api_key)
+        owner = await api_keys.find_owner(db, api_key)
         if owner is None:
             raise HTTPException(401, "Invalid API key.")
         user_id = owner.user_id
 
         site_id = site_domain = site_status = None
         if site_header:
-            site = await sites_repository.get_site(db, user_id, site_header)
+            site = await sites.get(db, user_id, site_header)
             if site is None:
                 raise HTTPException(404, f"No website {site_header!r} in this workspace.")
             site_id, site_domain, site_status = site.id, site.domain, site.status
         else:
-            only = await sites_repository.default_site_id(db, user_id)
-            if only:
-                site = await sites_repository.get_site(db, user_id, only)
+            site = await sites.get_default(db, user_id)
+            if site is not None:
                 site_id, site_domain, site_status = site.id, site.domain, site.status
 
     role, schema = await run_in_threadpool(ensure_user, user_id)

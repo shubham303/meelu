@@ -17,7 +17,7 @@ async def test_keys_crud(client, email):
 
     r = await client.delete(f"/api/v1/keys/{created['id']}")
     assert r.status_code == 200
-    assert r.json() == {"data": {"deleted": True}}
+    assert r.json() == {"data": {"id": created["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/keys/{created['id']}")
     assert r.status_code == 404

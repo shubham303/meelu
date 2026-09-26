@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.agent.context import tenant_names
@@ -7,7 +7,7 @@ from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.core.schemas import EntityModel
-from src.seo import export, service
+from src.seo.service import seo_service
 from src.seo.schemas import (
     CannibalisationRequest,
     ClusterRecord,
@@ -98,7 +98,7 @@ def suggestion_filter(
 async def get_state(
     db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> SiteStateRecord:
-    return await service.get_state(db, ctx.user_id, ctx.site_id)
+    return await seo_service.get_state(db, ctx.user_id, ctx.site_id)
 
 
 @router.patch("/state")
@@ -107,28 +107,28 @@ async def patch_state(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SiteStateRecord:
-    return await service.patch_state(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.patch_state(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/rollup")
 async def run_rollup(
     db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> RollupResult:
-    return await service.run_rollup(db, ctx.user_id, ctx.site_id)
+    return await seo_service.run_rollup(db, ctx.user_id, ctx.site_id)
 
 
 @router.post("/precompute")
 async def request_precompute(
     db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> SiteStateRecord:
-    return await service.request_precompute(db, ctx.user_id, ctx.site_id)
+    return await seo_service.request_precompute(db, ctx.user_id, ctx.site_id)
 
 
 @router.get("/overview")
 async def overview(
     db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> OverviewResponse:
-    return await service.overview(db, ctx.user_id, ctx.site_id)
+    return await seo_service.overview(db, ctx.user_id, ctx.site_id)
 
 
 @router.post("/jobs", status_code=201)
@@ -137,7 +137,7 @@ async def start_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> StartedJobResponse:
-    job, reconciled = await service.start_job(db, ctx.user_id, ctx.site_id, body)
+    job, reconciled = await seo_service.start_job(db, ctx.user_id, ctx.site_id, body)
     return StartedJobResponse(**job.model_dump(), reconciled=reconciled)
 
 
@@ -147,14 +147,14 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[SeoJobRecord]:
-    return await service.list_jobs(db, ctx.site_id, paging)
+    return await seo_service.list_jobs(db, ctx.site_id, paging)
 
 
 @router.get("/jobs/{job_id}")
 async def get_job(
     job_id: str, db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> SeoJobRecord:
-    return await service.get_job(db, ctx.site_id, job_id)
+    return await seo_service.get_job(db, ctx.site_id, job_id)
 
 
 @router.patch("/jobs/{job_id}")
@@ -164,7 +164,7 @@ async def finish_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SeoJobRecord:
-    return await service.finish_job(db, ctx.site_id, job_id, body)
+    return await seo_service.finish_job(db, ctx.site_id, job_id, body)
 
 
 @router.get("/pages")
@@ -174,7 +174,7 @@ async def list_page_facts(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[PageFactsRecord]:
-    return await service.list_page_facts(db, ctx.site_id, paging, live)
+    return await seo_service.list_page_facts(db, ctx.site_id, paging, live)
 
 
 @router.get("/pages/{page_id}/keywords")
@@ -184,7 +184,7 @@ async def page_keywords(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[KeywordGscPageRecord]:
-    return await service.page_keywords(db, ctx.site_id, page_id, paging)
+    return await seo_service.page_keywords(db, ctx.site_id, page_id, paging)
 
 
 @router.get("/keywords")
@@ -194,21 +194,21 @@ async def list_keywords(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[KeywordRecord]:
-    return await service.list_keywords(db, ctx.site_id, f, paging)
+    return await seo_service.list_keywords(db, ctx.site_id, f, paging)
 
 
 @router.get("/keywords/{keyword_id}")
 async def get_keyword(
     keyword_id: str, db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> KeywordRecord:
-    return await service.get_keyword(db, ctx.site_id, keyword_id)
+    return await seo_service.get_keyword(db, ctx.site_id, keyword_id)
 
 
 @router.get("/keywords/{keyword_id}/pages")
 async def keyword_pages(
     keyword_id: str, db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> KeywordPagesResponse:
-    gsc, content = await service.keyword_pages(db, ctx.site_id, keyword_id)
+    gsc, content = await seo_service.keyword_pages(db, ctx.site_id, keyword_id)
     return KeywordPagesResponse(gsc=gsc, content=content)
 
 
@@ -218,7 +218,7 @@ async def list_clusters(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[ClusterRecord]:
-    return await service.list_clusters(db, ctx.site_id, paging)
+    return await seo_service.list_clusters(db, ctx.site_id, paging)
 
 
 @router.get("/competitors")
@@ -227,7 +227,7 @@ async def list_competitors(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> list[CompetitorRecord]:
-    return await service.list_competitors(
+    return await seo_service.list_competitors(
         db, ctx.site_id, None if fields.blank(state) else fields.competitor_state(state)
     )
 
@@ -239,7 +239,7 @@ async def patch_competitor(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CompetitorRecord:
-    return await service.patch_competitor(db, ctx.site_id, competitor_id, body)
+    return await seo_service.patch_competitor(db, ctx.site_id, competitor_id, body)
 
 
 @router.get("/page-suggestions")
@@ -249,7 +249,7 @@ async def list_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[PageSuggestionRecord]:
-    return await service.list_suggestions(db, ctx.site_id, f, paging)
+    return await seo_service.list_suggestions(db, ctx.site_id, f, paging)
 
 
 @router.post("/page-suggestions", status_code=201)
@@ -258,14 +258,14 @@ async def save_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CreateResult:
-    return await service.save_suggestion(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.save_suggestion(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/reconcile")
 async def reconcile(
     db: AsyncSession = Depends(get_db), ctx: AuthContext = Depends(require_site)
 ) -> ReconcileResult:
-    return await service.reconcile(db, ctx.user_id, ctx.site_id)
+    return await seo_service.reconcile(db, ctx.user_id, ctx.site_id)
 
 
 @router.get("/page-suggestions/{suggestion_id}")
@@ -274,7 +274,7 @@ async def get_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageSuggestionRecord:
-    return await service.get_suggestion(db, ctx.site_id, suggestion_id)
+    return await seo_service.get_suggestion(db, ctx.site_id, suggestion_id)
 
 
 @router.post("/page-suggestions/{suggestion_id}/reject")
@@ -283,7 +283,7 @@ async def reject_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageSuggestionRecord:
-    return await service.settle_suggestion(db, ctx.site_id, suggestion_id, "user_rejected")
+    return await seo_service.settle_suggestion(db, ctx.site_id, suggestion_id, "user_rejected")
 
 
 @router.post("/page-suggestions/{suggestion_id}/done")
@@ -292,7 +292,7 @@ async def done_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageSuggestionRecord:
-    return await service.settle_suggestion(db, ctx.site_id, suggestion_id, "done")
+    return await seo_service.settle_suggestion(db, ctx.site_id, suggestion_id, "done")
 
 
 @router.post("/page-suggestions/propose-edits")
@@ -301,7 +301,7 @@ async def propose_page_edits(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CreateResult:
-    return await service.propose_page_edits(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.propose_page_edits(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/propose-cannibalisation")
@@ -310,7 +310,7 @@ async def propose_cannibalisation(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CreateResult:
-    return await service.propose_cannibalisation(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.propose_cannibalisation(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/screen")
@@ -319,7 +319,7 @@ async def screen_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ScreenResult:
-    return await service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/review-inputs")
@@ -328,7 +328,7 @@ async def page_suggestion_review_inputs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewBatch:
-    return await service.review_inputs(db, ctx.site_id, body)
+    return await seo_service.review_inputs(db, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/verdicts")
@@ -337,7 +337,7 @@ async def page_suggestion_verdicts(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await service.apply_verdicts(db, ctx.site_id, body)
+    return await seo_service.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/rank")
@@ -346,7 +346,7 @@ async def rank_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RankResult:
-    return await service.rank_suggestions(db, ctx.site_id, body)
+    return await seo_service.rank_suggestions(db, ctx.site_id, body)
 
 
 @router.post("/collect/keywords")
@@ -355,7 +355,7 @@ async def collect_keywords(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CollectResult:
-    return await service.collect_keywords(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.collect_keywords(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/collect/competitors")
@@ -364,7 +364,7 @@ async def collect_competitors(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CollectResult:
-    return await service.collect_competitors(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.collect_competitors(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/collect/competitor-keywords")
@@ -373,7 +373,7 @@ async def collect_competitor_keywords(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CollectResult:
-    return await service.collect_competitor_keywords(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.collect_competitor_keywords(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/collect/serps")
@@ -382,7 +382,7 @@ async def collect_serps(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CollectResult:
-    return await service.collect_serps(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.collect_serps(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/propose-gaps")
@@ -391,7 +391,7 @@ async def propose_gap_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> CreateResult:
-    return await service.propose_gap_pages(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.propose_gap_pages(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/page-suggestions/propose-topic")
@@ -400,7 +400,7 @@ async def propose_topic_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> TopicPagesResult:
-    return await service.propose_topic_pages(db, ctx.user_id, ctx.site_id, body)
+    return await seo_service.propose_topic_pages(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/export")
@@ -409,8 +409,6 @@ async def export_dataset(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> dict:
-    if dataset not in export.DATASETS:
-        raise HTTPException(400, f"Unknown dataset. One of: {', '.join(export.DATASETS)}.")
     _, schema = tenant_names(ctx.user_id)
-    path, rows = await export.write_csv(db, ctx.site_id, schema, dataset)
+    path, rows = await seo_service.export(db, ctx.site_id, schema, dataset)
     return {"path": str(path), "rows": rows, "dataset": dataset}

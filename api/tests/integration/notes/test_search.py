@@ -75,9 +75,7 @@ async def test_keyword_search_ranking(client, email, monkeypatch):
 
     r = await client.get("/api/v1/notes", params={"q": "checkout", "kind": "rumour"})
     assert r.status_code == 400
-    assert r.json() == {
-        "error": {"message": 'Invalid kind "rumour". Allowed values: note, feedback.'}
-    }
+    assert r.json() == {"error": {"message": "kind.0: Input should be 'note' or 'feedback'"}}
 
 
 async def test_search_without_notes_reports_empty_coverage(client, email, monkeypatch):

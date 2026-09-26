@@ -7,7 +7,6 @@ from sqlalchemy import inspect
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
-from src.embed_worker.search.schemas import SearchHit, SearchMode
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.stage import STAGES, page_stage
 from src.site_pages.url import normalise_url
@@ -140,22 +139,6 @@ class SitePageListQuery(SitePageFilters):
 
     def paging(self) -> PaginationParams:
         return PaginationParams(page=self.page, page_size=self.page_size).validate()
-
-
-class SitePageSearchRequest(RequestModel):
-    text: str
-    input: Literal["query", "text"] = "query"
-    mode: SearchMode = "hybrid"
-    min_similarity: float | None = Field(default=None, ge=0, le=1)
-    limit: int = Field(default=20, ge=1, le=200)
-    rerank: bool = True
-
-
-class SitePageSearchResponse(EntityModel):
-    hits: list[SearchHit]
-    mode: SearchMode
-    reranked: bool
-    note: str | None = None
 
 
 class SitePageWritableFields(RequestModel):
@@ -307,7 +290,7 @@ class SitePageSlimRecord(SemanticMatchFields):
     chunked_from_hash: str | None
     url: str
     title: str | None
-    page_type: str | None
+    page_type: str | None = None
     status: int | None
     inlinks: int
     link_score: float | None
@@ -362,9 +345,10 @@ class SitePageTextRecord(SemanticMatchFields):
 
 
 class SitePageExportRecord(SemanticMatchFields):
+    id: str = Field(exclude=True)
     url: str
     status: int | None
-    page_type: str | None
+    page_type: str | None = None
     format: str | None
     title: str | None
     title_pixels: int | None
@@ -398,8 +382,8 @@ class SitePageExportRecord(SemanticMatchFields):
     content_hash: str | None
     chunked_from_hash: str | None
     has_text: bool
-    out_link_count: int
-    external_link_count: int
+    out_link_count: int = 0
+    external_link_count: int = 0
     image_count: int
     image_bytes: int
     heading_count: int
@@ -513,8 +497,52 @@ class SitePageEdge(EntityModel):
     weight: float = 1.0
 
 
-class SitePageLandingSeed(EntityModel):
-    sessions_by_path: dict[str, int]
+class SitePageBrief(EntityModel):
+    id: str
+    user_id: str
+    site_id: str
+    url: str
+    title: str | None
+    meta_description: str | None
+    h1: list[str]
+    status: int | None
+    inlinks: int
+    depth: int | None
+    word_count: int | None
+    content_hash: str | None
+    redirect_to: str | None
+    fetch_error: str | None
+    blocked_by_robots: bool
+    body_text: str | None = None
+
+
+class SitePageChunkSource(EntityModel):
+    id: str
+    site_id: str
+    user_id: str
+    url: str
+    title: str | None
+    h1: list[str]
+    meta_description: str | None
+    body_text: str | None
+    content_hash: str | None
+
+
+class RenderEligiblePage(EntityModel):
+    id: str
+    url: str
+    content_hash: str | None
+    depth: int | None
+    inlinks: int
+    seq: int
+
+
+class ChunkHit(EntityModel):
+    id: str
+    page_id: str
+    heading_path: str | None
+    text: str
+    raw: float
 
 
 class CrawlKnownPageRecord(EntityModel):
@@ -530,10 +558,6 @@ class CrawlKnownPageRecord(EntityModel):
 class SitemapPresenceResult(EntityModel):
     known: int
     listed: int
-
-
-class CrawlCountsResult(EntityModel):
-    pages: int
 
 
 class StageCount(EntityModel):
@@ -557,7 +581,7 @@ class ChunkCounts(EntityModel):
     failed: int
 
 
-class SitePageStatsRecord(EntityModel):
+class SitePageCountsRecord(EntityModel):
     pages: int
     blocked_by_robots: int
     blocked_and_discoverable: int
@@ -575,16 +599,14 @@ class SitePageStatsRecord(EntityModel):
     embed_failed: int
     crawl_complete: int
     by_stage: list[StageCount]
-    by_page_type: list[PageTypeCount]
     by_shallow_reason: list[ShallowReasonCount]
-    chunks: ChunkCounts
 
 
 class DiscoveryPage(EntityModel):
     id: str
     url: str
     title: str | None
-    page_type: str | None
+    page_type: str | None = None
     inlinks: int
     depth: int | None
     in_sitemap: bool
@@ -608,7 +630,27 @@ class SitePageDiscoveryRecord(EntityModel):
     deep_pages: list[DiscoveryPage]
 
 
-class SitePageStatsResult(SitePageStatsRecord):
+class SitePageStatsResult(EntityModel):
+    pages: int
+    blocked_by_robots: int
+    blocked_and_discoverable: int
+    ok: int
+    errored: int
+    gone: int
+    not_in_sitemap: int
+    sitemap_missing: int
+    not_found: int
+    blocked: int
+    server_error: int
+    unreachable: int
+    orphans: int
+    shallow: int
+    embed_failed: int
+    crawl_complete: int
+    by_stage: list[StageCount]
+    by_page_type: list[PageTypeCount]
+    by_shallow_reason: list[ShallowReasonCount]
+    chunks: ChunkCounts
     last_crawled_at: JsDateTime | None = None
     sitemap_url_count: int | None = None
 

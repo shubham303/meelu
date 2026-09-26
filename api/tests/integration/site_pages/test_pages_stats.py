@@ -65,12 +65,12 @@ async def test_stats_shape(client, site):
     assert body["embedFailed"] == 0
     assert body["crawlComplete"] == 3
     assert body["chunks"] == {"total": 0, "embedded": 0, "failed": 0}
-    assert body["lastCrawledAt"] is None
-    assert body["sitemapUrlCount"] is None
+    assert body.get("lastCrawledAt") is None
+    assert body.get("sitemapUrlCount") is None
 
     by_stage = {row["stage"]: row["n"] for row in body["byStage"]}
     assert by_stage == {"indexed": 1, "skipped": 1, "failed": 3, "blocked": 1, "pending": 1}
-    by_page_type = {row["pageType"]: row["n"] for row in body["byPageType"]}
+    by_page_type = {row.get("pageType"): row["n"] for row in body["byPageType"]}
     assert by_page_type == {None: 7}
     assert body["byShallowReason"] == [{"reason": "thin", "n": 1}]
 
@@ -83,7 +83,7 @@ async def test_stats_carries_site_fields(client, site):
     assert r.status_code == 200
 
     r = await client.get("/api/v1/site/pages/stats")
-    assert r.json()["data"]["sitemapUrlCount"] is None
+    assert r.json()["data"].get("sitemapUrlCount") is None
 
 
 async def test_chunks_route(client, site):
@@ -91,7 +91,7 @@ async def test_chunks_route(client, site):
 
     r = await client.get("/api/v1/site/chunks")
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "pageId is required."}}
+    assert r.json() == {"error": {"message": "Missing required field(s): pageId"}}
 
     r = await client.get("/api/v1/site/chunks", params={"pageId": "spg_nope00000"})
     assert r.status_code == 404

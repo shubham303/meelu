@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from src.core.database import unit_of_work
 from src.credits import billing
+from src.credits.billing import site_billing_service
 from tests.conftest import signup
 from tests.integration.credits.test_site_billing import (
     add_site,
@@ -52,7 +53,7 @@ async def test_re_adding_the_same_domain_the_same_day_is_not_charged_twice(clien
 
     site = await add_site(client, "example.com", "Example")
     await age_billing(site["id"], 25)
-    await billing.sweep()
+    await site_billing_service.sweep()
     assert await balance_usd(client) == pytest.approx(start - 0.8)
 
 
@@ -91,7 +92,7 @@ async def test_one_broke_site_cannot_starve_the_sweep(client, email, monkeypatch
     await age_billing(broke["id"], 25)
     await age_billing(payer["id"], 25)
 
-    result = await billing.sweep(limit=1)
+    result = await site_billing_service.sweep(limit=1)
 
     # the sweep must reach both, not spin on the first page forever
     assert result.considered >= 2
@@ -107,7 +108,7 @@ async def test_concurrent_sweeps_charge_a_site_once(client, email):
     after_create = await balance_usd(client)
     await age_billing(site["id"], 25)
 
-    results = await asyncio.gather(*(billing.sweep() for _ in range(4)))
+    results = await asyncio.gather(*(site_billing_service.sweep() for _ in range(4)))
 
     assert sum(r.charged for r in results) == 1
     assert await balance_usd(client) == pytest.approx(after_create - 0.4)

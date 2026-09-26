@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import computed_field, field_validator
 
@@ -80,6 +80,8 @@ class SiteChannelRecord(EntityModel):
 
 
 class SiteChannelResponse(EntityModel):
+    keep_null: ClassVar[frozenset[str]] = frozenset({"maxLinks", "maxHashtags"})
+
     id: str
     site_id: str
     channel_key: str

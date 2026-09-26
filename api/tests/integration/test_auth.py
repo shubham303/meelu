@@ -12,7 +12,7 @@ async def test_register_returns_user_envelope(client, email):
     user = r.json()["data"]
     assert user["email"] == email
     assert user["name"] == "Grace Hopper"
-    assert user["image"] is None
+    assert user.get("image") is None
     assert user["id"].startswith("user_")
     assert "hashedPassword" not in user
     assert "hashed_password" not in user
@@ -54,7 +54,7 @@ async def test_register_login_cookie_flow(client, email):
     keys = r.json()["data"]
     assert len(keys) == 1
     assert keys[0]["name"] == "Default MCP key"
-    assert keys[0]["lastUsedAt"] is None
+    assert keys[0].get("lastUsedAt") is None
     assert "keyHash" not in keys[0]
     assert "userId" not in keys[0]
     assert "seq" not in keys[0]
@@ -68,7 +68,7 @@ async def test_me_returns_current_user(client, email):
     user = r.json()["data"]
     assert user["email"] == email
     assert user["name"] == "Ada Lovelace"
-    assert user["image"] is None
+    assert user.get("image") is None
     assert user["id"].startswith("user_")
     assert "hashedPassword" not in user
     assert "hashed_password" not in user

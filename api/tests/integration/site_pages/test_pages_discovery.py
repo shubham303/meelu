@@ -53,7 +53,7 @@ async def test_discovery_counts_orphans_unreachable_and_deep(client, site):
         "https://example.com/d4",
     ]
     assert d["deepPages"][0]["depth"] == 5
-    assert {b["depth"]: b["n"] for b in d["byDepth"]} == {
+    assert {b.get("depth"): b["n"] for b in d["byDepth"]} == {
         0: 1,
         1: 1,
         2: 1,

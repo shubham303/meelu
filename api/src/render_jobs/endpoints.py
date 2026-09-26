@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
-from src.render_jobs import service
 from src.render_jobs.schemas import (
     RENDER_DEVICES,
     PageRenderCreateRequest,
@@ -18,6 +17,7 @@ from src.render_jobs.schemas import (
     RenderJobStatusResponse,
     RenderJobUpdateRequest,
 )
+from src.render_jobs.service import STALE_JOB_MS, render_job_service
 
 router = APIRouter()
 
@@ -35,7 +35,7 @@ async def render_status(
     ctx: AuthContext = Depends(require_site),
 ) -> RenderJobStatusResponse:
     return RenderJobStatusResponse(
-        status=await service.render_status(db, ctx.user_id, ctx.site_id, device)
+        status=await render_job_service.status(db, ctx.user_id, ctx.site_id, device)
     )
 
 
@@ -46,7 +46,7 @@ async def open_render_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RenderJobStartResponse:
-    started = await service.start_render(db, ctx.user_id, ctx.site_id, body)
+    started = await render_job_service.start(db, ctx.user_id, ctx.site_id, body)
     response.status_code = 202 if started.started else 409
     return RenderJobStartResponse(
         started=started.started,
@@ -62,10 +62,10 @@ async def reap_render_jobs(
     ctx: AuthContext = Depends(require_site),
 ) -> RenderJobReapResponse:
     stale = body.stale_ms
-    reaped = await service.reap_renders(
+    reaped = await render_job_service.reap(
         db,
         [ctx.site_id],
-        stale if stale is not None else service.STALE_JOB_MS,
+        stale if stale is not None else STALE_JOB_MS,
         reason=(
             "the process running it went away"
             if stale == 0
@@ -87,15 +87,15 @@ async def patch_render_job(
     status = body.status or ""
 
     if status == "cancelling":
-        stopped = await service.stop_render(
+        stopped = await render_job_service.stop(
             db, ctx.user_id, ctx.site_id, job_id, body.reason or "stopped by the user"
         )
         return RenderJobResponse.model_validate(stopped)
     if status == "running" or body.heartbeat is True:
-        beat = await service.beat_render(db, ctx.site_id, job_id, body)
+        beat = await render_job_service.beat(db, ctx.site_id, job_id, body)
         return RenderJobBeatResponse(stop=beat.stop)
     if status in ("completed", "failed", "cancelled"):
-        settled = await service.settle_render(db, ctx.user_id, ctx.site_id, job_id, body)
+        settled = await render_job_service.settle(db, ctx.user_id, ctx.site_id, job_id, body)
         return RenderJobResponse.model_validate(settled)
 
     raise HTTPException(
@@ -111,7 +111,7 @@ async def claim_render_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RenderJobClaimResponse:
-    claimed = await service.claim_render(db, ctx.user_id, ctx.site_id, job_id)
+    claimed = await render_job_service.claim(db, ctx.user_id, ctx.site_id, job_id)
     return RenderJobClaimResponse(
         job=RenderJobResponse.model_validate(claimed.job),
         target=claimed.target,
@@ -127,7 +127,7 @@ async def get_page_render(
     ctx: AuthContext = Depends(require_site),
 ) -> PageRenderResponse:
     return PageRenderResponse.model_validate(
-        await service.read_page_render(db, ctx.user_id, ctx.site_id, page_id, device)
+        await render_job_service.get_page_render(db, ctx.user_id, ctx.site_id, page_id, device)
     )
 
 
@@ -137,7 +137,7 @@ async def save_page_render(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageRenderResponse:
-    saved = await service.save_page_render(db, ctx.user_id, ctx.site_id, body)
+    saved = await render_job_service.save_page_render(db, ctx.user_id, ctx.site_id, body)
     return PageRenderResponse.model_validate(saved)
 
 
@@ -148,5 +148,5 @@ async def delete_page_render(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> Response:
-    await service.delete_page_render(db, ctx.user_id, ctx.site_id, page_id, device)
+    await render_job_service.delete_page_render(db, ctx.user_id, ctx.site_id, page_id, device)
     return Response(status_code=204)

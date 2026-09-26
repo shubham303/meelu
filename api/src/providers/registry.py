@@ -9,14 +9,14 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import unit_of_work
-from src.credits import service as credits
-from src.providers import repository as repo
+from src.credits.service import InsufficientCreditsError, credit_service
 from src.providers.errors import (
     NoProviderError,
     NotSupportedError,
     ProviderRequestError,
     SpendCeilingError,
 )
+from src.providers.repository import provider_caches, provider_calls
 from src.providers.schemas import AdapterStatus, DomainStatus
 
 
@@ -105,7 +105,7 @@ class ProviderFacade:
     ) -> Any:
         key = cache_key(self.domain, capability, request)
         started = time.monotonic()
-        hit = await repo.cached(db, key)
+        hit = await provider_caches.get_fresh(db, key)
         if hit is not None:
             await self._log(
                 db, caller, capability, hit.provider, key, True, 0, 0, "ok", None, started
@@ -124,8 +124,8 @@ class ProviderFacade:
                 if caller.spend is not None:
                     caller.spend.check()
                 try:
-                    await credits.require_balance(db, caller.user_id)
-                except credits.InsufficientCreditsError as exc:
+                    await credit_service.require_balance(db, caller.user_id)
+                except InsufficientCreditsError as exc:
                     await self._log_failure(caller, capability, adapter.id, key, str(exc), started)
                     raise
             try:
@@ -133,7 +133,7 @@ class ProviderFacade:
             except ProviderRequestError as exc:
                 last = exc
                 continue
-            await repo.put_cache(
+            await provider_caches.upsert(
                 db,
                 cache_key=key,
                 domain=self.domain,
@@ -157,17 +157,17 @@ class ProviderFacade:
                 None,
                 started,
             )
-            row.charged_micros = (
-                await credits.charge_vendor_call(
+            charged = (
+                await credit_service.charge_vendor_call(
                     db, caller.user_id, self.domain, capability, result.cost_micros, row.id
                 )
                 if adapter.charges
                 else 0
             )
+            await provider_calls.set_charged_micros(db, row, charged)
             if caller.spend is not None:
                 caller.spend.calls += 1
-                caller.spend.micros += int(row.charged_micros or 0)
-            await db.flush()
+                caller.spend.micros += int(charged or 0)
             return result.data
 
         assert last is not None
@@ -194,7 +194,7 @@ class ProviderFacade:
         error: str | None,
         started: float,
     ):
-        return await repo.log_call(
+        return await provider_calls.create(
             db,
             user_id=caller.user_id,
             site_id=caller.site_id,

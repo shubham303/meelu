@@ -249,7 +249,7 @@ class SiteIssueBulkUpdateRequest(IssueUpdateRequest):
 class PageIssueSelector(BaseModel):
     kind: str | None = None
     page_id: str | None = None
-    url: str | None = None
+    page_ids: list[str] | None = None
 
 
 class PageIssueBulkUpdateRequest(IssueUpdateRequest):
@@ -274,8 +274,8 @@ class PageIssueBulkUpdateRequest(IssueUpdateRequest):
             raise ValueError("Changing page issues in bulk needs a kind, a pageId or a url.")
         return self
 
-    def selector(self) -> PageIssueSelector:
-        return PageIssueSelector(kind=self.kind, page_id=self.page_id, url=self.url)
+    def selector(self, url_page_ids: list[str] | None) -> PageIssueSelector:
+        return PageIssueSelector(kind=self.kind, page_id=self.page_id, page_ids=url_page_ids)
 
 
 class IssueBulkUpdateResult(EntityModel):

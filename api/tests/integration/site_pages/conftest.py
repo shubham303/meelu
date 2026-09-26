@@ -45,9 +45,9 @@ async def save_extraction(client, page_id, page_type):
 async def list_pages(client, **params):
     r = await client.get("/api/v1/site/pages", params=params)
     assert r.status_code == 200, r.text
-    return r.json()["data"]
+    return r.json()
 
 
 async def urls(client, **params):
     body = await list_pages(client, **params)
-    return [p["url"] for p in body["pages"]]
+    return [p["url"] for p in body["data"]]

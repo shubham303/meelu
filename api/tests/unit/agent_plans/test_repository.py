@@ -1,20 +1,11 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agent_plans.repository import (
-    create_plan,
-    delete_plan,
-    get_plan,
-    get_plan_by_slug,
-    list_plans,
-    prune_builtins,
-    search_plans,
-    update_plan,
-    upsert_builtin,
-)
-from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.agent_plans.repository import agent_plans
+from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
 
 
 @pytest.fixture
@@ -25,7 +16,7 @@ def db():
 @pytest.fixture
 def mock_plan_row():
     now = datetime.now(UTC)
-    return MagicMock(
+    return SimpleNamespace(
         id="plan_123",
         user_id="user_123",
         slug="test-plan",
@@ -39,12 +30,12 @@ def mock_plan_row():
 class TestGetPlan:
     @pytest.mark.asyncio
     async def test_get_plan_found(self, db, mock_plan_row):
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_plan_row
 
         db.execute.return_value = mock_result
 
-        result = await get_plan(db, "user_123", "plan_123")
+        result = await agent_plans.get(db, "user_123", "plan_123")
 
         assert result is not None
         assert result.id == "plan_123"
@@ -52,12 +43,12 @@ class TestGetPlan:
 
     @pytest.mark.asyncio
     async def test_get_plan_not_found(self, db):
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
 
         db.execute.return_value = mock_result
 
-        result = await get_plan(db, "user_123", "plan_123")
+        result = await agent_plans.get(db, "user_123", "plan_123")
 
         assert result is None
 
@@ -65,12 +56,12 @@ class TestGetPlan:
 class TestGetPlanBySlug:
     @pytest.mark.asyncio
     async def test_get_plan_by_slug_found(self, db, mock_plan_row):
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_plan_row
 
         db.execute.return_value = mock_result
 
-        result = await get_plan_by_slug(db, "user_123", "test-plan")
+        result = await agent_plans.get_by_slug(db, "user_123", "test-plan")
 
         assert result is not None
         assert result.slug == "test-plan"
@@ -79,7 +70,7 @@ class TestGetPlanBySlug:
     @pytest.mark.asyncio
     async def test_get_plan_by_slug_prefers_user_plan_over_builtin(self, db):
         now = datetime.now(UTC)
-        user_plan = MagicMock(
+        user_plan = SimpleNamespace(
             id="user_plan",
             user_id="user_123",
             slug="test-plan",
@@ -89,19 +80,19 @@ class TestGetPlanBySlug:
             updated_at=now,
         )
 
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = user_plan
 
         db.execute.return_value = mock_result
 
-        result = await get_plan_by_slug(db, "user_123", "test-plan")
+        result = await agent_plans.get_by_slug(db, "user_123", "test-plan")
 
         assert result.user_id == "user_123"
 
     @pytest.mark.asyncio
     async def test_get_plan_by_slug_returns_builtin_if_no_user_plan(self, db):
         now = datetime.now(UTC)
-        builtin_plan = MagicMock(
+        builtin_plan = SimpleNamespace(
             id="builtin_plan",
             user_id=None,
             slug="test-plan",
@@ -111,12 +102,12 @@ class TestGetPlanBySlug:
             updated_at=now,
         )
 
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = builtin_plan
 
         db.execute.return_value = mock_result
 
-        result = await get_plan_by_slug(db, "user_123", "test-plan")
+        result = await agent_plans.get_by_slug(db, "user_123", "test-plan")
 
         assert result.user_id is None
 
@@ -127,10 +118,12 @@ class TestListPlans:
         paging = PaginationParams(page=1, page_size=10)
 
         with patch("src.agent_plans.repository.PaginationService") as mock_service:
-            mock_paginated = PaginatedApiResponse(data=[], pagination=MagicMock())
+            mock_paginated = PaginatedApiResponse(
+                data=[], pagination=PaginationService.build_pagination_meta(0, 1, 10)
+            )
             mock_service.paginate_query = AsyncMock(return_value=mock_paginated)
 
-            result = await list_plans(db, "user_123", paging)
+            result = await agent_plans.page(db, "user_123", paging)
 
             assert isinstance(result, PaginatedApiResponse)
             mock_service.paginate_query.assert_called_once()
@@ -140,13 +133,14 @@ class TestSearchPlans:
     @pytest.mark.asyncio
     async def test_search_plans_returns_paginated_response(self, db):
         paging = PaginationParams(page=1, page_size=10)
-        tsquery = MagicMock()
 
         with patch("src.agent_plans.repository.PaginationService") as mock_service:
-            mock_paginated = PaginatedApiResponse(data=[], pagination=MagicMock())
+            mock_paginated = PaginatedApiResponse(
+                data=[], pagination=PaginationService.build_pagination_meta(0, 1, 10)
+            )
             mock_service.paginate_query = AsyncMock(return_value=mock_paginated)
 
-            result = await search_plans(db, "user_123", tsquery, paging)
+            result = await agent_plans.search(db, "user_123", "test", paging)
 
             assert isinstance(result, PaginatedApiResponse)
             mock_service.paginate_query.assert_called_once()
@@ -160,8 +154,9 @@ class TestCreatePlan:
             db.add = MagicMock()
             db.flush = AsyncMock()
 
-            now = datetime.now(UTC)
-            result = await create_plan(db, "user_123", "test-plan", "What is this?", "Do this")
+            result = await agent_plans.create(
+                db, "user_123", "test-plan", "What is this?", "Do this"
+            )
 
             assert result.id == "plan_new"
             assert result.slug == "test-plan"
@@ -174,7 +169,7 @@ class TestUpdatePlan:
     @pytest.mark.asyncio
     async def test_update_plan_updates_and_returns(self, db):
         now = datetime.now(UTC)
-        updated_row = MagicMock(
+        updated_row = SimpleNamespace(
             id="plan_123",
             user_id="user_123",
             slug="new-slug",
@@ -184,11 +179,11 @@ class TestUpdatePlan:
             updated_at=now,
         )
 
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one.return_value = updated_row
         db.execute.return_value = mock_result
 
-        result = await update_plan(db, "plan_123", {"slug": "new-slug"})
+        result = await agent_plans.update(db, "plan_123", {"slug": "new-slug"})
 
         assert result.slug == "new-slug"
         db.execute.assert_called_once()
@@ -196,7 +191,7 @@ class TestUpdatePlan:
     @pytest.mark.asyncio
     async def test_update_plan_includes_updated_at(self, db):
         now = datetime.now(UTC)
-        updated_row = MagicMock(
+        updated_row = SimpleNamespace(
             id="plan_123",
             user_id="user_123",
             slug="test-plan",
@@ -206,11 +201,11 @@ class TestUpdatePlan:
             updated_at=now,
         )
 
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.scalar_one.return_value = updated_row
         db.execute.return_value = mock_result
 
-        result = await update_plan(db, "plan_123", {"question": "New question"})
+        result = await agent_plans.update(db, "plan_123", {"question": "New question"})
 
         assert result is not None
         db.execute.assert_called_once()
@@ -222,7 +217,7 @@ class TestDeletePlan:
         db.execute = AsyncMock()
         db.flush = AsyncMock()
 
-        await delete_plan(db, "plan_123")
+        await agent_plans.delete(db, "plan_123")
 
         db.execute.assert_called_once()
         db.flush.assert_called_once()
@@ -237,7 +232,7 @@ class TestUpsertBuiltin:
         with patch("src.agent_plans.repository.uid") as mock_uid:
             mock_uid.return_value = "plan_builtin"
 
-            await upsert_builtin(db, "test-plan", "What is this?", "Do this")
+            await agent_plans.upsert_builtin(db, "test-plan", "What is this?", "Do this")
 
             db.execute.assert_called_once()
             db.flush.assert_called_once()
@@ -250,7 +245,7 @@ class TestUpsertBuiltin:
         with patch("src.agent_plans.repository.uid") as mock_uid:
             mock_uid.return_value = "plan_builtin"
 
-            await upsert_builtin(db, "builtin-slug", "Builtin question", "Builtin plan")
+            await agent_plans.upsert_builtin(db, "builtin-slug", "Builtin question", "Builtin plan")
 
             db.execute.assert_called_once()
 
@@ -258,12 +253,12 @@ class TestUpsertBuiltin:
 class TestPruneBuiltins:
     @pytest.mark.asyncio
     async def test_prune_builtins_removes_unlisted(self, db):
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.rowcount = 3
         db.execute.return_value = mock_result
         db.flush = AsyncMock()
 
-        result = await prune_builtins(db, ["kept-plan-1", "kept-plan-2"])
+        result = await agent_plans.prune_builtins(db, ["kept-plan-1", "kept-plan-2"])
 
         assert result == 3
         db.execute.assert_called_once()
@@ -271,11 +266,11 @@ class TestPruneBuiltins:
 
     @pytest.mark.asyncio
     async def test_prune_builtins_keeps_listed_plans(self, db):
-        mock_result = AsyncMock()
+        mock_result = MagicMock()
         mock_result.rowcount = 0
         db.execute.return_value = mock_result
         db.flush = AsyncMock()
 
-        result = await prune_builtins(db, ["all-plans"])
+        result = await agent_plans.prune_builtins(db, ["all-plans"])
 
         assert result == 0

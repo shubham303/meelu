@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import require
 from src.core.database import get_db
-from src.profile import service
+from src.profile.service import profile_service
 from src.profile.schemas import (
     ProfileCreateRequest,
     ProfileDeleteResponse,
@@ -19,7 +19,7 @@ async def get_profile(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("profile", "read")),
 ) -> ProfileResponse | None:
-    record = await service.get_profile(db, user_id)
+    record = await profile_service.get(db, user_id)
     return None if record is None else ProfileResponse.model_validate(record)
 
 
@@ -29,7 +29,7 @@ async def upsert_profile(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("profile", "write")),
 ) -> ProfileResponse:
-    return ProfileResponse.model_validate(await service.upsert_profile(db, user_id, body))
+    return ProfileResponse.model_validate(await profile_service.upsert(db, user_id, body))
 
 
 @router.patch("/profile")
@@ -38,7 +38,7 @@ async def patch_profile(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("profile", "write")),
 ) -> ProfileResponse:
-    return ProfileResponse.model_validate(await service.patch_profile(db, user_id, body))
+    return ProfileResponse.model_validate(await profile_service.update(db, user_id, body))
 
 
 @router.delete("/profile")
@@ -46,5 +46,5 @@ async def delete_profile(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("profile", "write")),
 ) -> ProfileDeleteResponse:
-    record = await service.delete_profile(db, user_id)
+    record = await profile_service.delete(db, user_id)
     return ProfileDeleteResponse(id=record.id)

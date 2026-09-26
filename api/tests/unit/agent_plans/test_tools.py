@@ -10,7 +10,7 @@ from src.agent_plans.schemas import (
     AgentPlanRecord,
 )
 from src.agent_plans.tools import find_plans, get_plan
-from src.core.pagination import PaginatedApiResponse
+from src.core.pagination import PaginatedApiResponse, PaginationService
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def mock_match_records():
 class TestFindPlans:
     @patch("src.agent_plans.tools.current")
     @patch("src.agent_plans.tools.unit_of_work")
-    @patch("src.agent_plans.tools.service.list_plans")
+    @patch("src.agent_plans.tools.agent_plan_service.list_plans")
     @pytest.mark.asyncio
     async def test_find_plans_success(
         self, mock_list_plans, mock_unit_of_work, mock_current, mock_context, mock_match_records
@@ -74,7 +74,9 @@ class TestFindPlans:
         mock_db = AsyncMock()
         mock_unit_of_work.return_value.__aenter__.return_value = mock_db
 
-        paginated = PaginatedApiResponse(data=mock_match_records, pagination=MagicMock())
+        paginated = PaginatedApiResponse(
+            data=mock_match_records, pagination=PaginationService.build_pagination_meta(0, 1, 10)
+        )
         mock_list_plans.return_value = paginated
 
         result = await find_plans("test query")
@@ -88,7 +90,7 @@ class TestFindPlans:
 
     @patch("src.agent_plans.tools.current")
     @patch("src.agent_plans.tools.unit_of_work")
-    @patch("src.agent_plans.tools.service.list_plans")
+    @patch("src.agent_plans.tools.agent_plan_service.list_plans")
     @pytest.mark.asyncio
     async def test_find_plans_empty(
         self, mock_list_plans, mock_unit_of_work, mock_current, mock_context
@@ -97,7 +99,9 @@ class TestFindPlans:
         mock_db = AsyncMock()
         mock_unit_of_work.return_value.__aenter__.return_value = mock_db
 
-        paginated = PaginatedApiResponse(data=[], pagination=MagicMock())
+        paginated = PaginatedApiResponse(
+            data=[], pagination=PaginationService.build_pagination_meta(0, 1, 10)
+        )
         mock_list_plans.return_value = paginated
 
         result = await find_plans("unknown query")
@@ -108,7 +112,7 @@ class TestFindPlans:
 
     @patch("src.agent_plans.tools.current")
     @patch("src.agent_plans.tools.unit_of_work")
-    @patch("src.agent_plans.tools.service.list_plans")
+    @patch("src.agent_plans.tools.agent_plan_service.list_plans")
     @pytest.mark.asyncio
     async def test_find_plans_returns_match_responses(
         self, mock_list_plans, mock_unit_of_work, mock_current, mock_context, mock_match_records
@@ -117,7 +121,9 @@ class TestFindPlans:
         mock_db = AsyncMock()
         mock_unit_of_work.return_value.__aenter__.return_value = mock_db
 
-        paginated = PaginatedApiResponse(data=mock_match_records, pagination=MagicMock())
+        paginated = PaginatedApiResponse(
+            data=mock_match_records, pagination=PaginationService.build_pagination_meta(0, 1, 10)
+        )
         mock_list_plans.return_value = paginated
 
         result = await find_plans("test query")
@@ -131,7 +137,7 @@ class TestFindPlans:
 class TestGetPlan:
     @patch("src.agent_plans.tools.current")
     @patch("src.agent_plans.tools.unit_of_work")
-    @patch("src.agent_plans.tools.service.get_plan_by_slug")
+    @patch("src.agent_plans.tools.agent_plan_service.get_plan_by_slug")
     @pytest.mark.asyncio
     async def test_get_plan_success(
         self, mock_get_by_slug, mock_unit_of_work, mock_current, mock_context, mock_record
@@ -150,7 +156,7 @@ class TestGetPlan:
 
     @patch("src.agent_plans.tools.current")
     @patch("src.agent_plans.tools.unit_of_work")
-    @patch("src.agent_plans.tools.service.get_plan_by_slug")
+    @patch("src.agent_plans.tools.agent_plan_service.get_plan_by_slug")
     @pytest.mark.asyncio
     async def test_get_plan_returns_plan_response(
         self, mock_get_by_slug, mock_unit_of_work, mock_current, mock_context, mock_record

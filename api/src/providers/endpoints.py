@@ -7,12 +7,12 @@ from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.core.schemas import RequestModel
-from src.providers import repository as repo
 from src.providers.json_data_extractor.service import json_data_extractor
 from src.providers.prospect_sources.service import prospect_sources
 from src.providers.registry import Caller
 from src.providers.schemas import DomainStatus, ProviderCallResponse
 from src.providers.seo_data.service import seo_data
+from src.providers.service import provider_call_service
 from src.providers.social_search.service import social_search
 
 router = APIRouter()
@@ -51,7 +51,7 @@ async def list_calls(
     paging: PaginationParams = Depends(get_pagination_params),
     domain: str | None = Query(default=None),
 ) -> PaginatedApiResponse[ProviderCallResponse]:
-    return await repo.list_calls(db, user_id, paging, domain)
+    return await provider_call_service.list(db, user_id, paging, domain)
 
 
 @router.get("/providers/social-listening/platforms")

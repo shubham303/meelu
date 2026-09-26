@@ -4,7 +4,7 @@ from src.providers.errors import ProviderRequestError
 from src.providers.json_data_extractor.adapter import DECIDE, JsonDataExtractorAdapter
 from src.providers.json_data_extractor.service import json_data_extractor
 from src.providers.registry import VendorResponse
-from src.site_pages.llm_extraction import classify
+from src.site_pages.llm_extraction.classify import site_page_classifier
 from tests.conftest import signup
 
 
@@ -77,7 +77,7 @@ async def test_pass_classifies_pending_pages(client, site, jev):
     r = await client.get("/api/v1/site/page-llm-extractions/stats")
     assert r.json()["data"]["stats"] == {"eligible": 3, "extracted": 0, "pending": 3}
 
-    assert await classify.run_extraction_pass(site["id"]) == 3
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 3
 
     assert len(jev.calls) == 3
     assert "Who we are" in [c["meta_description"] for c in jev.calls]
@@ -92,7 +92,7 @@ async def test_pass_classifies_pending_pages(client, site, jev):
     assert r.json()["data"]["pageType"] == "money"
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{broken['id']}")
-    assert r.json()["data"]["pageType"] is None
+    assert r.json()["data"].get("pageType") is None
     assert "jev down" in r.json()["data"]["error"]
 
     r = await client.get("/api/v1/site/page-llm-extractions/stats")
@@ -102,10 +102,10 @@ async def test_pass_classifies_pending_pages(client, site, jev):
     r = await client.get("/api/v1/site/page-llm-extractions?page_type=money")
     assert [x["pageId"] for x in r.json()["data"]] == [b["id"]]
 
-    assert await classify.run_extraction_pass(site["id"]) == 1
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
     assert len(jev.calls) == 4
-    assert await classify.run_extraction_pass(site["id"]) == 1
-    assert await classify.run_extraction_pass(site["id"]) == 0
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 0
     assert len(jev.calls) == 5
 
     r = await client.get("/api/v1/providers/calls?domain=json-data-extractor")
@@ -119,13 +119,13 @@ async def test_pass_classifies_pending_pages(client, site, jev):
     r = await client.get("/api/v1/site/page-llm-extractions/stats")
     assert r.json()["data"]["stats"]["pending"] == 1
 
-    assert await classify.run_extraction_pass(site["id"]) == 1
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
     assert r.json()["data"]["extractedFromHash"] == "h1-new"
 
 
 async def test_pass_with_nothing_pending_does_nothing(client, site, jev):
-    assert await classify.run_extraction_pass(site["id"]) == 0
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 0
     assert jev.calls == []
 
 
@@ -180,25 +180,23 @@ def unsure_jev(monkeypatch):
     return fake
 
 
-async def test_low_confidence_leaves_the_type_unset_and_is_not_retried(
-    client, site, unsure_jev
-):
+async def test_low_confidence_leaves_the_type_unset_and_is_not_retried(client, site, unsure_jev):
     a = await add_page(client, "https://extract.example.com/unsure", bodyText="x", contentHash="h1")
 
-    assert await classify.run_extraction_pass(site["id"]) == 1
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
-    assert r.json()["data"]["pageType"] is None
+    assert r.json()["data"].get("pageType") is None
     assert r.json()["data"]["confidence"] == 0.4
-    assert r.json()["data"]["error"] is None
+    assert r.json()["data"].get("error") is None
 
-    assert await classify.run_extraction_pass(site["id"]) == 0
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 0
     assert len(unsure_jev.calls) == 1
 
 
 async def test_set_page_type_fills_an_unset_type_only(client, site, unsure_jev):
     a = await add_page(client, "https://extract.example.com/unsure", bodyText="x", contentHash="h1")
-    assert await classify.run_extraction_pass(site["id"]) == 1
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
 
     r = await client.post(
         f"/api/v1/site/page-llm-extractions/by-page/{a['id']}/page-type",
@@ -217,7 +215,7 @@ async def test_set_page_type_fills_an_unset_type_only(client, site, unsure_jev):
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
     assert r.json()["data"]["pageType"] == "hub"
 
-    assert await classify.run_extraction_pass(site["id"]) == 0
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 0
 
 
 async def test_set_page_type_on_a_page_never_extracted(client, site):

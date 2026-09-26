@@ -14,18 +14,17 @@ async def test_runs_listing_and_lifecycle(client, email):
 
     r = await client.get("/api/v1/site/technical-seo/runs")
     assert r.status_code == 200
-    body = r.json()["data"]
-    assert body["total"] == 2
-    assert body["shown"] == 2
-    assert body["offset"] == 0
-    assert body["runs"][0]["trigger"] == "schedule"
-    assert body["runs"][1]["id"] == run["id"]
+    body = r.json()
+    assert body["pagination"]["total"] == 2
+    assert len(body["data"]) == 2
+    assert body["data"][0]["trigger"] == "schedule"
+    assert body["data"][1]["id"] == run["id"]
 
     r = await client.get("/api/v1/site/technical-seo/runs", params={"trigger": "schedule"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
     r = await client.get("/api/v1/site/technical-seo/runs", params={"reviewed": "true"})
-    assert r.json()["data"]["total"] == 0
+    assert r.json()["pagination"]["total"] == 0
 
     r = await client.get(f"/api/v1/site/technical-seo/runs/{run['id']}")
     assert r.json()["data"]["id"] == run["id"]
@@ -35,7 +34,7 @@ async def test_runs_listing_and_lifecycle(client, email):
     assert r.json()["data"]["reviewedAt"] is not None
 
     r = await client.get("/api/v1/site/technical-seo/runs", params={"reviewed": "true"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
     r = await client.put(f"/api/v1/site/technical-seo/runs/{run['id']}", json={"trigger": "agent"})
     assert r.json()["data"]["trigger"] == "agent"
@@ -45,14 +44,14 @@ async def test_runs_listing_and_lifecycle(client, email):
     assert r.json() == {"error": {"message": "Nothing to change. Send reviewed or trigger."}}
 
     r = await client.delete(f"/api/v1/site/technical-seo/runs/{run['id']}")
-    assert r.json()["data"] == {"deleted": True}
+    assert r.json()["data"] == {"id": run["id"], "deleted": True}
 
     r = await client.delete(f"/api/v1/site/technical-seo/runs/{run['id']}")
     assert r.status_code == 404
     assert r.json() == {"error": {"message": "No such technical SEO run for this website."}}
 
     r = await client.get("/api/v1/site/technical-seo/runs")
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
 
 async def test_site_issue_crud(client, email):
@@ -131,7 +130,7 @@ async def test_site_issue_crud(client, email):
     }
 
     r = await client.delete(f"/api/v1/site/technical-seo/issues/{issue['id']}")
-    assert r.json()["data"] == {"deleted": True}
+    assert r.json()["data"] == {"id": issue["id"], "deleted": True}
 
     r = await client.get(f"/api/v1/site/technical-seo/issues/{issue['id']}")
     assert r.status_code == 404
@@ -224,7 +223,7 @@ async def test_page_issue_crud(client, email):
     assert r.json() == {"error": {"message": "No page issue in this run matched."}}
 
     r = await client.delete(f"/api/v1/site/technical-seo/page-issues/{issue['id']}")
-    assert r.json()["data"] == {"deleted": True}
+    assert r.json()["data"] == {"id": issue["id"], "deleted": True}
 
     r = await client.get(f"/api/v1/site/technical-seo/page-issues/{issue['id']}")
     assert r.status_code == 404

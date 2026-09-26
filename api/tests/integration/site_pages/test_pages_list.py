@@ -100,19 +100,19 @@ async def corpus(client, site):
 
 async def test_list_defaults_sorted_by_url_with_totals(client, corpus):
     body = await list_pages(client)
-    assert body["total"] == 4
-    assert body["shown"] == 4
-    assert body["offset"] == 0
-    assert [p["url"] for p in body["pages"]] == [
+    assert body["pagination"]["total"] == 4
+    assert len(body["data"]) == 4
+    assert body["pagination"]["page"] == 1
+    assert [p["url"] for p in body["data"]] == [
         "https://example.com/",
         "https://example.com/blog/grinders",
         "https://example.com/blog/old-kettles",
         "https://example.com/redirected",
     ]
-    assert body["pages"][0]["stage"] == "indexed"
-    assert body["pages"][1]["stage"] == "crawled"
-    assert body["pages"][3]["stage"] == "blocked"
-    assert "bodyText" not in body["pages"][0]
+    assert body["data"][0]["stage"] == "indexed"
+    assert body["data"][1]["stage"] == "crawled"
+    assert body["data"][3]["stage"] == "blocked"
+    assert "bodyText" not in body["data"][0]
 
 
 async def test_filter_page_type_status_and_stage(client, corpus):
@@ -214,35 +214,36 @@ async def test_sort_and_limit_clamp(client, corpus):
     assert (await urls(client, sort="crawled"))[0] == "https://example.com/redirected"
     assert (await urls(client, sort="bogus")) == await urls(client)
 
-    body = await list_pages(client, limit="0")
-    assert body["shown"] == 1
-    assert body["total"] == 4
+    body = await list_pages(client, pageSize="1")
+    assert len(body["data"]) == 1
+    assert body["pagination"]["total"] == 4
 
-    body = await list_pages(client, limit="99999")
-    assert body["shown"] == 4
+    body = await list_pages(client, pageSize="2", page="2")
+    assert body["pagination"]["page"] == 2
+    assert len(body["data"]) == 2
+    assert body["pagination"]["total"] == 4
 
-    body = await list_pages(client, offset="2")
-    assert body["offset"] == 2
-    assert body["shown"] == 2
-    assert body["total"] == 4
-
-    r = await client.get("/api/v1/site/pages", params={"limit": "abc"})
+    r = await client.get("/api/v1/site/pages", params={"pageSize": "abc"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "limit must be a number."}}
+    assert r.json() == {
+        "error": {
+            "message": "pageSize: Input should be a valid integer, unable to parse string as an integer"
+        }
+    }
 
     r = await client.get("/api/v1/site/pages", params={"stage": "nope"})
     assert r.status_code == 400
-    assert "stage must be one of" in r.json()["error"]["message"]
+    assert "stage: Input should be" in r.json()["error"]["message"]
 
 
 async def test_views(client, corpus):
     body = await list_pages(client, view="full", urlContains="grinders")
-    page = body["pages"][0]
+    page = body["data"][0]
     assert page["bodyText"] == "burr grinders compared"
     assert page["outLinkCount"] == 0
 
     body = await list_pages(client, view="export", urlContains="grinders")
-    page = body["pages"][0]
+    page = body["data"][0]
     assert page["hasText"] is True
     assert page["outLinkCount"] == 0
     assert page["externalLinkCount"] == 0
@@ -252,7 +253,7 @@ async def test_views(client, corpus):
     assert "id" not in page
 
     body = await list_pages(client, view="text", urlContains="grinders")
-    page = body["pages"][0]
+    page = body["data"][0]
     assert page["bodyText"] == "burr grinders compared"
     assert page["stage"] in ("crawled", "indexed")
     assert "outLinkCount" not in page
@@ -260,12 +261,14 @@ async def test_views(client, corpus):
 
     r = await client.get("/api/v1/site/pages", params={"view": "wide"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "view must be one of slim, full, export, text."}}
+    assert r.json() == {
+        "error": {"message": "view: Input should be 'slim', 'full', 'export' or 'text'"}
+    }
 
 
 async def test_ids_and_urls_filters(client, corpus):
     body = await list_pages(client, urls="https://example.com/,https://example.com/redirected")
-    assert body["total"] == 2
-    ids = [p["id"] for p in body["pages"]]
+    assert body["pagination"]["total"] == 2
+    ids = [p["id"] for p in body["data"]]
     body = await list_pages(client, ids=ids[0])
-    assert body["total"] == 1
+    assert body["pagination"]["total"] == 1

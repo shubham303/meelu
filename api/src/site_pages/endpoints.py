@@ -5,17 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
-from src.site_pages import service
-from src.site_pages.llm_extraction import service as llm_extraction_service
-from src.site_pages.schemas.llm_extraction import (
-    PageLlmExtractionCreateRequest,
-    PageLlmExtractionDeleteResponse,
-    PageLlmExtractionListQuery,
-    PageLlmExtractionListResponse,
-    PageLlmExtractionPageTypeRequest,
-    PageLlmExtractionResponse,
-    PageLlmExtractionStatsResponse,
-)
+from src.site_pages.llm_extraction.service import site_page_llm_extraction_service
 from src.site_pages.schemas import (
     SiteChunkResponse,
     SitePageBatchRequest,
@@ -30,8 +20,6 @@ from src.site_pages.schemas import (
     SitePageListResponse,
     SitePagePruneResult,
     SitePageResponse,
-    SitePageSearchRequest,
-    SitePageSearchResponse,
     SitePageSlimListItemResponse,
     SitePageStatsResponse,
     SitePageTextListItemResponse,
@@ -40,6 +28,17 @@ from src.site_pages.schemas import (
     SitePageVisitedResult,
     SitePageVisitSweepResult,
 )
+from src.site_pages.schemas.llm_extraction import (
+    PageLlmExtractionCreateRequest,
+    PageLlmExtractionDeleteResponse,
+    PageLlmExtractionListQuery,
+    PageLlmExtractionListResponse,
+    PageLlmExtractionPageTypeRequest,
+    PageLlmExtractionResponse,
+    PageLlmExtractionStatsResponse,
+)
+from src.site_pages.schemas.search import SitePageSearchRequest, SitePageSearchResponse
+from src.site_pages.service import site_page_service
 
 router = APIRouter()
 
@@ -57,7 +56,9 @@ async def list_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageListResponse:
-    result = await service.pages(db, ctx.site_id, q.filters(), q.paging(), q.view, q.search_text)
+    result = await site_page_service.list_pages(
+        db, ctx.site_id, q.filters(), q.paging(), q.view, q.search_text
+    )
     item = LIST_ITEM_RESPONSE[q.view or "slim"]
     return SitePageListResponse(
         data=[item.model_validate(p) for p in result.data],
@@ -72,7 +73,7 @@ async def search_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageSearchResponse:
-    return await service.search(db, ctx.site_id, body)
+    return await site_page_service.search(db, ctx.site_id, body)
 
 
 @router.post("/site/pages")
@@ -83,10 +84,10 @@ async def save_pages(
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageBatchResult | SitePageResponse:
     if isinstance(body, SitePageBatchRequest):
-        return await service.save_pages(db, ctx.user_id, ctx.site_id, body)
+        return await site_page_service.save_many(db, ctx.user_id, ctx.site_id, body)
     response.status_code = 201
     return SitePageResponse.model_validate(
-        await service.save_page(db, ctx.user_id, ctx.site_id, body)
+        await site_page_service.save(db, ctx.user_id, ctx.site_id, body)
     )
 
 
@@ -96,7 +97,7 @@ async def page_by_url(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageResponse:
-    return SitePageResponse.model_validate(await service.resolve_page(db, ctx.site_id, url))
+    return SitePageResponse.model_validate(await site_page_service.get_by_url(db, ctx.site_id, url))
 
 
 @router.get("/site/pages/stats")
@@ -104,7 +105,9 @@ async def page_stats(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageStatsResponse:
-    return SitePageStatsResponse.model_validate(await service.stats(db, ctx.user_id, ctx.site_id))
+    return SitePageStatsResponse.model_validate(
+        await site_page_service.stats(db, ctx.user_id, ctx.site_id)
+    )
 
 
 @router.get("/site/pages/discovery")
@@ -112,7 +115,9 @@ async def page_discovery(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageDiscoveryResponse:
-    return SitePageDiscoveryResponse.model_validate(await service.discovery(db, ctx.site_id))
+    return SitePageDiscoveryResponse.model_validate(
+        await site_page_service.discovery(db, ctx.site_id)
+    )
 
 
 @router.post("/site/pages/visited")
@@ -122,8 +127,8 @@ async def mark_visited(
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageVisitSweepResult | SitePageVisitedResult:
     if body.reset:
-        return await service.start_visit_sweep(db, ctx.site_id)
-    return await service.mark_visited(db, ctx.site_id, body)
+        return await site_page_service.start_visit_sweep(db, ctx.site_id)
+    return await site_page_service.mark_visited(db, ctx.site_id, body)
 
 
 @router.post("/site/pages/prune")
@@ -131,7 +136,7 @@ async def prune_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePagePruneResult:
-    return await service.prune_pages(db, ctx.site_id)
+    return await site_page_service.prune(db, ctx.site_id)
 
 
 @router.post("/site/pages/graph")
@@ -139,7 +144,7 @@ async def rebuild_graph(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageGraphResult:
-    await service.rebuild_graph(db, ctx.site_id)
+    await site_page_service.rebuild_graph(db, ctx.site_id)
     return SitePageGraphResult()
 
 
@@ -149,7 +154,7 @@ async def get_page(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageResponse:
-    return SitePageResponse.model_validate(await service.page(db, ctx.site_id, page_id))
+    return SitePageResponse.model_validate(await site_page_service.get(db, ctx.site_id, page_id))
 
 
 @router.get("/site/pages/{page_id}/links")
@@ -158,7 +163,9 @@ async def page_links(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageLinksResponse:
-    return SitePageLinksResponse.model_validate(await service.page_links(db, ctx.site_id, page_id))
+    return SitePageLinksResponse.model_validate(
+        await site_page_service.links(db, ctx.site_id, page_id)
+    )
 
 
 @router.put("/site/pages/{page_id}")
@@ -168,7 +175,7 @@ async def put_page(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageResponse:
-    record = await service.update_page(db, ctx.user_id, ctx.site_id, page_id, body)
+    record = await site_page_service.update(db, ctx.user_id, ctx.site_id, page_id, body)
     return SitePageResponse.model_validate(record)
 
 
@@ -179,7 +186,7 @@ async def patch_page(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageResponse:
-    record = await service.update_page(db, ctx.user_id, ctx.site_id, page_id, body)
+    record = await site_page_service.update(db, ctx.user_id, ctx.site_id, page_id, body)
     return SitePageResponse.model_validate(record)
 
 
@@ -189,7 +196,7 @@ async def delete_page(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SitePageDeleteResponse:
-    removed = await service.delete_page(db, ctx.user_id, ctx.site_id, page_id)
+    removed = await site_page_service.delete(db, ctx.user_id, ctx.site_id, page_id)
     return SitePageDeleteResponse(id=removed.id, url=removed.url)
 
 
@@ -200,7 +207,8 @@ async def list_chunks(
     ctx: AuthContext = Depends(require_site),
 ) -> list[SiteChunkResponse]:
     return [
-        SiteChunkResponse.model_validate(c) for c in await service.chunks(db, ctx.site_id, page_id)
+        SiteChunkResponse.model_validate(c)
+        for c in await site_page_service.chunks(db, ctx.site_id, page_id)
     ]
 
 
@@ -210,7 +218,9 @@ async def list_extractions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionListResponse:
-    result = await llm_extraction_service.list_extractions(db, ctx.site_id, q.page_type, q.paging())
+    result = await site_page_llm_extraction_service.list_extractions(
+        db, ctx.site_id, q.page_type, q.paging()
+    )
     return PageLlmExtractionListResponse(
         data=[PageLlmExtractionResponse.model_validate(r) for r in result.data],
         pagination=result.pagination,
@@ -226,7 +236,7 @@ async def save_extraction(
 ) -> PageLlmExtractionResponse:
     response.status_code = 201
     return PageLlmExtractionResponse.model_validate(
-        await llm_extraction_service.save(db, ctx.user_id, ctx.site_id, body)
+        await site_page_llm_extraction_service.save(db, ctx.user_id, ctx.site_id, body)
     )
 
 
@@ -238,7 +248,7 @@ async def set_extraction_page_type(
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionResponse:
     return PageLlmExtractionResponse.model_validate(
-        await llm_extraction_service.set_page_type(
+        await site_page_llm_extraction_service.set_page_type(
             db, ctx.user_id, ctx.site_id, page_id, body.page_type
         )
     )
@@ -249,7 +259,9 @@ async def extraction_stats(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionStatsResponse:
-    return PageLlmExtractionStatsResponse(stats=await llm_extraction_service.stats(db, ctx.site_id))
+    return PageLlmExtractionStatsResponse(
+        stats=await site_page_llm_extraction_service.stats(db, ctx.site_id)
+    )
 
 
 @router.get("/site/page-llm-extractions/by-page/{page_id}")
@@ -259,7 +271,7 @@ async def extraction_by_page(
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionResponse:
     return PageLlmExtractionResponse.model_validate(
-        await llm_extraction_service.get_by_page(db, ctx.site_id, page_id)
+        await site_page_llm_extraction_service.get_by_page(db, ctx.site_id, page_id)
     )
 
 
@@ -270,7 +282,7 @@ async def get_extraction(
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionResponse:
     return PageLlmExtractionResponse.model_validate(
-        await llm_extraction_service.get(db, ctx.site_id, extraction_id)
+        await site_page_llm_extraction_service.get(db, ctx.site_id, extraction_id)
     )
 
 
@@ -280,5 +292,5 @@ async def delete_extraction(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PageLlmExtractionDeleteResponse:
-    await llm_extraction_service.delete(db, ctx.site_id, extraction_id)
+    await site_page_llm_extraction_service.delete(db, ctx.site_id, extraction_id)
     return PageLlmExtractionDeleteResponse(id=extraction_id)

@@ -1,6 +1,5 @@
 import numpy as np
 
-from tests.conftest import TEST_URL
 from tests.integration.seo.test_rollup import BASE, BLOG, HOME, PRICING, prepare, vector
 from tests.integration.site_structure.test_removals_and_pillars import seed_embedded_chunk
 
@@ -18,17 +17,8 @@ class FakeEmbedder:
         return out
 
 
-def test_psycopg_sql_rewrites_named_parameters():
-    from src.seo.precompute.clusters import psycopg_sql
-
-    assert psycopg_sql("where a = :site_id and b = cast(:ids as text[]) and c::text = 'x'") == (
-        "where a = %(site_id)s and b = cast(%(ids)s as text[]) and c::text = 'x'"
-    )
-
-
 async def test_worker_pass_builds_clusters_and_owner(client, email, monkeypatch):
-    from src.embed_worker.db import Db
-    from src.seo.precompute import clusters
+    from src.seo.precompute.clusters import seo_cluster_service
 
     site, user_id, pages = await prepare(client, email)
     await seed_embedded_chunk(site["id"], user_id, pages[PRICING], vector(1), "Espresso machines")
@@ -71,12 +61,7 @@ async def test_worker_pass_builds_clusters_and_owner(client, email, monkeypatch)
     r = await client.post(f"{BASE}/precompute")
     assert r.json()["data"]["precomputeRequestedAt"]
 
-    worker_db = Db(TEST_URL)
-    try:
-        assert not [c for c in worker_db.missing_columns() if c.startswith("seo_keywords")]
-        rebuilt = clusters.run_seo_pass(worker_db, FakeEmbedder(), "fake-model")
-    finally:
-        worker_db.close()
+    rebuilt = await seo_cluster_service.run_seo_pass(FakeEmbedder(), "fake-model")
     assert rebuilt == 1
 
     state = (await client.get(f"{BASE}/state")).json()["data"]

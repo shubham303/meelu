@@ -25,7 +25,7 @@ async def test_sites_create_and_list(client, email):
     assert site["sitemapUrls"] == []
     assert "userId" not in site
     assert "seq" not in site
-    assert site["country"] is None
+    assert site.get("country") is None
 
     r = await client.post("/api/v1/sites", json={"domain": "example.com", "name": "Dup"})
     assert r.status_code == 409
@@ -33,28 +33,36 @@ async def test_sites_create_and_list(client, email):
 
     r = await client.get("/api/v1/sites")
     assert r.status_code == 200
-    body = r.json()["data"]
-    assert body["total"] == 1
-    assert body["shown"] == 1
-    assert body["offset"] == 0
-    assert body["sites"][0]["id"] == site["id"]
+    body = r.json()
+    assert body["pagination"]["total"] == 1
+    assert len(body["data"]) == 1
+    assert body["pagination"]["page"] == 1
+    assert body["data"][0]["id"] == site["id"]
 
     r = await client.get("/api/v1/sites", params={"q": "exam"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
     r = await client.get("/api/v1/sites", params={"q": "zzz"})
-    assert r.json()["data"]["total"] == 0
+    assert r.json()["pagination"]["total"] == 0
 
     r = await client.get("/api/v1/sites", params={"sort": "bogus"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "sort must be one of created, name, domain, crawled."}}
+    assert r.json() == {
+        "error": {"message": "sort: Input should be 'created', 'name', 'domain' or 'crawled'"}
+    }
 
-    r = await client.get("/api/v1/sites", params={"limit": "x"})
+    r = await client.get("/api/v1/sites", params={"page_size": "x"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "limit must be a number."}}
+    assert r.json() == {
+        "error": {
+            "message": "page_size: Input should be a valid integer, unable to parse string as an integer"
+        }
+    }
 
     r = await client.get("/api/v1/sites", params={"hasRepo": "maybe"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "hasRepo must be true or false."}}
+    assert r.json() == {
+        "error": {"message": "hasRepo: Input should be a valid boolean, unable to interpret input"}
+    }
 
 
 async def test_sites_by_id(client, email):

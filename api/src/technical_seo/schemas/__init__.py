@@ -4,6 +4,7 @@ from src.technical_seo.schemas.groups import (
     AuditSummaryResponse,
     IssueGroupResponse,
     PageIssueGroup,
+    PageIssueKindGroup,
 )
 from src.technical_seo.schemas.issues import (
     IssueBulkUpdateResult,
@@ -74,6 +75,7 @@ __all__ = [
     "PageIssueDeleteResponse",
     "PageIssueFilter",
     "PageIssueGroup",
+    "PageIssueKindGroup",
     "PageIssueListItemResponse",
     "PageIssueRecord",
     "PageIssueResponse",

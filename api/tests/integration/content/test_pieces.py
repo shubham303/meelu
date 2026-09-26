@@ -97,7 +97,7 @@ async def test_clone_piece(client, workspace):
     r = await client.delete(f"/api/v1/content/pieces/{source['id']}")
     assert r.status_code == 200
     r = await client.get(f"/api/v1/content/pieces/{clone['id']}")
-    assert r.json()["data"]["parentPieceId"] is None
+    assert r.json()["data"].get("parentPieceId") is None
 
 
 async def test_hard_checks_block_and_unblock(client, workspace):
@@ -172,8 +172,8 @@ async def test_piece_issues(client, workspace):
     assert first["anchorText"] == "Hires every quarter."
     assert first["suggestion"] == "It hires every quarter."
     assert first["state"] == "open"
-    assert second["anchorText"] is None
-    assert second["suggestion"] is None
+    assert second.get("anchorText") is None
+    assert second.get("suggestion") is None
     assert first["runId"] == second["runId"] == created["runId"]
 
     r = await client.post(

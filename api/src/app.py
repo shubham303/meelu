@@ -10,6 +10,7 @@ from src.analytics.endpoints import router as analytics_router
 from src.auth import session_router
 from src.content.endpoints import router as content_router
 from src.core.envelope import install_envelope
+from src.core import scheduler
 from src.core.logging import RequestLoggingMiddleware, configure_logging
 from src.crawl_jobs.endpoints import router as crawl_jobs_router
 from src.credits import cron as credits_cron
@@ -38,7 +39,8 @@ configure_logging()
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with credits_cron.running():
+    credits_cron.register(scheduler.scheduler)
+    async with scheduler.running():
         yield
 
 

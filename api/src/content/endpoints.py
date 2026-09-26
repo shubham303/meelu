@@ -12,10 +12,10 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, current_user_id, require_site
-from src.content.channels import service as channels_service
-from src.content.media import service as media_service
-from src.content.piece_issues import service as issues_service
-from src.content.pieces import service as pieces_service
+from src.content.channels.service import site_channel_service
+from src.content.media.service import post_media_service
+from src.content.piece_issues.service import content_piece_issue_service
+from src.content.pieces.service import content_piece_service
 from src.content.schemas import (
     ContentPieceCountsResponse,
     ContentPieceCreateRequest,
@@ -56,7 +56,7 @@ async def list_channels(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> list[SiteChannelResponse]:
-    channels = await channels_service.list_channels(db, ctx.user_id, ctx.site_id)
+    channels = await site_channel_service.list(db, ctx.user_id, ctx.site_id)
     return [SiteChannelResponse.model_validate(c) for c in channels]
 
 
@@ -66,7 +66,7 @@ async def get_channel(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SiteChannelResponse:
-    channel = await channels_service.get_channel(db, ctx.user_id, ctx.site_id, channel_key)
+    channel = await site_channel_service.get(db, ctx.user_id, ctx.site_id, channel_key)
     return SiteChannelResponse.model_validate(channel)
 
 
@@ -77,7 +77,7 @@ async def update_channel(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SiteChannelResponse:
-    channel = await channels_service.update_channel(db, ctx.user_id, ctx.site_id, channel_key, body)
+    channel = await site_channel_service.update(db, ctx.user_id, ctx.site_id, channel_key, body)
     return SiteChannelResponse.model_validate(channel)
 
 
@@ -87,7 +87,7 @@ async def reset_channel_rules(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SiteChannelResponse:
-    channel = await channels_service.reset_rules(db, ctx.user_id, ctx.site_id, channel_key)
+    channel = await site_channel_service.reset_rules(db, ctx.user_id, ctx.site_id, channel_key)
     return SiteChannelResponse.model_validate(channel)
 
 
@@ -102,8 +102,8 @@ async def list_pieces(
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[ContentPieceListItemResponse] | ContentPieceCountsResponse:
     if counts:
-        return await pieces_service.counts(db, ctx.site_id)
-    page = await pieces_service.list_pieces(
+        return await content_piece_service.counts(db, ctx.site_id)
+    page = await content_piece_service.list(
         db,
         ctx.site_id,
         paging,
@@ -124,7 +124,7 @@ async def create_piece(
     ctx: AuthContext = Depends(require_site),
     actor: str = Depends(actor_of),
 ) -> ContentPieceResponse:
-    piece = await pieces_service.create_piece(db, ctx.user_id, ctx.site_id, body, actor=actor)
+    piece = await content_piece_service.create(db, ctx.user_id, ctx.site_id, body, actor=actor)
     return ContentPieceResponse.model_validate(piece)
 
 
@@ -135,7 +135,7 @@ async def get_piece(
     ctx: AuthContext = Depends(require_site),
 ) -> ContentPieceResponse:
     return ContentPieceResponse.model_validate(
-        await pieces_service.get_piece(db, ctx.site_id, piece_id)
+        await content_piece_service.get(db, ctx.site_id, piece_id)
     )
 
 
@@ -145,8 +145,8 @@ async def piece_markdown(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> Response:
-    piece = await pieces_service.get_piece(db, ctx.site_id, piece_id)
-    export = pieces_service.markdown_export(piece)
+    piece = await content_piece_service.get(db, ctx.site_id, piece_id)
+    export = content_piece_service.markdown_export(piece)
     return Response(export.markdown, media_type="text/markdown; charset=utf-8")
 
 
@@ -157,7 +157,7 @@ async def update_piece(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ContentPieceResponse:
-    piece = await pieces_service.update_piece(db, ctx.user_id, ctx.site_id, piece_id, body)
+    piece = await content_piece_service.update(db, ctx.user_id, ctx.site_id, piece_id, body)
     return ContentPieceResponse.model_validate(piece)
 
 
@@ -167,7 +167,7 @@ async def delete_piece(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ContentPieceDeleteResponse:
-    piece = await pieces_service.delete_piece(db, ctx.site_id, piece_id)
+    piece = await content_piece_service.delete(db, ctx.site_id, piece_id)
     return ContentPieceDeleteResponse(id=piece.id)
 
 
@@ -180,7 +180,7 @@ async def list_piece_issues(
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[ContentPieceIssueListItemResponse]:
-    page = await issues_service.list_issues(
+    page = await content_piece_issue_service.list(
         db, ctx.site_id, piece_id, paging, state=state, tool=tool
     )
     return PaginatedApiResponse[ContentPieceIssueListItemResponse](
@@ -196,7 +196,9 @@ async def replace_piece_issues(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ContentPieceIssuesReplaceResponse:
-    result = await issues_service.replace_tool_issues(db, ctx.user_id, ctx.site_id, piece_id, body)
+    result = await content_piece_issue_service.replace_for_tool(
+        db, ctx.user_id, ctx.site_id, piece_id, body
+    )
     return ContentPieceIssuesReplaceResponse(
         run_id=result.run_id,
         tool=result.tool,
@@ -212,7 +214,7 @@ async def update_piece_issue(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ContentPieceIssueResponse:
-    issue = await issues_service.update_issue(db, ctx.site_id, piece_id, issue_id, body)
+    issue = await content_piece_issue_service.update(db, ctx.site_id, piece_id, issue_id, body)
     return ContentPieceIssueResponse.model_validate(issue)
 
 
@@ -224,7 +226,7 @@ async def upload_media(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> PostMediaResponse:
-    media = await media_service.upload_media(
+    media = await post_media_service.upload(
         db,
         user_id,
         await file.read(),
@@ -242,7 +244,7 @@ async def serve_media(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> Response:
-    media = await media_service.read_media(db, user_id, media_id)
+    media = await post_media_service.read(db, user_id, media_id)
     return Response(
         content=media.data,
         headers={

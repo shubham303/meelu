@@ -44,6 +44,8 @@ class LinkSuggestionFilter(BaseModel):
     to_page_id: str | None = None
     page_id: str | None = None
     url: str | None = None
+    sort_by: str = "score"
+    sort_order: str = "desc"
 
 
 class NewLinkSuggestion(BaseModel):

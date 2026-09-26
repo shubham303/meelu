@@ -9,7 +9,7 @@ from src.agent_plans.schemas import (
     AgentPlanResponse,
     AgentPlanUpdateRequest,
 )
-from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
 
 
 @pytest.fixture
@@ -47,9 +47,9 @@ class TestListPlansEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.list_plans") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.list_plans") as mock_service:
             mock_paginated = PaginatedApiResponse(
-                data=[record], pagination=MagicMock(total=1, page=1, page_size=10)
+                data=[record], pagination=PaginationService.build_pagination_meta(1, 1, 10)
             )
             mock_service.return_value = mock_paginated
 
@@ -76,9 +76,9 @@ class TestListPlansEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.list_plans") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.list_plans") as mock_service:
             mock_paginated = PaginatedApiResponse(
-                data=[record], pagination=MagicMock(total=1, page=1, page_size=10)
+                data=[record], pagination=PaginationService.build_pagination_meta(1, 1, 10)
             )
             mock_service.return_value = mock_paginated
 
@@ -110,7 +110,7 @@ class TestCreatePlanEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.create_plan") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.create_plan") as mock_service:
             mock_service.return_value = created_record
 
             db = AsyncMock()
@@ -140,7 +140,7 @@ class TestGetPlanBySlugEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.get_plan_by_slug") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.get_plan_by_slug") as mock_service:
             mock_service.return_value = record
 
             db = AsyncMock()
@@ -167,7 +167,7 @@ class TestGetPlanEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.get_plan") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.get_plan") as mock_service:
             mock_service.return_value = record
 
             db = AsyncMock()
@@ -194,7 +194,7 @@ class TestPatchPlanEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.update_plan") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.update_plan") as mock_service:
             mock_service.return_value = updated_record
 
             db = AsyncMock()
@@ -224,7 +224,7 @@ class TestDeletePlanEndpoint:
             updated_at=now,
         )
 
-        with patch("src.agent_plans.service.delete_plan") as mock_service:
+        with patch("src.agent_plans.service.agent_plan_service.delete_plan") as mock_service:
             mock_service.return_value = deleted_record
 
             db = AsyncMock()

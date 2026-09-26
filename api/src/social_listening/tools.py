@@ -5,7 +5,7 @@ from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.settings import settings
-from src.social_listening import service
+from src.social_listening.service import social_listening_service
 from src.social_listening.schemas import (
     BulkUpsertResponse,
     PostFilters,
@@ -50,7 +50,7 @@ async def social_listening_save_queries(queries: list[QueryUpsertItem]) -> BulkU
         raise ValueError("queries must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.upsert_queries(db, ctx.user_id, ctx.site_id, queries)
+        return await social_listening_service.upsert_queries(db, ctx.user_id, ctx.site_id, queries)
 
 
 @tool(writes=True, desk="social-listening")
@@ -62,7 +62,7 @@ async def social_listening_save_targets(targets: list[TargetUpsertItem]) -> Bulk
         raise ValueError("targets must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.upsert_targets(db, ctx.user_id, ctx.site_id, targets)
+        return await social_listening_service.upsert_targets(db, ctx.user_id, ctx.site_id, targets)
 
 
 @tool(writes=True, desk="social-listening")
@@ -76,7 +76,7 @@ async def social_listening_update_post(post_id: str, patch: PostPatchRequest) ->
         raise ValueError("replyText is the user's own words; leave it unset.")
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.patch_post(db, ctx.site_id, post_id, patch)
+        return await social_listening_service.patch_post(db, ctx.site_id, post_id, patch)
 
 
 @tool(desk="social-listening")
@@ -89,7 +89,7 @@ async def social_listening_download_posts(
     ctx = require_site()
     filters = PostFilters(kind=kind, status=status, sort="newest")
     async with unit_of_work() as db:
-        rows = await service.export_posts(db, ctx.site_id, filters)
+        rows = await social_listening_service.export_posts(db, ctx.site_id, filters)
     out_dir = settings.agent_data_dir / "social-listening" / ctx.schema
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")

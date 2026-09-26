@@ -8,7 +8,7 @@ from src.agent import security
 from src.agent.auth import AuthMiddleware
 from src.agent.schemas import HealthResponse
 from src.agent.server import mcp
-from src.agent_plans import service as plan_service
+from src.agent_plans.service import agent_plan_service
 from src.core.database import unit_of_work
 from src.core.logging import configure_logging
 
@@ -21,7 +21,7 @@ mcp_app = mcp.streamable_http_app()
 async def lifespan(app: FastAPI):
     await run_in_threadpool(security.bootstrap)
     async with unit_of_work() as db:
-        await plan_service.sync_builtins(db)
+        await agent_plan_service.sync_builtins(db)
     async with mcp.session_manager.run():
         yield
 

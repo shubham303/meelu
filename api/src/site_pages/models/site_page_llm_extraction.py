@@ -21,9 +21,7 @@ class SitePageLlmExtraction(EntityMixin, SiteScopedMixin, Base):
     extracted_from_hash: Mapped[str | None]
     model: Mapped[str | None]
     error: Mapped[str | None]
-    extract_attempts: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
+    extract_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     extracted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

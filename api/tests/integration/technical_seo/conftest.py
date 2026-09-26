@@ -107,10 +107,10 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
                 )
         await db.commit()
 
-    from src.site_pages import repository as pages_repo
+    from src.site_pages.service import site_page_service
 
     async with SessionLocal() as db:
-        await pages_repo.resolve_links(db, site_id)
+        await site_page_service.resolve_links(db, site_id)
         await db.commit()
     return made
 

@@ -4,7 +4,7 @@ from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.core.schemas import EntityModel
-from src.seo import export, service
+from src.seo.service import seo_service
 from src.seo.schemas import (
     CannibalisationRequest,
     CollectCompetitorKeywordsRequest,
@@ -46,10 +46,10 @@ async def start_seo_job(prompt: str) -> StartedJob:
     rows per action."""
     ctx = require_site()
     async with unit_of_work() as db:
-        job, reconciled = await service.start_job(
+        job, reconciled = await seo_service.start_job(
             db, ctx.user_id, ctx.site_id, SeoJobCreateRequest(prompt=prompt)
         )
-        summary = await service.overview(db, ctx.user_id, ctx.site_id)
+        summary = await seo_service.overview(db, ctx.user_id, ctx.site_id)
     ready = {a: getattr(summary.suggestions, a).get("ready", 0) for a in ("add", "edit", "delete")}
     return StartedJob(job_id=job.id, reconciled=reconciled, ready=ready)
 
@@ -59,7 +59,9 @@ async def finish_seo_job(job_id: str, status: str = "COMPLETED") -> FinishedJob:
     """Close an SEO job as COMPLETED or FAILED once the prompt has run."""
     ctx = require_site()
     async with unit_of_work() as db:
-        job = await service.finish_job(db, ctx.site_id, job_id, SeoJobUpdateRequest(status=status))
+        job = await seo_service.finish_job(
+            db, ctx.site_id, job_id, SeoJobUpdateRequest(status=status)
+        )
     return FinishedJob(job_id=job.id, status=job.status)
 
 
@@ -88,7 +90,7 @@ async def propose_page_edits(
         min_impressions=min_impressions,
     )
     async with unit_of_work() as db:
-        return await service.propose_page_edits(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.propose_page_edits(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -103,7 +105,7 @@ async def propose_cannibalisation(
         job_id=job_id, page_ids=page_ids, min_shared_impressions=min_shared_impressions
     )
     async with unit_of_work() as db:
-        return await service.propose_cannibalisation(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.propose_cannibalisation(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -134,7 +136,7 @@ async def save_page_suggestion(
         evidence=evidence or {},
     )
     async with unit_of_work() as db:
-        return await service.save_suggestion(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.save_suggestion(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -145,7 +147,7 @@ async def screen_page_suggestions(
     becomes llm_rejected, the rest stay draft for review_page_suggestions."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.screen_suggestions(
+        return await seo_service.screen_suggestions(
             db,
             ctx.user_id,
             ctx.site_id,
@@ -161,7 +163,7 @@ async def rank_page_suggestions(
     become llm_rejected. A cannibalisation pair counts once against budget_delete."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.rank_suggestions(
+        return await seo_service.rank_suggestions(
             db,
             ctx.site_id,
             RankRequest(
@@ -199,7 +201,7 @@ async def collect_keywords(
         dry_run=dry_run,
     )
     async with unit_of_work() as db:
-        return await service.collect_keywords(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.collect_keywords(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -212,7 +214,7 @@ async def collect_competitors(
     ctx = require_site()
     body = CollectCompetitorsRequest(job_id=job_id, limit=limit, keyword_ids=keyword_ids)
     async with unit_of_work() as db:
-        return await service.collect_competitors(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.collect_competitors(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -226,7 +228,7 @@ async def collect_competitor_keywords(
         job_id=job_id, competitor_ids=competitor_ids, limit=limit
     )
     async with unit_of_work() as db:
-        return await service.collect_competitor_keywords(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.collect_competitor_keywords(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -253,7 +255,7 @@ async def collect_serps(
         max_keywords=max_keywords,
     )
     async with unit_of_work() as db:
-        return await service.collect_serps(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.collect_serps(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -270,7 +272,7 @@ async def propose_gap_pages(
         job_id=job_id, keyword_ids=keyword_ids, min_volume=min_volume, max_difficulty=max_difficulty
     )
     async with unit_of_work() as db:
-        return await service.propose_gap_pages(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.propose_gap_pages(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(writes=True, desk="seo")
@@ -292,7 +294,7 @@ async def propose_topic_pages(
         dry_run=dry_run,
     )
     async with unit_of_work() as db:
-        return await service.propose_topic_pages(db, ctx.user_id, ctx.site_id, body)
+        return await seo_service.propose_topic_pages(db, ctx.user_id, ctx.site_id, body)
 
 
 @tool(desk="seo")
@@ -305,5 +307,5 @@ async def seo_download_data(
     file with the analytics engine; the rows never come back inline."""
     ctx = require_site()
     async with unit_of_work() as db:
-        path, rows = await export.write_csv(db, ctx.site_id, ctx.schema, dataset)
+        path, rows = await seo_service.export(db, ctx.site_id, ctx.schema, dataset)
     return {"path": str(path), "rows": rows, "dataset": dataset}

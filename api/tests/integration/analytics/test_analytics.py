@@ -66,7 +66,7 @@ async def test_sessions_lifecycle(client, email):
 
     r = await client.delete(f"/api/v1/analytics/sessions/{second['id']}")
     assert r.status_code == 200
-    assert r.json() == {"data": {"ok": True}}
+    assert r.json() == {"data": {"id": second["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/analytics/sessions/{second['id']}")
     assert r.status_code == 404
@@ -141,7 +141,7 @@ async def test_sources_lifecycle(client, email):
 
     r = await client.delete(f"/api/v1/analytics/sources/{plain['id']}")
     assert r.status_code == 200
-    assert r.json() == {"data": {"ok": True}}
+    assert r.json() == {"data": {"id": plain["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/analytics/sources/{plain['id']}")
     assert r.status_code == 404
@@ -211,7 +211,7 @@ async def test_reports_lifecycle(client, email):
 
     r = await client.delete(f"/api/v1/analytics/reports/{loose['id']}")
     assert r.status_code == 200
-    assert r.json() == {"data": {"ok": True}}
+    assert r.json() == {"data": {"id": loose["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/analytics/reports/{loose['id']}")
     assert r.status_code == 404
@@ -241,7 +241,7 @@ async def test_report_html_must_be_self_contained(client, email):
 
     r = await client.post("/api/v1/analytics/reports", json={"title": "T", "html": "   "})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "Missing required field(s): html"}}
+    assert r.json() == {"error": {"message": "`html` must be a non-empty string."}}
 
     r = await client.post("/api/v1/analytics/reports", json={"title": "T", "html": 5})
     assert r.status_code == 400

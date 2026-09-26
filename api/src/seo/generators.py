@@ -1,17 +1,24 @@
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.seo import suggestions
 from src.seo.constants import (
     IMPRESSIONS_FLOOR,
     LEADER_MIN_DAYS,
     WEAK_COVERAGE,
 )
-from src.seo.schemas import CreateResult, NewPageSuggestion
+from src.seo.repositories import (
+    seo_keyword_clusters,
+    seo_keyword_content_pages,
+    seo_keyword_gsc_pages,
+    seo_keywords,
+    seo_page_facts,
+)
+from src.seo.schemas import CreateResult, KeywordRecord, NewPageSuggestion
+from src.seo.suggestions import seo_suggestion_service
 
 CTR_PERCENTILE = 0.75
 
@@ -34,70 +41,79 @@ QUESTION_RE = re.compile(r"^(" + "|".join(QUESTION_WORDS) + r")\b")
 
 STRONGER_TYPES = {"money", "hub", "informational", "support"}
 
-NARROW = """
-  and (cast(:page_ids as text[]) is null or g.page_id = any(cast(:page_ids as text[])))
-  and (cast(:keyword_ids as text[]) is null or k.id = any(cast(:keyword_ids as text[])))
-"""
 
-GSC_ROWS_SQL = f"""
-select g.page_id, k.id as keyword_id, k.keyword, coalesce(hk.keyword, k.keyword) as topic_key,
-       k.cluster_id, k.intent, k.volume, k.difficulty, g.position, g.impressions_28d,
-       g.clicks_28d, g.impressions_prev_28d, g.clicks_prev_28d, g.clicks_ly_28d,
-       g.impressions_ly_28d, g.ctr, g.ctr_gap, g.coverage, g.lexical_hit,
-       f.title, f.meta_description, f.title_pixels, f.content_hash, f.page_type
-from seo_keyword_gsc_pages g
-join seo_keywords k on k.id = g.keyword_id
-left join seo_keyword_clusters c on c.id = k.cluster_id
-left join seo_keywords hk on hk.id = c.head_keyword_id
-join seo_page_facts f on f.page_id = g.page_id
-where g.site_id = :site_id and f.live and f.indexable and not k.branded
-{NARROW}
-"""
+@dataclass
+class EditRow:
+    page_id: str
+    keyword_id: str
+    keyword: str
+    topic_key: str
+    cluster_id: str | None
+    intent: str | None
+    volume: int | None
+    difficulty: int | None
+    position: float | None
+    impressions_28d: int
+    clicks_28d: int
+    impressions_prev_28d: int
+    clicks_prev_28d: int
+    clicks_ly_28d: int | None
+    impressions_ly_28d: int | None
+    ctr: float | None
+    ctr_gap: float | None
+    coverage: float | None
+    lexical_hit: bool
+    title: str | None
+    meta_description: str | None
+    title_pixels: int | None
+    content_hash: str | None
+    page_type: str | None
 
-CLUSTER_ROWS_SQL = """
-select c.owner_page_id as page_id, hk.keyword as topic_key, c.id as cluster_id,
-       k.id as keyword_id, k.keyword, k.volume, k.intent, f.content_hash, f.page_type,
-       greatest(coalesce(g.coverage, 0), coalesce(cp.coverage, 0)) as coverage
-from seo_keyword_clusters c
-join seo_keywords hk on hk.id = c.head_keyword_id
-join seo_keywords k on k.cluster_id = c.id and not k.branded and coalesce(k.volume, 0) > 0
-join seo_page_facts f on f.page_id = c.owner_page_id and f.live and f.indexable
-left join seo_keyword_gsc_pages g on g.keyword_id = k.id and g.page_id = c.owner_page_id
-left join seo_keyword_content_pages cp on cp.keyword_id = k.id and cp.page_id = c.owner_page_id
-where c.site_id = :site_id and c.owner_page_id is not null
-  and (cast(:page_ids as text[]) is null or c.owner_page_id = any(cast(:page_ids as text[])))
-  and (cast(:keyword_ids as text[]) is null or k.id = any(cast(:keyword_ids as text[])))
-"""
 
-CTR_CUTOFF_SQL = """
-select percentile_cont(:pct) within group (order by g.ctr_gap * g.impressions_28d)
-from seo_keyword_gsc_pages g
-join seo_keywords k on k.id = g.keyword_id
-where g.site_id = :site_id and g.ctr_gap > 0 and not k.branded
-"""
+@dataclass
+class OwnerRow:
+    page_id: str
+    topic_key: str
+    cluster_id: str
+    keyword_id: str
+    keyword: str
+    volume: int | None
+    intent: str | None
+    content_hash: str | None
+    page_type: str | None
+    coverage: float
 
-CANNIBAL_SQL = """
-select a.page_id as strong_page, b.page_id as weak_page, k.id as keyword_id, k.keyword,
-       coalesce(hk.keyword, k.keyword) as topic_key, k.cluster_id,
-       a.impressions_28d + b.impressions_28d as shared_impressions,
-       a.leader_days_90d as strong_days, b.leader_days_90d as weak_days,
-       a.position as strong_position, b.position as weak_position,
-       fa.page_type as strong_type, fb.page_type as weak_type, fa.content_hash
-from seo_keyword_gsc_pages a
-join seo_keyword_gsc_pages b on b.keyword_id = a.keyword_id and b.page_id <> a.page_id
-join seo_keywords k on k.id = a.keyword_id and not k.branded
-left join seo_keyword_clusters c on c.id = k.cluster_id
-left join seo_keywords hk on hk.id = c.head_keyword_id
-join seo_page_facts fa on fa.page_id = a.page_id and fa.live
-join seo_page_facts fb on fb.page_id = b.page_id and fb.live
-where a.site_id = :site_id
-  and a.leader_days_90d >= :min_days and b.leader_days_90d >= :min_days
-  and a.impressions_28d + b.impressions_28d >= :min_shared
-  and (fa.clicks_28d, fa.inlinks, coalesce(fa.link_score, 0), fa.page_id)
-      > (fb.clicks_28d, fb.inlinks, coalesce(fb.link_score, 0), fb.page_id)
-  and (cast(:page_ids as text[]) is null or a.page_id = any(cast(:page_ids as text[]))
-       or b.page_id = any(cast(:page_ids as text[])))
-"""
+
+@dataclass
+class CannibalRow:
+    strong_page: str
+    weak_page: str
+    keyword_id: str
+    keyword: str
+    topic_key: str
+    cluster_id: str | None
+    shared_impressions: int
+    strong_days: int
+    weak_days: int
+    strong_position: float | None
+    weak_position: float | None
+    strong_type: str | None
+    weak_type: str | None
+    content_hash: str | None
+
+
+def percentile_cont(values: list[float], fraction: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = fraction * (len(ordered) - 1)
+    low = int(rank)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (rank - low)
+
+
+def strength(page) -> tuple:
+    return (page.clicks_28d, page.inlinks, page.link_score or 0, page.page_id)
 
 
 def _f(value: Any) -> float:
@@ -357,61 +373,273 @@ def cannibal_pairs(rows: list[Any]):
     return out
 
 
-def _narrow(page_ids: list[str] | None, keyword_ids: list[str] | None) -> dict[str, Any]:
-    return {"page_ids": page_ids or None, "keyword_ids": keyword_ids or None}
-
-
-async def propose_page_edits(
-    db: AsyncSession,
-    user_id: str,
-    site_id: str,
-    job_id: str,
-    evidence: str,
-    page_ids: list[str] | None,
-    keyword_ids: list[str] | None,
-    min_position: float,
-    max_position: float,
-    min_impressions: int,
-    min_questions: int,
-    min_drop: float,
-) -> CreateResult:
-    kinds = ("gsc", "cluster", "ctr", "questions", "decay") if evidence == "all" else (evidence,)
-    params = {"site_id": site_id, **_narrow(page_ids, keyword_ids)}
-    drafts: list[NewPageSuggestion] = []
-    gsc_rows = (await db.execute(text(GSC_ROWS_SQL), params)).all() if kinds != ("cluster",) else []
-    if "gsc" in kinds:
-        drafts += gsc_edits(gsc_rows, min_position, max_position, min_impressions)
-    if "cluster" in kinds:
-        drafts += cluster_edits((await db.execute(text(CLUSTER_ROWS_SQL), params)).all())
-    if "ctr" in kinds:
-        cutoff = (
-            await db.execute(text(CTR_CUTOFF_SQL), {"site_id": site_id, "pct": CTR_PERCENTILE})
-        ).scalar()
-        drafts += ctr_edits(gsc_rows, _f(cutoff), min(max_position, 10.0), min_impressions)
-    if "questions" in kinds:
-        drafts += question_edits(gsc_rows, min_questions)
-    if "decay" in kinds:
-        drafts += decay_edits(gsc_rows, min_drop)
-    return await suggestions.create_many(db, user_id, site_id, job_id, drafts)
-
-
-async def propose_cannibalisation(
-    db: AsyncSession,
-    user_id: str,
-    site_id: str,
-    job_id: str,
-    page_ids: list[str] | None,
-    min_shared_impressions: int,
-) -> CreateResult:
-    rows = (
-        await db.execute(
-            text(CANNIBAL_SQL),
-            {
-                "site_id": site_id,
-                "min_days": LEADER_MIN_DAYS,
-                "min_shared": min_shared_impressions,
-                "page_ids": page_ids or None,
-            },
+class SeoGeneratorService:
+    async def topic_keys(
+        self, db: AsyncSession, site_id: str, keywords: list[KeywordRecord]
+    ) -> dict[str, str]:
+        clusters = await seo_keyword_clusters.list_by_ids(
+            db, site_id, list({k.cluster_id for k in keywords if k.cluster_id})
         )
-    ).all()
-    return await suggestions.create_many(db, user_id, site_id, job_id, cannibal_pairs(rows))
+        heads = {
+            k.id: k.keyword
+            for k in await seo_keywords.list_by_ids(
+                db, site_id, [c.head_keyword_id for c in clusters]
+            )
+        }
+        head_of = {c.id: heads.get(c.head_keyword_id) for c in clusters}
+        return {
+            k.id: (head_of.get(k.cluster_id) if k.cluster_id else None) or k.keyword
+            for k in keywords
+        }
+
+    async def edit_rows(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        page_ids: list[str] | None,
+        keyword_ids: list[str] | None,
+    ) -> list[EditRow]:
+        pairs = await seo_keyword_gsc_pages.list_for_site(db, site_id, page_ids, keyword_ids)
+        keywords = {
+            k.id: k
+            for k in await seo_keywords.list_by_ids(
+                db, site_id, list({p.keyword_id for p in pairs})
+            )
+            if not k.branded
+        }
+        facts = {
+            f.page_id: f
+            for f in await seo_page_facts.list_by_page_ids(
+                db, site_id, list({p.page_id for p in pairs})
+            )
+            if f.live and f.indexable
+        }
+        topics = await self.topic_keys(db, site_id, list(keywords.values()))
+        rows: list[EditRow] = []
+        for g in pairs:
+            k = keywords.get(g.keyword_id)
+            f = facts.get(g.page_id)
+            if k is None or f is None:
+                continue
+            rows.append(
+                EditRow(
+                    page_id=g.page_id,
+                    keyword_id=k.id,
+                    keyword=k.keyword,
+                    topic_key=topics[k.id],
+                    cluster_id=k.cluster_id,
+                    intent=k.intent,
+                    volume=k.volume,
+                    difficulty=k.difficulty,
+                    position=g.position,
+                    impressions_28d=g.impressions_28d,
+                    clicks_28d=g.clicks_28d,
+                    impressions_prev_28d=g.impressions_prev_28d,
+                    clicks_prev_28d=g.clicks_prev_28d,
+                    clicks_ly_28d=g.clicks_ly_28d,
+                    impressions_ly_28d=g.impressions_ly_28d,
+                    ctr=g.ctr,
+                    ctr_gap=g.ctr_gap,
+                    coverage=g.coverage,
+                    lexical_hit=g.lexical_hit,
+                    title=f.title,
+                    meta_description=f.meta_description,
+                    title_pixels=f.title_pixels,
+                    content_hash=f.content_hash,
+                    page_type=f.page_type,
+                )
+            )
+        return rows
+
+    async def owner_rows(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        page_ids: list[str] | None,
+        keyword_ids: list[str] | None,
+    ) -> list[OwnerRow]:
+        clusters = {
+            c.id: c
+            for c in await seo_keyword_clusters.list_owned(db, site_id)
+            if page_ids is None or c.owner_page_id in page_ids
+        }
+        heads = {
+            k.id: k.keyword
+            for k in await seo_keywords.list_by_ids(
+                db, site_id, [c.head_keyword_id for c in clusters.values()]
+            )
+        }
+        facts = {
+            f.page_id: f
+            for f in await seo_page_facts.list_by_page_ids(
+                db, site_id, list({c.owner_page_id for c in clusters.values() if c.owner_page_id})
+            )
+            if f.live and f.indexable
+        }
+        keywords = [
+            k
+            for k in await seo_keywords.list_by_cluster_ids(db, site_id, list(clusters))
+            if not k.branded
+            and (k.volume or 0) > 0
+            and (keyword_ids is None or k.id in keyword_ids)
+        ]
+        ids = [k.id for k in keywords]
+        gsc = {
+            (g.keyword_id, g.page_id): g.coverage
+            for g in await seo_keyword_gsc_pages.list_for_keywords(db, site_id, ids)
+        }
+        content = {
+            (c.keyword_id, c.page_id): c.coverage
+            for c in await seo_keyword_content_pages.list_for_keywords(db, site_id, ids)
+        }
+        rows: list[OwnerRow] = []
+        for k in keywords:
+            cluster = clusters[k.cluster_id or ""]
+            page = facts.get(cluster.owner_page_id or "")
+            if page is None or cluster.head_keyword_id not in heads:
+                continue
+            pair = (k.id, page.page_id)
+            rows.append(
+                OwnerRow(
+                    page_id=page.page_id,
+                    topic_key=heads[cluster.head_keyword_id],
+                    cluster_id=cluster.id,
+                    keyword_id=k.id,
+                    keyword=k.keyword,
+                    volume=k.volume,
+                    intent=k.intent,
+                    content_hash=page.content_hash,
+                    page_type=page.page_type,
+                    coverage=max(gsc.get(pair) or 0.0, content.get(pair) or 0.0),
+                )
+            )
+        return rows
+
+    async def ctr_gap_cutoff(self, db: AsyncSession, site_id: str, fraction: float) -> float | None:
+        branded = await seo_keywords.branded_ids(db, site_id)
+        values = [
+            v
+            for keyword_id, v in await seo_keyword_gsc_pages.ctr_gap_values(db, site_id)
+            if keyword_id not in branded
+        ]
+        return percentile_cont(values, fraction)
+
+    async def cannibal_rows(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        min_days: int,
+        min_shared: int,
+        page_ids: list[str] | None,
+    ) -> list[CannibalRow]:
+        leaders = await seo_keyword_gsc_pages.list_leaders(db, site_id, min_days)
+        keywords = {
+            k.id: k
+            for k in await seo_keywords.list_by_ids(
+                db, site_id, list({g.keyword_id for g in leaders})
+            )
+            if not k.branded
+        }
+        facts = {
+            f.page_id: f
+            for f in await seo_page_facts.list_by_page_ids(
+                db, site_id, list({g.page_id for g in leaders})
+            )
+            if f.live
+        }
+        topics = await self.topic_keys(db, site_id, list(keywords.values()))
+        by_keyword: dict[str, list] = defaultdict(list)
+        for g in leaders:
+            if g.keyword_id in keywords and g.page_id in facts:
+                by_keyword[g.keyword_id].append(g)
+        wanted = set(page_ids) if page_ids else None
+        rows: list[CannibalRow] = []
+        for keyword_id, members in by_keyword.items():
+            k = keywords[keyword_id]
+            for a in members:
+                for b in members:
+                    if a.page_id == b.page_id:
+                        continue
+                    fa, fb = facts[a.page_id], facts[b.page_id]
+                    shared = a.impressions_28d + b.impressions_28d
+                    if shared < min_shared or strength(fa) <= strength(fb):
+                        continue
+                    if wanted is not None and a.page_id not in wanted and b.page_id not in wanted:
+                        continue
+                    rows.append(
+                        CannibalRow(
+                            strong_page=a.page_id,
+                            weak_page=b.page_id,
+                            keyword_id=k.id,
+                            keyword=k.keyword,
+                            topic_key=topics[k.id],
+                            cluster_id=k.cluster_id,
+                            shared_impressions=shared,
+                            strong_days=a.leader_days_90d,
+                            weak_days=b.leader_days_90d,
+                            strong_position=a.position,
+                            weak_position=b.position,
+                            strong_type=fa.page_type,
+                            weak_type=fb.page_type,
+                            content_hash=fa.content_hash,
+                        )
+                    )
+        return rows
+
+    async def propose_page_edits(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        site_id: str,
+        job_id: str,
+        evidence: str,
+        page_ids: list[str] | None,
+        keyword_ids: list[str] | None,
+        min_position: float,
+        max_position: float,
+        min_impressions: int,
+        min_questions: int,
+        min_drop: float,
+    ) -> CreateResult:
+        kinds = (
+            ("gsc", "cluster", "ctr", "questions", "decay") if evidence == "all" else (evidence,)
+        )
+        page_ids = page_ids or None
+        keyword_ids = keyword_ids or None
+        drafts: list[NewPageSuggestion] = []
+        gsc_rows = (
+            await self.edit_rows(db, site_id, page_ids, keyword_ids)
+            if kinds != ("cluster",)
+            else []
+        )
+        if "gsc" in kinds:
+            drafts += gsc_edits(gsc_rows, min_position, max_position, min_impressions)
+        if "cluster" in kinds:
+            drafts += cluster_edits(await self.owner_rows(db, site_id, page_ids, keyword_ids))
+        if "ctr" in kinds:
+            cutoff = await self.ctr_gap_cutoff(db, site_id, CTR_PERCENTILE)
+            drafts += ctr_edits(gsc_rows, _f(cutoff), min(max_position, 10.0), min_impressions)
+        if "questions" in kinds:
+            drafts += question_edits(gsc_rows, min_questions)
+        if "decay" in kinds:
+            drafts += decay_edits(gsc_rows, min_drop)
+        return await seo_suggestion_service.create_many(db, user_id, site_id, job_id, drafts)
+
+    async def propose_cannibalisation(
+        self,
+        db: AsyncSession,
+        user_id: str,
+        site_id: str,
+        job_id: str,
+        page_ids: list[str] | None,
+        min_shared_impressions: int,
+    ) -> CreateResult:
+        rows = await self.cannibal_rows(
+            db, site_id, LEADER_MIN_DAYS, min_shared_impressions, page_ids or None
+        )
+        return await seo_suggestion_service.create_many(
+            db, user_id, site_id, job_id, cannibal_pairs(rows)
+        )
+
+
+seo_generator_service = SeoGeneratorService()

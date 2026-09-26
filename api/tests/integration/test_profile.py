@@ -4,9 +4,10 @@ from tests.conftest import signup
 async def test_profile_lifecycle(client, email):
     await signup(client, email, name="Grace Hopper")
 
+    profile_id = (await client.get("/api/v1/profile")).json()["data"]["id"]
     r = await client.delete("/api/v1/profile")
     assert r.status_code == 200
-    assert r.json() == {"data": {"deleted": True}}
+    assert r.json() == {"data": {"id": profile_id, "deleted": True}}
 
     r = await client.get("/api/v1/profile")
     assert r.status_code == 200
@@ -20,7 +21,7 @@ async def test_profile_lifecycle(client, email):
 
     r = await client.put("/api/v1/profile", json={"company": "Navy"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "Missing required field(s): fullName"}}
+    assert r.json() == {"error": {"message": "fullName is required."}}
 
     r = await client.put(
         "/api/v1/profile",

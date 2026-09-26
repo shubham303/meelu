@@ -11,7 +11,7 @@ from src.agent_scope.registry import (
     WRITE_TOOL_NAMES,
     desk_writes,
 )
-from src.agent_scope.service import render_tables, resolve_scope, scope_response
+from src.agent_scope.service import agent_scope_service
 from src.core.orm import Base
 from tests.conftest import signup
 
@@ -29,10 +29,10 @@ def test_every_scope_lists_real_unblocked_tables():
 
 
 def test_render_tables_lists_the_scopes_columns():
-    text = render_tables(AGENT_SCOPES["profile-setup"].tables)
+    text = agent_scope_service.render_tables(AGENT_SCOPES["profile-setup"].tables)
     assert "## The database" in text
     assert "- notes: " in text
-    full = render_tables(None)
+    full = agent_scope_service.render_tables(None)
     assert "- site_pages: " in full
     for blocked in BLOCKED_TABLES:
         assert f"- {blocked}: " not in full
@@ -47,9 +47,9 @@ def test_every_action_writes_through_registered_tools():
 @pytest.mark.parametrize("action", sorted(AGENT_SCOPES))
 def test_payload_shape(action):
     scope = AGENT_SCOPES[action]
-    body = scope_response(action, scope, None if scope.is_global else SITE).model_dump(
-        by_alias=True
-    )
+    body = agent_scope_service.scope_response(
+        action, scope, None if scope.is_global else SITE
+    ).model_dump(by_alias=True)
     assert isinstance(body["providers"], list)
     assert body["desk"] == scope.desk
     assert all(isinstance(w, str) for w in body["writes"])
@@ -65,7 +65,7 @@ def test_profile_setup_sees_only_the_profile():
     scope = AGENT_SCOPES["profile-setup"]
     assert scope.desk == "profile"
     assert scope.table_names == {"profile", "notes"}
-    assert scope_response("profile-setup", scope, None).writes == [
+    assert agent_scope_service.scope_response("profile-setup", scope, None).writes == [
         "save_profile",
         "clear_profile_fields",
     ]
@@ -93,7 +93,7 @@ def test_desk_writes_union_the_desks_actions():
 
 
 def test_scope_response_merges_added_desks():
-    base = scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE)
+    base = agent_scope_service.scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE)
     assert [d.name for d in base.desks] == [
         "analytics",
         "content",
@@ -104,7 +104,9 @@ def test_scope_response_merges_added_desks():
         "site",
         "social-listening",
     ]
-    merged = scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE, "content,analytics")
+    merged = agent_scope_service.scope_response(
+        "issue-review", AGENT_SCOPES["issue-review"], SITE, "content,analytics"
+    )
     assert "content_create_piece" in merged.writes
     assert "analytics" in merged.mcp_servers
     assert "content_pieces" in merged.system_prompt
@@ -117,12 +119,14 @@ def test_scope_response_merges_added_desks():
         "social-listening",
     ]
     with pytest.raises(HTTPException):
-        scope_response("issue-review", AGENT_SCOPES["issue-review"], SITE, "nope")
+        agent_scope_service.scope_response(
+            "issue-review", AGENT_SCOPES["issue-review"], SITE, "nope"
+        )
 
 
 def test_resolve_scope_rejects_unknown_action():
     with pytest.raises(HTTPException) as err:
-        resolve_scope("nope")
+        agent_scope_service.resolve_scope("nope")
     assert err.value.status_code == 404
     assert 'Unknown agent action "nope"' in err.value.detail
 

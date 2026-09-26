@@ -1,7 +1,7 @@
 from src.agent.context import require_site
 from src.agent.server import tool
-from src.content.channels import service as channels_service
-from src.content.pieces import service as pieces_service
+from src.content.channels.service import site_channel_service
+from src.content.pieces.service import content_piece_service
 from src.content.schemas import (
     ContentPieceCreateRequest,
     ContentPieceSummaryResponse,
@@ -24,7 +24,7 @@ async def content_create_piece(piece: ContentPieceCreateRequest) -> ContentPiece
         raise ValueError("bodyMarkdown is required.")
     ctx = require_site()
     async with unit_of_work() as db:
-        row = await pieces_service.create_piece(db, ctx.user_id, ctx.site_id, piece, actor="agent")
+        row = await content_piece_service.create(db, ctx.user_id, ctx.site_id, piece, actor="agent")
     return ContentPieceSummaryResponse.model_validate(row)
 
 
@@ -38,7 +38,7 @@ async def content_update_piece(
         raise ValueError("patch must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        row = await pieces_service.update_piece(db, ctx.user_id, ctx.site_id, piece_id, patch)
+        row = await content_piece_service.update(db, ctx.user_id, ctx.site_id, piece_id, patch)
     return ContentPieceSummaryResponse.model_validate(row)
 
 
@@ -52,7 +52,7 @@ async def content_update_channel(
         raise ValueError("patch must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        channel = await channels_service.update_channel(
+        channel = await site_channel_service.update(
             db, ctx.user_id, ctx.site_id, channel_key, patch
         )
     return SiteChannelResponse.model_validate(channel)
@@ -64,5 +64,5 @@ async def content_reset_channel_rules(channel_key: str) -> SiteChannelResponse:
     Confirm first."""
     ctx = require_site()
     async with unit_of_work() as db:
-        channel = await channels_service.reset_rules(db, ctx.user_id, ctx.site_id, channel_key)
+        channel = await site_channel_service.reset_rules(db, ctx.user_id, ctx.site_id, channel_key)
     return SiteChannelResponse.model_validate(channel)

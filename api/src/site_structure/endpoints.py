@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.site_structure import service
-from src.site_structure.pillars import service as pillars
+from src.site_structure.pillars.service import pillar_page_suggestion_service
 from src.site_structure.schemas import (
     HierarchyRequest,
     HierarchyResult,
@@ -45,12 +44,23 @@ from src.site_structure.schemas import (
     VerdictRequest,
     fields,
 )
+from src.site_structure.service import link_suggestion_service, structure_job_service
 
 router = APIRouter(prefix="/site/structure")
 
 
 class StartedJobResponse(StructureJobResponse):
     reconciled: ReconcileResult
+
+
+def _sort(sort_by: str | None, sort_order: str | None) -> dict[str, str]:
+    try:
+        return {
+            "sort_by": "score" if fields.blank(sort_by) else fields.sort_by(sort_by),
+            "sort_order": "desc" if fields.blank(sort_order) else fields.sort_order(sort_order),
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 def link_suggestion_filter(
@@ -61,6 +71,8 @@ def link_suggestion_filter(
     to_page_id: str | None = Query(None, alias="toPageId"),
     page_id: str | None = Query(None, alias="pageId"),
     url: str | None = Query(None),
+    sort_by: str | None = Query("score", alias="sortBy"),
+    sort_order: str | None = Query("desc", alias="sortOrder"),
 ) -> LinkSuggestionFilter:
     return LinkSuggestionFilter(
         state=None if fields.blank(state) or state == "any" else fields.state(state),
@@ -70,6 +82,7 @@ def link_suggestion_filter(
         to_page_id=to_page_id or None,
         page_id=page_id or None,
         url=(url or "").strip() or None,
+        **_sort(sort_by, sort_order),
     )
 
 
@@ -79,7 +92,7 @@ async def start_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> StartedJobResponse:
-    job, reconciled = await service.start_job(db, ctx.user_id, ctx.site_id, body)
+    job, reconciled = await structure_job_service.start_job(db, ctx.user_id, ctx.site_id, body)
     return StartedJobResponse(**job.model_dump(), reconciled=reconciled)
 
 
@@ -89,7 +102,7 @@ async def list_jobs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[StructureJobResponse]:
-    page = await service.list_jobs(db, ctx.site_id, paging)
+    page = await structure_job_service.list_jobs(db, ctx.site_id, paging)
     return PaginatedApiResponse[StructureJobResponse](
         data=[StructureJobResponse.model_validate(r) for r in page.data],
         pagination=page.pagination,
@@ -102,7 +115,9 @@ async def get_job(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> StructureJobResponse:
-    return StructureJobResponse.model_validate(await service.get_job(db, ctx.site_id, job_id))
+    return StructureJobResponse.model_validate(
+        await structure_job_service.get_job(db, ctx.site_id, job_id)
+    )
 
 
 @router.patch("/jobs/{job_id}")
@@ -113,7 +128,7 @@ async def finish_job(
     ctx: AuthContext = Depends(require_site),
 ) -> StructureJobResponse:
     return StructureJobResponse.model_validate(
-        await service.finish_job(db, ctx.site_id, job_id, body)
+        await structure_job_service.finish_job(db, ctx.site_id, job_id, body)
     )
 
 
@@ -122,7 +137,7 @@ async def reconcile(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReconcileResult:
-    return await service.reconcile(db, ctx.site_id)
+    return await link_suggestion_service.reconcile(db, ctx.site_id)
 
 
 @router.post("/link-suggestions/mentions")
@@ -131,7 +146,9 @@ async def propose_unlinked_mentions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> MentionsResult:
-    return await service.propose_unlinked_mentions(db, ctx.user_id, ctx.site_id, body)
+    return await link_suggestion_service.propose_unlinked_mentions(
+        db, ctx.user_id, ctx.site_id, body
+    )
 
 
 @router.post("/link-suggestions/hierarchy")
@@ -140,7 +157,7 @@ async def propose_hierarchy_links(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> HierarchyResult:
-    return await service.propose_hierarchy_links(db, ctx.user_id, ctx.site_id, body)
+    return await link_suggestion_service.propose_hierarchy_links(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/removals")
@@ -149,7 +166,7 @@ async def propose_link_removals(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RemovalsResult:
-    return await service.propose_link_removals(db, ctx.user_id, ctx.site_id, body)
+    return await link_suggestion_service.propose_link_removals(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/screen")
@@ -158,7 +175,7 @@ async def screen_link_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ScreenResult:
-    return await service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await link_suggestion_service.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/review-inputs")
@@ -167,7 +184,7 @@ async def link_suggestion_review_inputs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewBatch:
-    return await service.review_inputs(db, ctx.site_id, body)
+    return await link_suggestion_service.review_inputs(db, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/verdicts")
@@ -176,7 +193,7 @@ async def link_suggestion_verdicts(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await service.apply_verdicts(db, ctx.site_id, body)
+    return await link_suggestion_service.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/link-suggestions/rank")
@@ -185,7 +202,7 @@ async def rank_link_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RankResult:
-    return await service.rank_suggestions(db, ctx.site_id, body)
+    return await link_suggestion_service.rank_suggestions(db, ctx.site_id, body)
 
 
 @router.get("/link-suggestions/summary")
@@ -193,7 +210,7 @@ async def link_suggestion_summary(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> LinkSuggestionSummaryResponse:
-    return await service.summary(db, ctx.site_id)
+    return await link_suggestion_service.summary(db, ctx.site_id)
 
 
 @router.get("/link-suggestions")
@@ -203,7 +220,7 @@ async def list_link_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[LinkSuggestionResponse]:
-    page = await service.list_suggestions(db, ctx.site_id, filters, paging)
+    page = await link_suggestion_service.list_suggestions(db, ctx.site_id, filters, paging)
     return PaginatedApiResponse[LinkSuggestionResponse](
         data=[LinkSuggestionResponse.model_validate(r) for r in page.data],
         pagination=page.pagination,
@@ -216,7 +233,7 @@ async def create_link_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> LinkSuggestionResponse:
-    record = await service.create_suggestion(db, ctx.user_id, ctx.site_id, body)
+    record = await link_suggestion_service.create_suggestion(db, ctx.user_id, ctx.site_id, body)
     return LinkSuggestionResponse.model_validate(record)
 
 
@@ -227,7 +244,7 @@ async def get_link_suggestion(
     ctx: AuthContext = Depends(require_site),
 ) -> LinkSuggestionResponse:
     return LinkSuggestionResponse.model_validate(
-        await service.get_suggestion(db, ctx.site_id, suggestion_id)
+        await link_suggestion_service.get_suggestion(db, ctx.site_id, suggestion_id)
     )
 
 
@@ -238,7 +255,7 @@ async def update_link_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> LinkSuggestionResponse:
-    record = await service.update_suggestion(db, ctx.site_id, suggestion_id, body)
+    record = await link_suggestion_service.update_suggestion(db, ctx.site_id, suggestion_id, body)
     return LinkSuggestionResponse.model_validate(record)
 
 
@@ -248,7 +265,7 @@ async def delete_link_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> LinkSuggestionDeleteResponse:
-    record = await service.delete_suggestion(db, ctx.site_id, suggestion_id)
+    record = await link_suggestion_service.delete_suggestion(db, ctx.site_id, suggestion_id)
     return LinkSuggestionDeleteResponse(id=record.id)
 
 
@@ -256,11 +273,14 @@ def pillar_filter(
     state: str | None = Query("ready"),
     action: str | None = Query(None),
     job_id: str | None = Query(None, alias="jobId"),
+    sort_by: str | None = Query("score", alias="sortBy"),
+    sort_order: str | None = Query("desc", alias="sortOrder"),
 ) -> PillarPageSuggestionFilter:
     return PillarPageSuggestionFilter(
         state=None if fields.blank(state) or state == "any" else fields.state(state),
         action=None if fields.blank(action) else fields.pillar_action(action),
         job_id=job_id or None,
+        **_sort(sort_by, sort_order),
     )
 
 
@@ -270,7 +290,9 @@ async def propose_pillar_pages(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PillarsResult:
-    return await pillars.propose_pillar_pages(db, ctx.user_id, ctx.site_id, body)
+    return await pillar_page_suggestion_service.propose_pillar_pages(
+        db, ctx.user_id, ctx.site_id, body
+    )
 
 
 @router.post("/pillar-suggestions/screen")
@@ -279,7 +301,9 @@ async def screen_pillar_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ScreenResult:
-    return await pillars.screen_suggestions(db, ctx.user_id, ctx.site_id, body)
+    return await pillar_page_suggestion_service.screen_suggestions(
+        db, ctx.user_id, ctx.site_id, body
+    )
 
 
 @router.post("/pillar-suggestions/review-inputs")
@@ -288,7 +312,7 @@ async def pillar_suggestion_review_inputs(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewBatch:
-    return await pillars.review_inputs(db, ctx.site_id, body)
+    return await pillar_page_suggestion_service.review_inputs(db, ctx.site_id, body)
 
 
 @router.post("/pillar-suggestions/verdicts")
@@ -297,7 +321,7 @@ async def pillar_suggestion_verdicts(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> ReviewResult:
-    return await pillars.apply_verdicts(db, ctx.site_id, body)
+    return await pillar_page_suggestion_service.apply_verdicts(db, ctx.site_id, body)
 
 
 @router.post("/pillar-suggestions/rank")
@@ -306,7 +330,7 @@ async def rank_pillar_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> RankResult:
-    return await pillars.rank_suggestions(db, ctx.site_id, body)
+    return await pillar_page_suggestion_service.rank_suggestions(db, ctx.site_id, body)
 
 
 @router.get("/pillar-suggestions/summary")
@@ -314,7 +338,7 @@ async def pillar_suggestion_summary(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PillarPageSuggestionSummaryResponse:
-    return await pillars.summary(db, ctx.site_id)
+    return await pillar_page_suggestion_service.summary(db, ctx.site_id)
 
 
 @router.get("/pillar-suggestions")
@@ -324,7 +348,7 @@ async def list_pillar_suggestions(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PaginatedApiResponse[PillarPageSuggestionResponse]:
-    page = await pillars.list_suggestions(db, ctx.site_id, filters, paging)
+    page = await pillar_page_suggestion_service.list_suggestions(db, ctx.site_id, filters, paging)
     return PaginatedApiResponse[PillarPageSuggestionResponse](
         data=[PillarPageSuggestionResponse.model_validate(r) for r in page.data],
         pagination=page.pagination,
@@ -338,7 +362,7 @@ async def get_pillar_suggestion(
     ctx: AuthContext = Depends(require_site),
 ) -> PillarPageSuggestionResponse:
     return PillarPageSuggestionResponse.model_validate(
-        await pillars.get_suggestion(db, ctx.site_id, suggestion_id)
+        await pillar_page_suggestion_service.get_suggestion(db, ctx.site_id, suggestion_id)
     )
 
 
@@ -350,7 +374,7 @@ async def update_pillar_suggestion(
     ctx: AuthContext = Depends(require_site),
 ) -> PillarPageSuggestionResponse:
     return PillarPageSuggestionResponse.model_validate(
-        await pillars.update_suggestion(db, ctx.site_id, suggestion_id, body)
+        await pillar_page_suggestion_service.update_suggestion(db, ctx.site_id, suggestion_id, body)
     )
 
 
@@ -360,5 +384,5 @@ async def delete_pillar_suggestion(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> PillarPageSuggestionDeleteResponse:
-    record = await pillars.delete_suggestion(db, ctx.site_id, suggestion_id)
+    record = await pillar_page_suggestion_service.delete_suggestion(db, ctx.site_id, suggestion_id)
     return PillarPageSuggestionDeleteResponse(id=record.id)

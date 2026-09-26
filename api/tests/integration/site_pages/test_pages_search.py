@@ -4,7 +4,7 @@ from sqlalchemy import select
 from src.core.database import unit_of_work
 from src.core.ids import uid
 from src.embed_worker import models
-from src.embed_worker.search import default_min_similarity
+from src.embed_worker.search.service import page_search_service
 from src.site_pages.models.site_chunk import SiteChunk
 from src.sites.models.site import Site
 from tests.integration.site_pages.conftest import save_page, save_pages
@@ -49,11 +49,11 @@ async def test_search_without_text_is_keyword_listing(client, site):
     r = await client.get("/api/v1/site/pages", params={"titleContains": "espresso"})
     body = r.json()
     assert [p["url"] for p in body["data"]] == ["https://example.com/espresso"]
-    assert body["note"] is None
+    assert body.get("note") is None
 
 
 async def test_min_similarity_default():
-    assert default_min_similarity() == 0.82
+    assert page_search_service.default_min_similarity() == 0.82
 
 
 async def test_search_requires_text(client, site):
@@ -82,7 +82,7 @@ async def test_keyword_search_works_without_models(client, site, monkeypatch):
     hit = body["hits"][0]
     assert hit["pageId"] == grinders["id"]
     assert hit["keywordRank"] == 1
-    assert hit["similarity"] is None
+    assert hit.get("similarity") is None
     assert hit["snippet"] == "Burr grinders crush beans between two burrs."
     assert hit["headingPath"] == "Grinders"
 

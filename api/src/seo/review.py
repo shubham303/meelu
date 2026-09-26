@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.seo import repository as repo
-from src.seo.review_inputs import has_serp_evidence, review_state
+from src.seo.repositories import seo_page_suggestions
+from src.seo.review_inputs import has_serp_evidence, seo_review_input_service
 from src.seo.schemas import ReviewBatch, ReviewItem, ReviewResult, Verdict
 
 VERDICTS = ("reviewed", "llm_rejected")
@@ -27,52 +27,65 @@ Answer with a verdict: "reviewed" when the change is worth the owner's time as t
 Then write the suggestion the owner acts on. For an add: a working title and what the page must cover, in a few sentences. For an edit: the concrete changes, one per sentence. For a delete: where the page redirects and why. Give a one-sentence reason."""
 
 
-async def review_inputs(
-    db: AsyncSession, site_id: str, job_id: str, prompt: str, ids: list[str] | None, limit: int
-) -> ReviewBatch:
-    rows = await repo.job_rows(db, site_id, job_id, ids, ("draft",), limit)
-    items: list[ReviewItem] = []
-    needs_serp: list[str] = []
-    seen: set[str] = set()
-    for row in rows:
-        if row.id in seen:
-            continue
-        seen.add(row.id)
-        if row.pair_id:
-            seen.add(row.pair_id)
-        state = await review_state(db, site_id, row)
-        if row.action == "add" and not has_serp_evidence(state):
-            needs_serp.append(row.id)
-            continue
-        items.append(ReviewItem(id=row.id, state=state))
-    return ReviewBatch(
-        instructions=INSTRUCTIONS.format(prompt=prompt),
-        schema=SCHEMA,
-        items=items,
-        needs_serp=needs_serp,
-    )
+class SeoReviewService:
+    async def review_inputs(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        job_id: str,
+        prompt: str,
+        ids: list[str] | None,
+        limit: int,
+    ) -> ReviewBatch:
+        rows = await seo_page_suggestions.list_for_job(db, site_id, job_id, ids, ("draft",), limit)
+        items: list[ReviewItem] = []
+        needs_serp: list[str] = []
+        seen: set[str] = set()
+        for row in rows:
+            if row.id in seen:
+                continue
+            seen.add(row.id)
+            if row.pair_id:
+                seen.add(row.pair_id)
+            state = await seo_review_input_service.review_state(db, site_id, row)
+            if row.action == "add" and not has_serp_evidence(state):
+                needs_serp.append(row.id)
+                continue
+            items.append(ReviewItem(id=row.id, state=state))
+        return ReviewBatch(
+            instructions=INSTRUCTIONS.format(prompt=prompt),
+            schema=SCHEMA,
+            items=items,
+            needs_serp=needs_serp,
+        )
+
+    async def apply_verdicts(
+        self, db: AsyncSession, site_id: str, verdicts: list[Verdict]
+    ) -> ReviewResult:
+        result = ReviewResult()
+        for given in verdicts:
+            if given.verdict not in VERDICTS:
+                result.failed += 1
+                continue
+            row = await seo_page_suggestions.get(db, site_id, given.id)
+            if row is None:
+                result.failed += 1
+                continue
+            patch = {"state": given.verdict}
+            written = (given.suggestion or "").strip()
+            if given.verdict == "reviewed" and written:
+                patch["suggestion"] = written[:4000]
+            await seo_page_suggestions.update(db, site_id, row.id, patch)
+            if row.pair_id:
+                await seo_page_suggestions.update(
+                    db, site_id, row.pair_id, {"state": given.verdict}
+                )
+            await db.commit()
+            if given.verdict == "reviewed":
+                result.reviewed += 1
+            else:
+                result.llm_rejected += 1
+        return result
 
 
-async def apply_verdicts(db: AsyncSession, site_id: str, verdicts: list[Verdict]) -> ReviewResult:
-    result = ReviewResult()
-    for given in verdicts:
-        if given.verdict not in VERDICTS:
-            result.failed += 1
-            continue
-        row = await repo.get_suggestion(db, site_id, given.id)
-        if row is None:
-            result.failed += 1
-            continue
-        patch = {"state": given.verdict}
-        written = (given.suggestion or "").strip()
-        if given.verdict == "reviewed" and written:
-            patch["suggestion"] = written[:4000]
-        await repo.update_suggestion(db, site_id, row.id, patch)
-        if row.pair_id:
-            await repo.update_suggestion(db, site_id, row.pair_id, {"state": given.verdict})
-        await db.commit()
-        if given.verdict == "reviewed":
-            result.reviewed += 1
-        else:
-            result.llm_rejected += 1
-    return result
+seo_review_service = SeoReviewService()

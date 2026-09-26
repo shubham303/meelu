@@ -1,6 +1,6 @@
 from src.agent.context import current
 from src.agent.server import tool
-from src.agent_plans import service
+from src.agent_plans.service import agent_plan_service
 from src.agent_plans.schemas import (
     AgentPlanFindResponse,
     AgentPlanMatchResponse,
@@ -19,7 +19,7 @@ async def find_plans(query: str) -> AgentPlanFindResponse:
     then fetch a match with get_plan."""
     ctx = current()
     async with unit_of_work() as db:
-        page = await service.list_plans(
+        page = await agent_plan_service.list_plans(
             db, ctx.user_id, PaginationParams(page_size=FIND_PAGE_SIZE), search=query
         )
     matches = [AgentPlanMatchResponse.model_validate(h) for h in page.data]
@@ -32,5 +32,5 @@ async def get_plan(slug: str) -> AgentPlanPlanResponse:
     the step-by-step plan with SQL to adapt."""
     ctx = current()
     async with unit_of_work() as db:
-        record = await service.get_plan_by_slug(db, ctx.user_id, slug)
+        record = await agent_plan_service.get_plan_by_slug(db, ctx.user_id, slug)
     return AgentPlanPlanResponse.model_validate(record)

@@ -1,7 +1,7 @@
 from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
-from src.notes import service
+from src.notes.service import note_service
 from src.notes.schemas import (
     NoteCreateRequest,
     NoteDeleteResponse,
@@ -19,7 +19,7 @@ async def save_note(note: str, kind: str = "note") -> NoteResponse:
     ctx = require_site()
     body = NoteCreateRequest(note=note, kind=kind)
     async with unit_of_work() as db:
-        saved = await service.create_note(db, ctx.user_id, ctx.site_id, body)
+        saved = await note_service.create_note(db, ctx.user_id, ctx.site_id, body)
     return NoteResponse.model_validate(saved)
 
 
@@ -32,7 +32,7 @@ async def update_note(
     ctx = require_site()
     body = NoteUpdateRequest(note=note, kind=kind)
     async with unit_of_work() as db:
-        updated = await service.update_note(db, ctx.site_id, note_id, body)
+        updated = await note_service.update_note(db, ctx.site_id, note_id, body)
     return NoteResponse.model_validate(updated)
 
 
@@ -42,5 +42,5 @@ async def delete_note(note_id: str) -> NoteDeleteResponse:
     confirms a note is stale."""
     ctx = require_site()
     async with unit_of_work() as db:
-        record = await service.delete_note(db, ctx.site_id, note_id)
+        record = await note_service.delete_note(db, ctx.site_id, note_id)
     return NoteDeleteResponse(id=record.id)

@@ -1,4 +1,4 @@
-from src.agent_plans import service
+from src.agent_plans.service import agent_plan_service
 from src.agent_plans.library import BUILTIN_PLANS
 from src.core.database import unit_of_work
 from tests.conftest import signup
@@ -6,7 +6,7 @@ from tests.conftest import signup
 
 async def sync():
     async with unit_of_work() as db:
-        return await service.sync_builtins(db)
+        return await agent_plan_service.sync_builtins(db)
 
 
 async def test_sync_is_idempotent_and_prunes_nothing_user_owned(client, email):
@@ -32,12 +32,12 @@ async def test_list_search_and_get(client, email):
 
     r = await client.get("/api/v1/agent-plans/by-slug/striking-distance")
     assert r.status_code == 200
-    plan = r.json()
+    plan = r.json()["data"]
     assert plan["builtin"] is True
     assert "site_search_daily" in plan["plan"]
 
     r = await client.get(f"/api/v1/agent-plans/{plan['id']}")
-    assert r.json()["slug"] == "striking-distance"
+    assert r.json()["data"]["slug"] == "striking-distance"
 
 
 async def test_user_plans_crud_and_builtin_protection(client, email):
@@ -53,7 +53,7 @@ async def test_user_plans_crud_and_builtin_protection(client, email):
         },
     )
     assert r.status_code == 201, r.text
-    created = r.json()
+    created = r.json()["data"]
     assert created["builtin"] is False
 
     r = await client.post(
@@ -69,13 +69,13 @@ async def test_user_plans_crud_and_builtin_protection(client, email):
 
     r = await client.patch(f"/api/v1/agent-plans/{created['id']}", json={"plan": "SELECT 3;"})
     assert r.status_code == 200
-    assert r.json()["plan"] == "SELECT 3;"
+    assert r.json()["data"]["plan"] == "SELECT 3;"
 
     r = await client.get("/api/v1/agent-plans", params={"q": "signup funnel convert"})
     assert [h["slug"] for h in r.json()["data"]][:1] == ["my-funnel"]
 
     r = await client.get("/api/v1/agent-plans/by-slug/striking-distance")
-    builtin_id = r.json()["id"]
+    builtin_id = r.json()["data"]["id"]
     r = await client.patch(f"/api/v1/agent-plans/{builtin_id}", json={"plan": "nope"})
     assert r.status_code == 403
     r = await client.delete(f"/api/v1/agent-plans/{builtin_id}")

@@ -27,6 +27,7 @@ dependencies = [
     "huggingface_hub",
     "numpy",
     "tzdata>=2026.3",
+    "apscheduler>=3.11.3",
 ]
 
 [project.optional-dependencies]

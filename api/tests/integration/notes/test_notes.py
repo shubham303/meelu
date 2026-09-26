@@ -38,7 +38,7 @@ async def test_notes_crud(client, email):
 
     r = await client.post("/api/v1/notes", json={})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "A note needs some text."}}
+    assert r.json() == {"error": {"message": "Missing required field(s): note"}}
 
     r = await client.post("/api/v1/notes", json={"note": "hi", "kind": "rumour"})
     assert r.status_code == 400
@@ -54,12 +54,10 @@ async def test_notes_crud(client, email):
 
     r = await client.get("/api/v1/notes")
     assert r.status_code == 200
-    body = r.json()["data"]
-    assert set(body) == {"notes", "total", "shown", "offset"}
-    assert body["total"] == 2
-    assert body["shown"] == 2
-    assert body["offset"] == 0
-    assert body["notes"][0]["id"] == feedback["id"]
+    body = r.json()
+    assert body["pagination"]["total"] == 2
+    assert len(body["data"]) == 2
+    assert body["data"][0]["id"] == feedback["id"]
 
     r = await client.get(f"/api/v1/notes/{note['id']}")
     assert r.status_code == 200
@@ -88,13 +86,13 @@ async def test_notes_crud(client, email):
 
     r = await client.delete(f"/api/v1/notes/{note['id']}")
     assert r.status_code == 200
-    assert r.json() == {"data": {"id": note["id"]}}
+    assert r.json() == {"data": {"id": note["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/notes/{note['id']}")
     assert r.status_code == 404
 
     r = await client.get("/api/v1/notes")
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
 
 
 async def test_notes_filters(client, email):
@@ -109,42 +107,46 @@ async def test_notes_filters(client, email):
         assert r.status_code == 201
 
     r = await client.get("/api/v1/notes", params={"kind": "feedback"})
-    body = r.json()["data"]
-    assert body["total"] == 1
-    assert body["notes"][0]["kind"] == "feedback"
+    body = r.json()
+    assert body["pagination"]["total"] == 1
+    assert body["data"][0]["kind"] == "feedback"
 
-    r = await client.get("/api/v1/notes", params={"kind": "note,feedback"})
-    assert r.json()["data"]["total"] == 3
+    r = await client.get("/api/v1/notes", params=[("kind", "note"), ("kind", "feedback")])
+    assert r.json()["pagination"]["total"] == 3
 
     r = await client.get("/api/v1/notes", params={"contains": "pricing"})
-    body = r.json()["data"]
-    assert body["total"] == 1
-    assert "Pricing" in body["notes"][0]["note"]
+    body = r.json()
+    assert body["pagination"]["total"] == 1
+    assert "Pricing" in body["data"][0]["note"]
 
-    r = await client.get("/api/v1/notes", params={"limit": 2})
-    body = r.json()["data"]
-    assert body["total"] == 3
-    assert body["shown"] == 2
-    assert body["offset"] == 0
+    r = await client.get("/api/v1/notes", params={"page_size": 2})
+    body = r.json()
+    assert body["pagination"]["total"] == 3
+    assert len(body["data"]) == 2
 
-    r = await client.get("/api/v1/notes", params={"limit": 2, "offset": 2})
-    body = r.json()["data"]
-    assert body["shown"] == 1
-    assert body["offset"] == 2
+    r = await client.get("/api/v1/notes", params={"page_size": 2, "page": 2})
+    body = r.json()
+    assert len(body["data"]) == 1
+    assert body["pagination"]["page"] == 2
 
     r = await client.get("/api/v1/notes", params={"sort": "updated"})
     assert r.status_code == 200
     r = await client.get("/api/v1/notes", params={"sort": "sideways"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "sort must be one of created, updated."}}
+    assert r.json() == {"error": {"message": "sort: Input should be 'created' or 'updated'"}}
 
     r = await client.get("/api/v1/notes", params={"createdAfter": "2100-01-01"})
-    assert r.json()["data"]["total"] == 0
+    assert r.json()["pagination"]["total"] == 0
     r = await client.get("/api/v1/notes", params={"createdBefore": "2100-01-01"})
-    assert r.json()["data"]["total"] == 3
+    assert r.json()["pagination"]["total"] == 3
     r = await client.get("/api/v1/notes", params={"createdAfter": "not a date"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "createdAfter must be a date or ISO timestamp."}}
+    assert r.json() == {
+        "error": {
+            "message": "createdAfter: Input should be a valid datetime or date, "
+            "invalid character in year"
+        }
+    }
 
 
 async def test_agent_mcp_contract(client, email):
@@ -186,7 +188,7 @@ async def test_agent_mcp_contract(client, email):
 
     r = await client.delete(f"/api/v1/notes/{saved['id']}", headers=headers)
     assert r.status_code == 200
-    assert r.json() == {"data": {"id": saved["id"]}}
+    assert r.json() == {"data": {"id": saved["id"], "deleted": True}}
 
     r = await client.delete(f"/api/v1/notes/{saved['id']}", headers=headers)
     assert r.status_code == 404

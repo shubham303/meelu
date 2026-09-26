@@ -2,8 +2,7 @@ from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.core.schemas import EntityModel
-from src.site_structure import service
-from src.site_structure.pillars import service as pillars
+from src.site_structure.pillars.service import pillar_page_suggestion_service
 from src.site_structure.schemas import (
     HierarchyRequest,
     HierarchyResult,
@@ -23,6 +22,7 @@ from src.site_structure.schemas import (
     StructureJobCreateRequest,
     StructureJobUpdateRequest,
 )
+from src.site_structure.service import link_suggestion_service, structure_job_service
 
 
 class StartedJob(EntityModel):
@@ -42,7 +42,7 @@ async def start_structure_job(prompt: str) -> StartedJob:
     or pointing at a gone page are deleted."""
     ctx = require_site()
     async with unit_of_work() as db:
-        job, reconciled = await service.start_job(
+        job, reconciled = await structure_job_service.start_job(
             db, ctx.user_id, ctx.site_id, StructureJobCreateRequest(prompt=prompt)
         )
     return StartedJob(job_id=job.id, reconciled=reconciled)
@@ -53,7 +53,7 @@ async def finish_structure_job(job_id: str, status: str = "COMPLETED") -> Finish
     """Close a structure job as COMPLETED or FAILED once the prompt has run."""
     ctx = require_site()
     async with unit_of_work() as db:
-        job = await service.finish_job(
+        job = await structure_job_service.finish_job(
             db, ctx.site_id, job_id, StructureJobUpdateRequest(status=status)
         )
     return FinishedJob(job_id=job.id, status=job.status)
@@ -71,7 +71,9 @@ async def propose_unlinked_mentions(
         job_id=job_id, to_ids=to_ids, phrases=phrases, limit_per_target=limit_per_target
     )
     async with unit_of_work() as db:
-        return await service.propose_unlinked_mentions(db, ctx.user_id, ctx.site_id, body)
+        return await link_suggestion_service.propose_unlinked_mentions(
+            db, ctx.user_id, ctx.site_id, body
+        )
 
 
 @tool(writes=True, desk="site")
@@ -81,7 +83,7 @@ async def propose_hierarchy_links(job_id: str) -> HierarchyResult:
     of the other or both share a parent. Edges that exist or already have a row are skipped."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.propose_hierarchy_links(
+        return await link_suggestion_service.propose_hierarchy_links(
             db, ctx.user_id, ctx.site_id, HierarchyRequest(job_id=job_id)
         )
 
@@ -94,7 +96,7 @@ async def propose_link_removals(job_id: str, source_table: str) -> RemovalsResul
     by how little the anchor's passage relates to the target."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.propose_link_removals(
+        return await link_suggestion_service.propose_link_removals(
             db, ctx.user_id, ctx.site_id, RemovalsRequest(job_id=job_id, source_table=source_table)
         )
 
@@ -111,7 +113,7 @@ async def screen_link_suggestions(
     review_link_suggestions. Pass a question to replace the default one the model is asked."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.screen_suggestions(
+        return await link_suggestion_service.screen_suggestions(
             db,
             ctx.user_id,
             ctx.site_id,
@@ -128,7 +130,7 @@ async def rank_link_suggestions(
     Run it after screening."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.rank_suggestions(
+        return await link_suggestion_service.rank_suggestions(
             db,
             ctx.site_id,
             RankRequest(max_per_target=max_per_target, target_discount=target_discount),
@@ -152,7 +154,9 @@ async def propose_pillar_pages(
         job_id=job_id, source_table=source_table, min_size=min_size, min_cohesion=min_cohesion
     )
     async with unit_of_work() as db:
-        return await pillars.propose_pillar_pages(db, ctx.user_id, ctx.site_id, body)
+        return await pillar_page_suggestion_service.propose_pillar_pages(
+            db, ctx.user_id, ctx.site_id, body
+        )
 
 
 @tool(writes=True, desk="site")
@@ -163,7 +167,7 @@ async def screen_pillar_suggestions(
     no becomes llm_rejected; the rest stay draft for review_pillar_suggestions."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await pillars.screen_suggestions(
+        return await pillar_page_suggestion_service.screen_suggestions(
             db, ctx.user_id, ctx.site_id, PillarScreenRequest(job_id=job_id, ids=ids, limit=limit)
         )
 
@@ -174,4 +178,6 @@ async def rank_pillar_suggestions(budget: int = 5) -> RankResult:
     become llm_rejected. Run it after screening."""
     ctx = require_site()
     async with unit_of_work() as db:
-        return await pillars.rank_suggestions(db, ctx.site_id, PillarRankRequest(budget=budget))
+        return await pillar_page_suggestion_service.rank_suggestions(
+            db, ctx.site_id, PillarRankRequest(budget=budget)
+        )

@@ -4,7 +4,8 @@ import pytest
 from sqlalchemy import text
 
 from src.core.database import unit_of_work
-from src.credits import repository as repo
+from src.credits.ledger import credit_ledger_service
+from src.credits.repository import credit_accounts
 from tests.conftest import signup
 from tests.integration.credits.test_site_billing import (
     add_site,
@@ -25,7 +26,7 @@ async def ledger_sum_usd(user_id):
 
 async def stored_balance_usd(user_id):
     async with unit_of_work() as db:
-        return await repo.balance(db, user_id) / 1_000_000
+        return await credit_accounts.balance(db, user_id) / 1_000_000
 
 
 async def test_the_balance_always_equals_the_sum_of_the_ledger(client, email):
@@ -49,7 +50,7 @@ async def test_concurrent_charges_keep_the_ledger_consistent(client, email):
 
     async def charge(n):
         async with unit_of_work() as db:
-            await repo.apply_delta(db, user_id, -10_000, "usage", f"concurrent {n}")
+            await credit_ledger_service.apply(db, user_id, -10_000, "usage", f"concurrent {n}")
 
     await asyncio.gather(*(charge(n) for n in range(20)))
 

@@ -4,7 +4,7 @@ import pytest
 
 from src.core.database import unit_of_work
 from src.credits import pricing
-from src.credits import service as credits
+from src.credits.service import InsufficientCreditsError
 from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderAdapter, ProviderFacade, VendorResponse
 from tests.conftest import signup
@@ -124,7 +124,7 @@ async def test_a_workspace_below_the_floor_cannot_call_a_paid_vendor(client, ema
     await set_balance(user_id, 0.19)
 
     adapter = PaidAdapter(cost=100_000)
-    with pytest.raises(credits.InsufficientCreditsError):
+    with pytest.raises(InsufficientCreditsError):
         await fetch(ThingFacade([adapter]), user_id, "blocked")
 
     assert adapter.calls == 0

@@ -1,7 +1,7 @@
 import math
 import re
-from datetime import date
-from typing import Any, Literal
+from datetime import date, datetime
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field, field_validator
 
@@ -224,6 +224,8 @@ class SearchPageRollup(EntityModel):
 
 
 class SearchQueryRollupRow(EntityModel):
+    keep_null: ClassVar[frozenset[str]] = frozenset({"inlinks"})
+
     query: str
     page: str | None
     page_id: str | None
@@ -314,6 +316,8 @@ class SearchOverviewResponse(EntityModel):
 
 
 class SearchSeriesPoint(EntityModel):
+    keep_null: ClassVar[frozenset[str]] = frozenset({"ctr", "position"})
+
     day: str
     clicks: int
     impressions: int
@@ -384,3 +388,54 @@ class SearchSyncClaimResponse(EntityModel):
     end_day: str
     resume_from: str | None
     days_total: int
+
+
+class SitePageIndexStatusRecord(EntityModel):
+    id: str
+    site_id: str
+    page_id: str
+    index_state: str | None = None
+    coverage_state: str | None = None
+    google_canonical: str | None = None
+    last_crawl_time: datetime | None = None
+    index_checked_at: datetime | None = None
+
+
+class NewSitePageIndexStatus(EntityModel):
+    url: str
+    index_state: str
+    coverage_state: str | None = None
+    google_canonical: str | None = None
+    last_crawl_time: str | None = None
+
+
+class PageWindowTotals(EntityModel):
+    page: str
+    impressions_28d: int | None = None
+    clicks_28d: int | None = None
+    impressions_ly_28d: int | None = None
+    clicks_ly_28d: int | None = None
+
+
+class QueryWindowTotals(EntityModel):
+    query: str
+    impressions_28d: int = 0
+    clicks_28d: int = 0
+    impressions_prev_28d: int = 0
+    clicks_prev_28d: int = 0
+    impressions_ly_28d: int = 0
+    clicks_ly_28d: int = 0
+
+
+class QueryPageWindowTotals(EntityModel):
+    query: str
+    page: str
+    impressions_28d: int = 0
+    clicks_28d: int = 0
+    position_28d: float | None = None
+    impressions_prev_28d: int = 0
+    clicks_prev_28d: int = 0
+    impressions_ly_28d: int = 0
+    clicks_ly_28d: int = 0
+    impressions_90d: int = 0
+    leader_days_90d: int = 0

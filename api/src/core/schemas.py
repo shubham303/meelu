@@ -15,8 +15,6 @@ from sqlalchemy import DateTime, inspect
 
 INTERNAL = frozenset({"user_id", "seq", "key_hash"})
 
-DROP_NULLS = "drop_nulls"
-
 
 def js_iso(dt: datetime) -> str:
     dt = dt.astimezone(UTC) if dt.tzinfo else dt.replace(tzinfo=UTC)
@@ -51,12 +49,13 @@ class EntityModel(BaseModel):
         self, handler: SerializerFunctionWrapHandler, info: SerializationInfo
     ) -> dict[str, Any]:
         data = handler(self)
-        if not (info.context or {}).get(DROP_NULLS):
+        if info.mode != "json":
             return data
-        return {k: v for k, v in data.items() if v is not None or k in self.keep_null}
-
-    def entity(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", by_alias=True, context={DROP_NULLS: True})
+        return {
+            k: v
+            for k, v in data.items()
+            if v is not None or k in self.keep_null or to_camel(k) in self.keep_null
+        }
 
 
 def to_row(model: type, data: dict[str, Any]) -> dict[str, Any]:

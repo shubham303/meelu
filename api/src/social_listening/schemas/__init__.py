@@ -170,6 +170,17 @@ class QueryResponse(EntityModel):
     updated_at: JsDateTime
 
 
+class QueryEmbeddingInput(EntityModel):
+    id: str
+    text: str
+
+
+class PostEmbeddingInput(EntityModel):
+    id: str
+    title: str | None = None
+    text: str | None = None
+
+
 class TargetResponse(EntityModel):
     id: str
     site_id: str

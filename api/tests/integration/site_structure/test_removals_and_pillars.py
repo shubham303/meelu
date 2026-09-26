@@ -180,7 +180,7 @@ async def test_link_removals(client, email, screener):
     assert "Generic anchor" in rows[(a, b)]["suggestion"]
     assert rows[(a, b)]["fromChunkId"] is not None
     assert rows[(a, b)]["searchScore"] is not None and rows[(a, b)]["searchScore"] < 0.5
-    assert rows[(home, b)]["searchScore"] is None
+    assert rows[(home, b)].get("searchScore") is None
 
     r = await client.post(
         f"{BASE}/link-suggestions/removals", json={"jobId": job["id"], "sourceTable": "prune"}

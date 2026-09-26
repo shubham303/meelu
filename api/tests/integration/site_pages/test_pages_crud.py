@@ -18,7 +18,11 @@ async def test_save_page_normalises_url_and_returns_stage(client, site):
 async def test_save_page_requires_url(client, site):
     r = await client.post("/api/v1/site/pages", json={"title": "No url"})
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "A page needs a `url`."}}
+    assert r.json() == {
+        "error": {
+            "message": "Missing required field(s): SitePageBatchRequest.pages, SitePageCreateRequest.url"
+        }
+    }
 
 
 async def test_get_update_delete_page(client, site):
@@ -105,7 +109,7 @@ async def test_by_url(client, site):
 
     r = await client.get("/api/v1/site/pages/by-url")
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "Name the page by `id` or by `url`."}}
+    assert r.json() == {"error": {"message": "Missing required field(s): url"}}
 
 
 async def test_bulk_save_pages(client, site):

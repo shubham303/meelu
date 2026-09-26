@@ -14,7 +14,7 @@ from src.auth import (
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.sites import service
+from src.sites.service import site_service
 from src.sites.schemas import (
     SiteAgentUpdateRequest,
     SiteCreateRequest,
@@ -53,7 +53,7 @@ async def list_sites(
         crawled_after=crawled_after,
         sort=sort,
     )
-    page = await service.list_sites(db, user_id, filters, paging)
+    page = await site_service.list(db, user_id, filters, paging)
     return PaginatedApiResponse[SiteListItemResponse](
         data=[SiteListItemResponse.model_validate(s) for s in page.data],
         pagination=page.pagination,
@@ -66,7 +66,7 @@ async def create_site(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("sites", "write")),
 ) -> SiteResponse:
-    return SiteResponse.model_validate(await service.create_site(db, user_id, body))
+    return SiteResponse.model_validate(await site_service.create(db, user_id, body))
 
 
 @router.get("/sites/{site_id}")
@@ -75,7 +75,7 @@ async def get_site(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("sites", "read")),
 ) -> SiteResponse:
-    return SiteResponse.model_validate(await service.get_site(db, user_id, site_id))
+    return SiteResponse.model_validate(await site_service.get(db, user_id, site_id))
 
 
 @router.put("/sites/{site_id}")
@@ -85,7 +85,7 @@ async def put_site(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("sites", "write")),
 ) -> SiteResponse:
-    return SiteResponse.model_validate(await service.patch_site(db, user_id, site_id, body))
+    return SiteResponse.model_validate(await site_service.update(db, user_id, site_id, body))
 
 
 @router.patch("/sites/{site_id}")
@@ -95,7 +95,7 @@ async def patch_site(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("sites", "write")),
 ) -> SiteResponse:
-    return SiteResponse.model_validate(await service.patch_site(db, user_id, site_id, body))
+    return SiteResponse.model_validate(await site_service.update(db, user_id, site_id, body))
 
 
 @router.delete("/sites/{site_id}")
@@ -104,7 +104,7 @@ async def delete_site(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("sites", "write")),
 ) -> SiteDeleteResponse:
-    record = await service.delete_site(db, user_id, site_id)
+    record = await site_service.delete(db, user_id, site_id)
     return SiteDeleteResponse(id=record.id)
 
 
@@ -115,7 +115,7 @@ async def get_current_site(
 ) -> SiteResponse | None:
     if ctx.site_id is None:
         return None
-    return SiteResponse.model_validate(await service.get_site(db, ctx.user_id, ctx.site_id))
+    return SiteResponse.model_validate(await site_service.get(db, ctx.user_id, ctx.site_id))
 
 
 @router.put("/site")
@@ -124,7 +124,9 @@ async def put_current_site(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SiteResponse:
-    return SiteResponse.model_validate(await service.patch_site(db, ctx.user_id, ctx.site_id, body))
+    return SiteResponse.model_validate(
+        await site_service.update(db, ctx.user_id, ctx.site_id, body)
+    )
 
 
 @router.patch("/site")
@@ -134,7 +136,7 @@ async def patch_current_site(
     ctx: AuthContext = Depends(require_site),
 ) -> SiteResponse:
     return SiteResponse.model_validate(
-        await service.patch_site_as_agent(db, ctx.user_id, ctx.site_id, body)
+        await site_service.update_as_agent(db, ctx.user_id, ctx.site_id, body)
     )
 
 
@@ -143,5 +145,5 @@ async def delete_current_site(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(any_site),
 ) -> SiteDeleteResponse:
-    record = await service.delete_site(db, ctx.user_id, ctx.site_id)
+    record = await site_service.delete(db, ctx.user_id, ctx.site_id)
     return SiteDeleteResponse(id=record.id)

@@ -7,7 +7,7 @@ from src.auth import AuthContext, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.notes import service
+from src.notes.service import note_service
 from src.notes.schemas import (
     NoteCreateRequest,
     NoteDeleteResponse,
@@ -39,7 +39,7 @@ async def list_notes(
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[NoteListItemResponse] | NoteSearchResponse:
     if q:
-        result = await service.search(
+        result = await note_service.search(
             db,
             ctx.site_id,
             q,
@@ -56,7 +56,7 @@ async def list_notes(
         created_before=created_before,
         sort=sort,
     )
-    page = await service.list_notes(db, ctx.site_id, filters, paging)
+    page = await note_service.list_notes(db, ctx.site_id, filters, paging)
     return PaginatedApiResponse[NoteListItemResponse](
         data=[NoteListItemResponse.model_validate(n) for n in page.data],
         pagination=page.pagination,
@@ -69,7 +69,7 @@ async def create_note(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> NoteResponse:
-    record = await service.create_note(db, ctx.user_id, ctx.site_id, body)
+    record = await note_service.create_note(db, ctx.user_id, ctx.site_id, body)
     return NoteResponse.model_validate(record)
 
 
@@ -79,7 +79,7 @@ async def get_note(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> NoteResponse:
-    return NoteResponse.model_validate(await service.get_note(db, ctx.site_id, note_id))
+    return NoteResponse.model_validate(await note_service.get_note(db, ctx.site_id, note_id))
 
 
 @router.put("/notes/{note_id}")
@@ -89,7 +89,7 @@ async def put_note(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> NoteResponse:
-    record = await service.update_note(db, ctx.site_id, note_id, body)
+    record = await note_service.update_note(db, ctx.site_id, note_id, body)
     return NoteResponse.model_validate(record)
 
 
@@ -100,7 +100,7 @@ async def patch_note(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> NoteResponse:
-    record = await service.update_note(db, ctx.site_id, note_id, body)
+    record = await note_service.update_note(db, ctx.site_id, note_id, body)
     return NoteResponse.model_validate(record)
 
 
@@ -110,5 +110,5 @@ async def delete_note(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> NoteDeleteResponse:
-    record = await service.delete_note(db, ctx.site_id, note_id)
+    record = await note_service.delete_note(db, ctx.site_id, note_id)
     return NoteDeleteResponse(id=record.id)

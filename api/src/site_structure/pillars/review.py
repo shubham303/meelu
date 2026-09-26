@@ -1,17 +1,7 @@
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.site_structure.pillars import repository as repo
 from src.site_structure.review import VERDICTS
-from src.site_structure.schemas import (
-    PillarPageSuggestionChanges,
-    PillarReviewInput,
-    PillarVerdict,
-    ReviewBatch,
-    ReviewItem,
-    ReviewResult,
-)
+from src.site_structure.schemas import PillarReviewInput
 
 SCHEMA = {
     "type": "object",
@@ -43,42 +33,3 @@ def review_state(item: PillarReviewInput) -> dict[str, Any]:
         "covering_page": {"url": item.covering_url or "", "title": item.covering_title or ""},
         "pages": item.members,
     }
-
-
-async def review_inputs(
-    db: AsyncSession,
-    site_id: str,
-    prompt: str,
-    job_id: str | None,
-    ids: list[str] | None,
-    limit: int,
-) -> ReviewBatch:
-    items = await repo.review_inputs(db, site_id, job_id, ids, limit, unscreened_only=False)
-    return ReviewBatch(
-        instructions=INSTRUCTIONS.format(prompt=prompt),
-        schema=SCHEMA,
-        items=[ReviewItem(id=item.id, state=review_state(item)) for item in items],
-    )
-
-
-async def apply_verdicts(
-    db: AsyncSession, site_id: str, verdicts: list[PillarVerdict]
-) -> ReviewResult:
-    result = ReviewResult()
-    for given in verdicts:
-        if given.verdict not in VERDICTS:
-            result.failed += 1
-            continue
-        changes = PillarPageSuggestionChanges(state=given.verdict)
-        if given.verdict == "ready":
-            if given.title:
-                changes.topic = given.title.strip()
-            if given.suggestion:
-                changes.suggestion = given.suggestion.strip()
-        updated = await repo.update_one(db, site_id, given.id, changes)
-        if updated is None:
-            result.failed += 1
-            continue
-        result.reviewed += 1
-        setattr(result, given.verdict, getattr(result, given.verdict) + 1)
-    return result

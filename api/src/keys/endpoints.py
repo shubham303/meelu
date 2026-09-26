@@ -5,7 +5,7 @@ from src.auth import require
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.keys import service
+from src.keys.service import api_key_service
 from src.keys.schemas import (
     ApiKeyCreatedResponse,
     ApiKeyCreateRequest,
@@ -22,7 +22,7 @@ async def list_keys(
     user_id: str = Depends(require("keys", "read")),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[ApiKeyListItemResponse]:
-    page = await service.list_keys(db, user_id, paging)
+    page = await api_key_service.list(db, user_id, paging)
     return PaginatedApiResponse[ApiKeyListItemResponse](
         data=[ApiKeyListItemResponse.model_validate(k) for k in page.data],
         pagination=page.pagination,
@@ -35,7 +35,7 @@ async def create_key(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("keys", "write")),
 ) -> ApiKeyCreatedResponse:
-    result = await service.create_key(db, user_id, body)
+    result = await api_key_service.create(db, user_id, body)
     return ApiKeyCreatedResponse.model_validate({**dict(result.key), "key": result.raw})
 
 
@@ -45,5 +45,5 @@ async def revoke_key(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require("keys", "write")),
 ) -> ApiKeyDeleteResponse:
-    record = await service.revoke_key(db, user_id, key_id)
+    record = await api_key_service.revoke(db, user_id, key_id)
     return ApiKeyDeleteResponse(id=record.id)

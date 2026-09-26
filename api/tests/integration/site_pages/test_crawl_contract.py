@@ -1,10 +1,6 @@
 from src.core.database import unit_of_work
-from src.site_pages.repository import (
-    crawl_counts,
-    crawl_known_pages,
-    link_frontier,
-    stamp_sitemap_presence,
-)
+from src.site_pages.repositories.pages import site_pages
+from src.site_pages.service import site_page_service
 from tests.integration.site_pages.conftest import save_pages
 
 
@@ -27,11 +23,11 @@ async def test_crawl_known_pages_and_counts(client, site):
     )
 
     async with unit_of_work() as db:
-        known = await crawl_known_pages(db, site["id"])
-        counts = await crawl_counts(db, site["id"])
+        known = await site_pages.crawl_known_pages(db, site["id"])
+        count = await site_pages.count(db, site["id"])
 
-    assert counts == {"pages": 2}
-    by_url = {p["url"]: p for p in known}
+    assert count == 2
+    by_url = {p.url: p.model_dump(mode="json", by_alias=True) for p in known}
     done = by_url["https://example.com/done"]
     assert done["crawlComplete"] is True
     assert done["contentHash"] == "h"
@@ -63,7 +59,7 @@ async def test_link_frontier_lists_unknown_targets(client, site):
     )
 
     async with unit_of_work() as db:
-        frontier = await link_frontier(db, site["id"])
+        frontier = await site_page_service.link_frontier(db, site["id"])
 
     assert frontier == ["https://example.com/new"]
 
@@ -78,11 +74,11 @@ async def test_stamp_sitemap_presence(client, site):
     )
 
     async with unit_of_work() as db:
-        result = await stamp_sitemap_presence(
+        result = await site_pages.stamp_sitemap_presence(
             db, site["id"], ["https://example.com/b", "https://example.com/c"]
         )
 
-    assert result == {"known": 2, "listed": 1}
+    assert result.model_dump() == {"known": 2, "listed": 1}
 
     r = await client.get("/api/v1/site/pages", params={"inSitemap": "true"})
-    assert [p["url"] for p in r.json()["data"]["pages"]] == ["https://example.com/b"]
+    assert [p["url"] for p in r.json()["data"]] == ["https://example.com/b"]

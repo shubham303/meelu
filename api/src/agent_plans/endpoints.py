@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.agent_plans import service
+from src.agent_plans.service import agent_plan_service
 from src.agent_plans.schemas import (
     AgentPlanCreateRequest,
     AgentPlanDeleteResponse,
@@ -24,20 +24,20 @@ async def list_plans(
     user_id: str = Depends(current_user_id),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[AgentPlanListItemResponse]:
-    page = await service.list_plans(db, user_id, paging, search=q)
+    page = await agent_plan_service.list_plans(db, user_id, paging, search=q)
     return PaginatedApiResponse[AgentPlanListItemResponse](
         data=[AgentPlanListItemResponse.model_validate(p) for p in page.data],
         pagination=page.pagination,
     )
 
 
-@router.post("/agent-plans")
+@router.post("/agent-plans", status_code=201)
 async def create_plan(
     body: AgentPlanCreateRequest,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> AgentPlanResponse:
-    record = await service.create_plan(db, user_id, body)
+    record = await agent_plan_service.create_plan(db, user_id, body)
     return AgentPlanResponse.model_validate(record)
 
 
@@ -47,7 +47,8 @@ async def get_plan_by_slug(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> AgentPlanResponse:
-    return AgentPlanResponse.model_validate(await service.get_plan_by_slug(db, user_id, slug))
+    record = await agent_plan_service.get_plan_by_slug(db, user_id, slug)
+    return AgentPlanResponse.model_validate(record)
 
 
 @router.get("/agent-plans/{plan_id}")
@@ -56,7 +57,8 @@ async def get_plan(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> AgentPlanResponse:
-    return AgentPlanResponse.model_validate(await service.get_plan(db, user_id, plan_id))
+    record = await agent_plan_service.get_plan(db, user_id, plan_id)
+    return AgentPlanResponse.model_validate(record)
 
 
 @router.patch("/agent-plans/{plan_id}")
@@ -66,7 +68,7 @@ async def patch_plan(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> AgentPlanResponse:
-    record = await service.update_plan(db, user_id, plan_id, body)
+    record = await agent_plan_service.update_plan(db, user_id, plan_id, body)
     return AgentPlanResponse.model_validate(record)
 
 
@@ -76,5 +78,5 @@ async def delete_plan(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(current_user_id),
 ) -> AgentPlanDeleteResponse:
-    record = await service.delete_plan(db, user_id, plan_id)
+    record = await agent_plan_service.delete_plan(db, user_id, plan_id)
     return AgentPlanDeleteResponse(id=record.id)

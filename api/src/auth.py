@@ -7,19 +7,17 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pwdlib import PasswordHash
 from pydantic import field_validator
-from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
-from src.core.ids import uid
 from src.core.logging import get_logger
 from src.core.schemas import EntityModel, RequestModel
-from src.credits import service as credits_service
-from src.keys.repository import create_key, find_user_by_api_key
-from src.profile.models.user import AccessToken, User
-from src.profile.repository import create_profile
+from src.credits.service import credit_service
+from src.keys.repository import api_keys
+from src.profile.repository import access_tokens, profiles, users
+from src.profile.schemas import UserRecord
 from src.settings import settings
-from src.sites import repository as sites_repository
+from src.sites.repository import sites
 
 log = get_logger("auth")
 
@@ -31,19 +29,14 @@ def _session_cutoff() -> datetime:
     return datetime.now(UTC) - timedelta(seconds=settings.session_lifetime_seconds)
 
 
-async def session_user(db: AsyncSession, token: str | None) -> User | None:
+async def session_user(db: AsyncSession, token: str | None) -> UserRecord | None:
     if not token:
         return None
-    result = await db.execute(
-        select(User)
-        .join(AccessToken, AccessToken.user_id == User.id)
-        .where(
-            AccessToken.token == token,
-            AccessToken.created_at > _session_cutoff(),
-            User.is_active,
-        )
-    )
-    return result.scalar_one_or_none()
+    user_id = await access_tokens.find_user_id(db, token, _session_cutoff())
+    if user_id is None:
+        return None
+    user = await users.get(db, user_id)
+    return user if user is not None and user.is_active else None
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -101,26 +94,15 @@ session_router = APIRouter()
 
 @session_router.post("/register", status_code=201)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) -> UserResponse:
-    existing = await db.execute(select(User.id).where(User.email == body.email))
-    if existing.scalar_one_or_none() is not None:
+    if await users.find_by_email(db, body.email) is not None:
         raise HTTPException(400, "An account with this email already exists.")
 
-    user = User(
-        id=uid("user"),
-        email=body.email,
-        hashed_password=password_hash.hash(body.password),
-        name=body.name,
-        is_active=True,
-        is_superuser=False,
-        is_verified=False,
-    )
-    db.add(user)
-    await db.flush()
+    user = await users.create(db, body.email, password_hash.hash(body.password), body.name)
 
-    await create_key(db, user.id, "Default MCP key")
-    await credits_service.signup_grant(db, user.id)
+    await api_keys.create(db, user.id, "Default MCP key")
+    await credit_service.signup_grant(db, user.id)
     try:
-        await create_profile(db, user.id, {"full_name": user.name})
+        await profiles.create(db, user.id, {"full_name": user.name})
     except Exception as e:
         log.error("seed_profile_failed", user_id=user.id, error=str(e))
     await db.commit()
@@ -130,14 +112,13 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
 
 @session_router.post("/login")
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Response:
-    result = await db.execute(select(User).where(User.email == body.email))
-    user = result.scalar_one_or_none()
+    user = await users.find_by_email(db, body.email)
     hashed = user.hashed_password if user else _dummy_hash
     if not password_hash.verify(body.password, hashed) or user is None or not user.is_active:
         raise HTTPException(400, "Wrong email or password.")
 
     token = secrets.token_urlsafe(32)
-    db.add(AccessToken(token=token, user_id=user.id))
+    await access_tokens.create(db, user.id, token)
     await db.commit()
 
     response = Response(status_code=204)
@@ -149,7 +130,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Respo
 async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     token = request.cookies.get(settings.session_cookie_name)
     if token:
-        await db.execute(delete(AccessToken).where(AccessToken.token == token))
+        await access_tokens.delete(db, token)
         await db.commit()
 
     response = Response(status_code=204)
@@ -168,7 +149,7 @@ async def me(request: Request, db: AsyncSession = Depends(get_db)) -> UserRespon
 async def current_user_id(request: Request, db: AsyncSession = Depends(get_db)) -> str:
     api_key = request.headers.get("x-api-key")
     if api_key:
-        owner = await find_user_by_api_key(db, api_key)
+        owner = await api_keys.find_owner(db, api_key)
         if owner:
             return owner.user_id
         raise HTTPException(401, "Invalid API key.")
@@ -199,21 +180,20 @@ async def _resolve_site(
     asked = header if header is not None else request.query_params.get("siteId")
 
     if asked:
-        site = await sites_repository.get_site(db, user_id, asked)
+        site = await sites.get(db, user_id, asked)
         if site:
             if gated:
-                credits_service.require_active_site(site.id, site.status)
+                credit_service.require_active_site(site.id, site.status)
             return site.id
         raise HTTPException(404, f"No website {asked} in this workspace.")
 
-    only = await sites_repository.default_site_id(db, user_id)
-    if only:
-        site = await sites_repository.get_site(db, user_id, only)
+    site = await sites.get_default(db, user_id)
+    if site:
         if gated:
-            credits_service.require_active_site(site.id, site.status)
+            credit_service.require_active_site(site.id, site.status)
         return site.id
 
-    count = await sites_repository.count_sites(db, user_id)
+    count = await sites.count(db, user_id)
     if count == 0:
         raise HTTPException(
             400,
@@ -253,7 +233,7 @@ async def optional_site(
     try:
         site_id = await _resolve_site(db, request, user_id, gated=False)
     except HTTPException:
-        if await sites_repository.count_sites(db, user_id) == 0:
+        if await sites.count(db, user_id) == 0:
             return OptionalSiteContext(user_id=user_id, site_id=None)
         raise
     return OptionalSiteContext(user_id=user_id, site_id=site_id)
@@ -261,9 +241,9 @@ async def optional_site(
 
 async def require_superuser(request: Request, db: AsyncSession = Depends(get_db)) -> str:
     api_key = request.headers.get("x-api-key")
-    owner = await find_user_by_api_key(db, api_key) if api_key else None
+    owner = await api_keys.find_owner(db, api_key) if api_key else None
     user = (
-        await db.get(User, owner.user_id)
+        await users.get(db, owner.user_id)
         if owner
         else await session_user(db, request.cookies.get(settings.session_cookie_name))
     )

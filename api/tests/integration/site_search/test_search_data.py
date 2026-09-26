@@ -100,11 +100,8 @@ async def test_overview_without_data(client, email):
     body = r.json()["data"]
     assert body == {
         "connected": False,
-        "property": None,
         "hasData": False,
         "operatingBlind": True,
-        "sync": None,
-        "active": None,
     }
 
 
@@ -152,7 +149,7 @@ async def test_ingest_rows_and_aggregations(client, email):
     assert body["current"]["impressions"] == 380
     assert body["current"]["ctr"] == pytest.approx(38 / 380)
     assert body["current"]["position"] == pytest.approx(1980 / 380)
-    assert body["previous"] == {"clicks": 0, "impressions": 0, "ctr": None, "position": None}
+    assert body["previous"] == {"clicks": 0, "impressions": 0}
     assert len(body["weeklyClicks"]) == 12
     assert body["weeklyClicks"][-1] == 38
 
@@ -167,7 +164,7 @@ async def test_ingest_rows_and_aggregations(client, email):
     assert top["impressions"] == 320
     assert top["position"] == pytest.approx(1360 / 320)
     assert top["prevClicks"] == 0
-    assert top["prevPosition"] is None
+    assert top.get("prevPosition") is None
     assert top["page"] == PRICING
     assert second["query"] == "coffee grinder"
     assert second["clicks"] == 6
@@ -185,7 +182,7 @@ async def test_ingest_rows_and_aggregations(client, email):
     assert first["topQuery"] == "espresso machine"
     assert first["prevClicks"] == 0
     assert first["weekly"] == [0, 0, 0, 0, 0, 0, 0, 35]
-    assert first["pageId"] is None
+    assert first.get("pageId") is None
     assert other["page"] == BLOG
     assert other["clicks"] == 3
     assert other["position"] == pytest.approx(180 / 30)
@@ -197,7 +194,7 @@ async def test_ingest_rows_and_aggregations(client, email):
     assert body["days"] == 90
     assert len(body["series"]) == 1
     points = body["series"][0]["points"]
-    assert body["series"][0]["page"] is None
+    assert body["series"][0].get("page") is None
     assert len(points) == 90
     assert points[-1]["day"] == DAY_B
     by_day = {p["day"]: p for p in points}
@@ -294,7 +291,7 @@ async def test_ingest_rows_validation(client, email):
 
     r = await client.post("/api/v1/site/search-data/rows", json={})
     assert r.status_code == 400
-    assert "a sync batch with no days writes nothing" in r.json()["error"]["message"]
+    assert r.json()["error"]["message"] == "Missing required field(s): days"
 
     r = await client.post("/api/v1/site/search-data/rows", json={"days": []})
     assert r.status_code == 400
@@ -413,7 +410,7 @@ async def test_inspections_round_trip(client, email):
             "coverageState": "Crawled - currently not indexed",
         }
     ]
-    assert body["contentQualityVerdict"] is None
+    assert body.get("contentQualityVerdict") is None
 
     r = await client.get("/api/v1/site/search-data/inspections")
     assert r.json()["data"]["urls"] == []
@@ -444,8 +441,8 @@ async def test_sync_job_lifecycle(client, email):
     assert sync["rowsStored"] == 0
     assert sync["pagesInspected"] == 0
     assert sync["notes"] == []
-    assert sync["error"] is None
-    assert sync["finishedAt"] is None
+    assert sync.get("error") is None
+    assert sync.get("finishedAt") is None
     assert "userId" not in sync
     assert "seq" not in sync
     assert "property" not in sync
@@ -453,7 +450,7 @@ async def test_sync_job_lifecycle(client, email):
 
     r = await client.post("/api/v1/site/search-data/sync-jobs", json={})
     assert r.status_code == 409
-    blocked = r.json()["data"]
+    blocked = r.json()
     assert blocked["started"] is False
     assert blocked["sync"]["id"] == sync_id
     assert "already running" in blocked["reason"]
@@ -475,9 +472,9 @@ async def test_sync_job_lifecycle(client, email):
     plan = r.json()["data"]
     assert plan["sync"]["status"] == "running"
     assert plan["sync"]["startedAt"] is not None
-    assert plan["property"] is None
+    assert plan.get("property") is None
     assert plan["domain"] == "example.com"
-    assert plan["resumeFrom"] is None
+    assert plan.get("resumeFrom") is None
     assert plan["endDay"] == day_ago(3)
     assert plan["daysTotal"] > 400
     assert plan["sync"]["daysTotal"] == plan["daysTotal"]
@@ -504,7 +501,9 @@ async def test_sync_job_lifecycle(client, email):
         f"/api/v1/site/search-data/sync-jobs/{sync_id}", json={"status": "bogus"}
     )
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == "status must be completed, failed or cancelled."
+    assert r.json()["error"]["message"] == (
+        "status: Input should be 'completed', 'failed' or 'cancelled'"
+    )
 
     r = await client.patch(
         f"/api/v1/site/search-data/sync-jobs/{sync_id}",
@@ -530,7 +529,7 @@ async def test_sync_job_lifecycle(client, email):
     r = await client.get("/api/v1/site/search-data/sync-jobs")
     listed = r.json()["data"]
     assert listed["latest"]["id"] == sync_id
-    assert listed["active"] is None
+    assert listed.get("active") is None
 
     r = await client.post("/api/v1/site/search-data/sync-jobs", json={})
     assert r.status_code == 202

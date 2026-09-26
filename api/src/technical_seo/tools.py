@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
-from src.technical_seo import service
+from src.technical_seo.service import technical_seo_service
 from src.technical_seo.constants import SITE_ISSUE_SEVERITIES as SEVERITIES
 from src.technical_seo.schemas import (
     IssueChangeResult,
@@ -22,14 +22,14 @@ async def _apply(kind: str, url: str | None, patch: IssueUpdateRequest) -> Issue
         site = pages = 0
         if url:
             pages = (
-                await service.update_page_issues_by(
+                await technical_seo_service.update_page_issues_by(
                     db, ctx.site_id, PageIssueBulkUpdateRequest(kind=kind, url=url, **changes)
                 )
             ).updated
         else:
             try:
                 site = (
-                    await service.update_site_issues_by_kind(
+                    await technical_seo_service.update_site_issues_by_kind(
                         db, ctx.site_id, SiteIssueBulkUpdateRequest(kind=kind, **changes)
                     )
                 ).updated
@@ -38,7 +38,7 @@ async def _apply(kind: str, url: str | None, patch: IssueUpdateRequest) -> Issue
                     raise
             try:
                 pages = (
-                    await service.update_page_issues_by(
+                    await technical_seo_service.update_page_issues_by(
                         db, ctx.site_id, PageIssueBulkUpdateRequest(kind=kind, **changes)
                     )
                 ).updated
@@ -62,12 +62,14 @@ async def create_site_issue(kind: str, issue: str, severity: str = "p2") -> Issu
     async with unit_of_work() as db:
         body = SiteIssueCreateRequest(kind=kind, issue=issue, severity=severity)
         try:
-            created = await service.create_site_issue(db, ctx.user_id, ctx.site_id, body)
+            created = await technical_seo_service.create_site_issue(
+                db, ctx.user_id, ctx.site_id, body
+            )
             return IssueWriteResult(run_id=created.run_id, kind=kind, state="open")
         except HTTPException as exc:
             if exc.status_code != 409:
                 raise
-        updated = await service.update_site_issues_by_kind(
+        updated = await technical_seo_service.update_site_issues_by_kind(
             db,
             ctx.site_id,
             SiteIssueBulkUpdateRequest(

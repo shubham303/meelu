@@ -112,11 +112,11 @@ async def test_crawl_lifecycle(client, site):
     assert updated["lastCrawledAt"] is not None
 
     r = await client.get("/api/v1/site/crawl-jobs")
-    listed = r.json()["data"]
-    assert listed["total"] == 1
-    assert listed["shown"] == 1
-    assert listed["offset"] == 0
-    assert listed["jobs"][0]["id"] == job_id
+    listed = r.json()
+    assert listed["pagination"]["total"] == 1
+    assert len(listed["data"]) == 1
+    assert listed["pagination"]["page"] == 1
+    assert listed["data"][0]["id"] == job_id
     status = listed["status"]
     assert status["siteId"] == site["id"]
     assert status["domain"] == "jobs.example.com"
@@ -137,7 +137,7 @@ async def test_open_while_running(client, site):
     assert r.status_code == 409, r.text
     clash = r.json()["data"]
     assert clash["started"] is False
-    assert clash["plan"] is None
+    assert clash.get("plan") is None
     assert clash["job"]["id"] == first["id"]
     assert clash["reason"] == "A crawl of jobs.example.com is already running."
 
@@ -239,7 +239,7 @@ async def test_freshness_cutoff(client, site):
     job = r.json()["data"]["job"]
     assert job["cutoffDays"] == 0
     assert "freshBefore" not in job
-    assert r.json()["data"]["plan"]["freshBefore"] is None
+    assert r.json()["data"]["plan"].get("freshBefore") is None
     await client.patch(f"/api/v1/site/crawl-jobs/{job['id']}", json={"status": "cancelling"})
 
     r = await open_crawl(client)
@@ -256,7 +256,11 @@ async def test_freshness_cutoff(client, site):
 
     r = await open_crawl(client, freshBefore="not a date")
     assert r.status_code == 400
-    assert r.json() == {"error": {"message": "freshBefore must be an ISO timestamp."}}
+    assert r.json() == {
+        "error": {
+            "message": "freshBefore: Input should be a valid datetime or date, invalid character in year"
+        }
+    }
 
 
 async def test_sitemap_urls_land_on_the_site_record(client, site):
@@ -356,8 +360,8 @@ async def test_settle_failed_records_the_error(client, site):
     assert settled["complete"] is False
 
     r = await client.get("/api/v1/site/crawl-jobs")
-    assert r.json()["data"]["status"]["state"] == "failed"
-    assert r.json()["data"]["status"]["error"] == "host unreachable"
+    assert r.json()["status"]["state"] == "failed"
+    assert r.json()["status"]["error"] == "host unreachable"
 
 
 async def test_unknown_status_and_missing_job(client, site):
@@ -385,7 +389,7 @@ async def test_delete_stops_then_deletes(client, site):
     assert body["job"]["status"] == "cancelled"
 
     r = await client.delete(f"/api/v1/site/crawl-jobs/{job_id}")
-    assert r.json()["data"] == {"stopped": False, "deleted": True}
+    assert r.json()["data"] == {"id": job_id, "stopped": False, "deleted": True}
 
     r = await client.get(f"/api/v1/site/crawl-jobs/{job_id}")
     assert r.status_code == 404
@@ -397,17 +401,17 @@ async def test_list_filters(client, site):
     await client.patch(f"/api/v1/site/crawl-jobs/{job_id}", json={"status": "cancelling"})
 
     r = await client.get("/api/v1/site/crawl-jobs", params={"trigger": "schedule"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
     r = await client.get("/api/v1/site/crawl-jobs", params={"trigger": "user"})
-    assert r.json()["data"]["total"] == 0
+    assert r.json()["pagination"]["total"] == 0
     r = await client.get("/api/v1/site/crawl-jobs", params={"status": "cancelled"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
     r = await client.get("/api/v1/site/crawl-jobs", params={"active": "false"})
-    assert r.json()["data"]["total"] == 1
+    assert r.json()["pagination"]["total"] == 1
     r = await client.get("/api/v1/site/crawl-jobs", params={"active": "true"})
-    assert r.json()["data"]["total"] == 0
+    assert r.json()["pagination"]["total"] == 0
     r = await client.get("/api/v1/site/crawl-jobs", params={"sort": "bogus"})
     assert r.status_code == 400
     assert r.json() == {
-        "error": {"message": "sort must be one of created, started, finished, fetched."}
+        "error": {"message": "sort: Input should be 'created', 'started', 'finished' or 'fetched'"}
     }

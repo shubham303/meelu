@@ -79,7 +79,7 @@ async def test_campaign_crud(client, email):
     assert r.status_code == 200, r.text
     patched = r.json()["data"]
     assert patched["status"] == "paused"
-    assert patched["schedule"] is None
+    assert patched.get("schedule") is None
 
     r = await client.patch(
         f"/api/v1/lead-management/campaigns/{campaign['id']}", json={"status": "bogus"}
@@ -105,7 +105,7 @@ async def test_run_lifecycle(client, email):
     assert run["status"] == "running"
     assert run["campaignId"] == campaign["id"]
     assert run["sourceStats"] == {}
-    assert run["finishedAt"] is None
+    assert run.get("finishedAt") is None
 
     r = await client.patch(
         f"/api/v1/lead-management/runs/{run['id']}",
@@ -190,7 +190,7 @@ async def test_bulk_leads_dedupe(client, email):
     assert by_name["Alice Ash"]["stage"] == "qualified"
     assert by_name["Cara Code"]["stage"] == "found"
     assert by_name["Alice Ash"]["runId"] == run["id"]
-    assert by_name["Dana Dev"]["runId"] is None
+    assert by_name["Dana Dev"].get("runId") is None
 
     r = await client.post(
         "/api/v1/lead-management/leads/bulk", json={"runId": "lrn_missing", "leads": []}

@@ -131,7 +131,7 @@ def vendor(monkeypatch):
 
 async def test_collect_keywords_and_ceiling(client, email, vendor, monkeypatch):
     from src.core import database
-    from src.credits import service as credits
+    from src.credits.service import credit_service
 
     async def no_balance_check(db, user_id):
         return None
@@ -139,8 +139,8 @@ async def test_collect_keywords_and_ceiling(client, email, vendor, monkeypatch):
     async def no_charge(db, user_id, domain, capability, cost, call_id):
         return cost
 
-    monkeypatch.setattr(credits, "require_balance", no_balance_check)
-    monkeypatch.setattr(credits, "charge_vendor_call", no_charge)
+    monkeypatch.setattr(credit_service, "require_balance", no_balance_check)
+    monkeypatch.setattr(credit_service, "charge_vendor_call", no_charge)
 
     site, _, pages, job = await prepare(client, email)
     r = await client.post(f"{BASE}/collect/keywords", json={"jobId": job["id"], "dryRun": True})
@@ -193,7 +193,7 @@ async def test_collect_keywords_and_ceiling(client, email, vendor, monkeypatch):
 
 
 async def test_competitors_gap_and_serps(client, email, vendor, monkeypatch):
-    from src.credits import service as credits
+    from src.credits.service import credit_service
 
     async def no_balance_check(db, user_id):
         return None
@@ -201,8 +201,8 @@ async def test_competitors_gap_and_serps(client, email, vendor, monkeypatch):
     async def no_charge(db, user_id, domain, capability, cost, call_id):
         return cost
 
-    monkeypatch.setattr(credits, "require_balance", no_balance_check)
-    monkeypatch.setattr(credits, "charge_vendor_call", no_charge)
+    monkeypatch.setattr(credit_service, "require_balance", no_balance_check)
+    monkeypatch.setattr(credit_service, "charge_vendor_call", no_charge)
 
     site, _, pages, job = await prepare(client, email)
     r = await client.post(f"{BASE}/collect/competitors", json={"jobId": job["id"]})
@@ -309,7 +309,7 @@ async def test_competitors_gap_and_serps(client, email, vendor, monkeypatch):
 
 
 async def test_topic_pages(client, email, vendor, monkeypatch):
-    from src.credits import service as credits
+    from src.credits.service import credit_service
 
     async def no_balance_check(db, user_id):
         return None
@@ -317,8 +317,8 @@ async def test_topic_pages(client, email, vendor, monkeypatch):
     async def no_charge(db, user_id, domain, capability, cost, call_id):
         return cost
 
-    monkeypatch.setattr(credits, "require_balance", no_balance_check)
-    monkeypatch.setattr(credits, "charge_vendor_call", no_charge)
+    monkeypatch.setattr(credit_service, "require_balance", no_balance_check)
+    monkeypatch.setattr(credit_service, "charge_vendor_call", no_charge)
 
     site, _, pages, job = await prepare(client, email)
     r = await client.post(

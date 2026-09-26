@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import text
 
 from src.core.database import unit_of_work
-from src.credits import billing
+from src.credits.billing import site_billing_service
 from tests.conftest import signup
 
 
@@ -71,12 +71,12 @@ async def test_sweep_charges_once_per_day(client, email):
     site = await add_site(client)
     after_create = await balance_usd(client)
 
-    result = await billing.sweep()
+    result = await site_billing_service.sweep()
     assert result.charged == 0
     assert await balance_usd(client) == pytest.approx(after_create)
 
     await age_billing(site["id"], 25)
-    result = await billing.sweep()
+    result = await site_billing_service.sweep()
     assert result.charged == 1
     assert result.disabled == 0
     assert await balance_usd(client) == pytest.approx(after_create - 0.4)
@@ -90,7 +90,7 @@ async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(clien
     await set_balance(user_id, 0.1)
     await age_billing(site["id"], 25)
 
-    result = await billing.sweep()
+    result = await site_billing_service.sweep()
     assert result.disabled == 1
     assert result.charged == 0
 
@@ -107,7 +107,7 @@ async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(clien
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 5})
     assert r.status_code == 200, r.text
 
-    result = await billing.sweep()
+    result = await site_billing_service.sweep()
     assert result.charged == 1
     assert result.reactivated == 1
 
@@ -123,7 +123,7 @@ async def test_disabled_site_blocks_site_scoped_routes(client, email):
 
     await set_balance(user_id, 0)
     await age_billing(site["id"], 25)
-    await billing.sweep()
+    await site_billing_service.sweep()
 
     r = await client.get("/api/v1/site/pages")
     assert r.status_code == 402
@@ -137,18 +137,18 @@ async def test_disabled_site_blocks_site_scoped_routes(client, email):
 
 
 async def test_vendor_calls_need_the_minimum_balance(client, email):
-    from src.credits import service as credits_service
+    from src.credits.service import InsufficientCreditsError, credit_service
 
     await signup(client, email)
     user_id = await user_id_of(client)
 
     await set_balance(user_id, 0.19)
     async with unit_of_work() as db:
-        with pytest.raises(credits_service.InsufficientCreditsError) as caught:
-            await credits_service.require_balance(db, user_id)
+        with pytest.raises(InsufficientCreditsError) as caught:
+            await credit_service.require_balance(db, user_id)
     assert caught.value.floor_micros == 200_000
     assert "minimum" in str(caught.value)
 
     await set_balance(user_id, 0.2)
     async with unit_of_work() as db:
-        assert await credits_service.require_balance(db, user_id) == 200_000
+        assert await credit_service.require_balance(db, user_id) == 200_000

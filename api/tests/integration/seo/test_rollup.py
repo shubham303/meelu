@@ -112,7 +112,7 @@ async def test_rollup_builds_page_facts_keywords_and_pairs(client, email):
     espresso = keywords["espresso machine"]
     assert espresso["impressions28D"] == 7 * 100 + 3 * 200 + 4 * 20
     assert espresso["impressionsPrev28D"] == 6 * 500
-    assert espresso["impressionsLy28D"] is None
+    assert espresso.get("impressionsLy28D") is None
     assert espresso["firstSource"] == "gsc"
 
     r = await client.get(f"{BASE}/keywords/{espresso['id']}/pages")

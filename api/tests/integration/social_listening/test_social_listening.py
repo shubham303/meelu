@@ -81,7 +81,7 @@ async def test_config_lazy_create_and_update(client, email):
     assert config["maxAgeDays"] == 365
     assert config["dropDeadPosts"] is True
     assert config["minSimilarity"] == pytest.approx(0.8)
-    assert config["schedule"] is None
+    assert config.get("schedule") is None
 
     r = await client.put(
         "/api/v1/social-listening/config",
@@ -238,7 +238,7 @@ async def test_runs_lifecycle_and_list(client, email):
     run = r.json()["data"]
     assert run["status"] == "running"
     assert run["startedAt"] is not None
-    assert run["finishedAt"] is None
+    assert run.get("finishedAt") is None
     assert run["fetchedCount"] == 0
     assert run["platformStats"] == {}
 
@@ -317,7 +317,7 @@ async def test_posts_bulk_insert_skips_known_urls(client, email):
     assert first["status"] == "fetched"
     assert first["runId"] == run_id
     assert first["engagement"]["score"] == 42
-    assert first["similarity"] is None
+    assert first.get("similarity") is None
 
     r = await client.patch(
         f"/api/v1/social-listening/posts/{first['id']}", json={"status": "drafted"}
@@ -530,7 +530,7 @@ async def test_post_filters_sort_and_reply(client, email):
 
     r = await client.get("/api/v1/social-listening/posts", params={"status": "needs_reply"})
     brand = next(p for p in r.json()["data"] if p["kind"] == "brand")
-    assert brand["repliedAt"] is None
+    assert brand.get("repliedAt") is None
 
     r = await client.patch(
         f"/api/v1/social-listening/posts/{brand['id']}",

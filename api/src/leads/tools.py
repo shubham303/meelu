@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
-from src.leads import service
+from src.leads.service import lead_service
 from src.leads.schemas import (
     BulkLeadsResponse,
     CampaignCreateRequest,
@@ -45,9 +45,9 @@ async def leads_save_campaign(
     ctx = require_site()
     async with unit_of_work() as db:
         if campaign_id is None:
-            return await service.create_campaign(db, ctx.user_id, ctx.site_id, campaign)
+            return await lead_service.create_campaign(db, ctx.user_id, ctx.site_id, campaign)
         patch = CampaignPatchRequest(**campaign.model_dump())
-        return await service.patch_campaign(db, ctx.site_id, campaign_id, patch)
+        return await lead_service.patch_campaign(db, ctx.site_id, campaign_id, patch)
 
 
 @tool(writes=True, desk="leads")
@@ -60,7 +60,7 @@ async def leads_add_leads(leads: LeadsBulkRequest) -> BulkLeadsResponse:
         raise ValueError("leads must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.bulk_add_leads(db, ctx.user_id, ctx.site_id, leads)
+        return await lead_service.bulk_add_leads(db, ctx.user_id, ctx.site_id, leads)
 
 
 @tool(writes=True, desk="leads")
@@ -72,7 +72,7 @@ async def leads_update_lead(lead_id: str, patch: LeadPatchRequest) -> LeadRespon
         raise ValueError("patch must not be empty.")
     ctx = require_site()
     async with unit_of_work() as db:
-        return await service.patch_lead(db, ctx.site_id, lead_id, patch)
+        return await lead_service.patch_lead(db, ctx.site_id, lead_id, patch)
 
 
 @tool(desk="leads")
@@ -83,7 +83,7 @@ async def leads_download_leads(stage: str | None = None, campaign_id: str | None
     ctx = require_site()
     filters = LeadFilters(stage=stage, campaign_id=campaign_id, sort="newest")
     async with unit_of_work() as db:
-        rows = await service.export_leads(db, ctx.site_id, filters)
+        rows = await lead_service.export_leads(db, ctx.site_id, filters)
     out_dir = settings.agent_data_dir / "leads" / ctx.schema
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")

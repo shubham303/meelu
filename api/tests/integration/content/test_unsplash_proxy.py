@@ -142,7 +142,7 @@ async def test_download_trigger(client, workspace, transport):
 
     r = await client.post("/api/v1/content/unsplash", json={})
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == "Missing downloadLocation."
+    assert r.json()["error"]["message"] == "Missing required field(s): downloadLocation"
 
     r = await client.post(
         "/api/v1/content/unsplash",

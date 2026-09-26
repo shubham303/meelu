@@ -1,7 +1,7 @@
 from src.agent.context import current
 from src.agent.server import tool
 from src.core.database import unit_of_work
-from src.profile import service
+from src.profile.service import profile_service
 from src.profile.schemas import (
     ProfileCreateRequest,
     ProfileDeleteResponse,
@@ -57,7 +57,7 @@ async def save_profile(
         raise ValueError("full_name cannot be blank.")
     ctx = current()
     async with unit_of_work() as db:
-        record = await service.upsert_profile(db, ctx.user_id, ProfileCreateRequest(**fields))
+        record = await profile_service.upsert(db, ctx.user_id, ProfileCreateRequest(**fields))
     return ProfileResponse.model_validate(record)
 
 
@@ -73,7 +73,7 @@ async def clear_profile_fields(fields: list[str]) -> ProfileResponse:
         raise ValueError(f"Cannot clear {unknown}; allowed: {list(CLEARABLE)}.")
     ctx = current()
     async with unit_of_work() as db:
-        record = await service.patch_profile(
+        record = await profile_service.update(
             db, ctx.user_id, ProfileUpdateRequest.model_validate(dict.fromkeys(names))
         )
     return ProfileResponse.model_validate(record)
@@ -84,5 +84,5 @@ async def delete_profile() -> ProfileDeleteResponse:
     """Delete the user's profile entirely. Only when the user explicitly asks."""
     ctx = current()
     async with unit_of_work() as db:
-        record = await service.delete_profile(db, ctx.user_id)
+        record = await profile_service.delete(db, ctx.user_id)
     return ProfileDeleteResponse(id=record.id)

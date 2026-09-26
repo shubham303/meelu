@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.analytics import service
+from src.analytics.service import analytics_service
 from src.analytics.schemas import (
     AnalyticsReportCreateRequest,
     AnalyticsReportDeleteResponse,
@@ -34,7 +34,7 @@ async def get_workspace(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsWorkspaceResponse:
-    workspace = await service.get_workspace(db, ctx.user_id, ctx.site_id)
+    workspace = await analytics_service.get_workspace(db, ctx.user_id, ctx.site_id)
     return AnalyticsWorkspaceResponse.model_validate(workspace)
 
 
@@ -44,7 +44,7 @@ async def list_sessions(
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[AnalyticsSessionListItemResponse]:
-    page = await service.list_sessions(db, ctx.user_id, ctx.site_id, paging)
+    page = await analytics_service.list_sessions(db, ctx.user_id, ctx.site_id, paging)
     return PaginatedApiResponse[AnalyticsSessionListItemResponse](
         data=[AnalyticsSessionListItemResponse.model_validate(s) for s in page.data],
         pagination=page.pagination,
@@ -57,7 +57,7 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSessionResponse:
-    record = await service.create_session(db, ctx.user_id, ctx.site_id, body)
+    record = await analytics_service.create_session(db, ctx.user_id, ctx.site_id, body)
     return AnalyticsSessionResponse.model_validate(record)
 
 
@@ -67,7 +67,7 @@ async def get_session(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSessionResponse:
-    record = await service.get_session(db, ctx.user_id, ctx.site_id, session_id)
+    record = await analytics_service.get_session(db, ctx.user_id, ctx.site_id, session_id)
     return AnalyticsSessionResponse.model_validate(record)
 
 
@@ -78,7 +78,7 @@ async def update_session(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSessionResponse:
-    record = await service.update_session(db, ctx.user_id, ctx.site_id, session_id, body)
+    record = await analytics_service.update_session(db, ctx.user_id, ctx.site_id, session_id, body)
     return AnalyticsSessionResponse.model_validate(record)
 
 
@@ -88,7 +88,7 @@ async def delete_session(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSessionDeleteResponse:
-    record = await service.delete_session(db, ctx.user_id, ctx.site_id, session_id)
+    record = await analytics_service.delete_session(db, ctx.user_id, ctx.site_id, session_id)
     return AnalyticsSessionDeleteResponse(id=record.id)
 
 
@@ -99,7 +99,7 @@ async def list_sources(
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[AnalyticsSourceListItemResponse]:
-    page = await service.list_sources(db, ctx.user_id, ctx.site_id, session_id, paging)
+    page = await analytics_service.list_sources(db, ctx.user_id, ctx.site_id, session_id, paging)
     return PaginatedApiResponse[AnalyticsSourceListItemResponse](
         data=[AnalyticsSourceListItemResponse.model_validate(s) for s in page.data],
         pagination=page.pagination,
@@ -113,7 +113,7 @@ async def create_source(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSourceResponse:
-    record = await service.create_source(db, ctx.user_id, ctx.site_id, session_id, body)
+    record = await analytics_service.create_source(db, ctx.user_id, ctx.site_id, session_id, body)
     return AnalyticsSourceResponse.model_validate(record)
 
 
@@ -123,7 +123,7 @@ async def delete_source(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsSourceDeleteResponse:
-    record = await service.delete_source(db, ctx.user_id, ctx.site_id, source_id)
+    record = await analytics_service.delete_source(db, ctx.user_id, ctx.site_id, source_id)
     return AnalyticsSourceDeleteResponse(id=record.id)
 
 
@@ -134,7 +134,7 @@ async def list_reports(
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[AnalyticsReportListItemResponse]:
-    page = await service.list_reports(db, ctx.user_id, ctx.site_id, paging, session_id)
+    page = await analytics_service.list_reports(db, ctx.user_id, ctx.site_id, paging, session_id)
     return PaginatedApiResponse[AnalyticsReportListItemResponse](
         data=[AnalyticsReportListItemResponse.model_validate(r) for r in page.data],
         pagination=page.pagination,
@@ -147,7 +147,7 @@ async def create_report(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsReportSummaryResponse:
-    record = await service.create_report(db, ctx.user_id, ctx.site_id, body)
+    record = await analytics_service.create_report(db, ctx.user_id, ctx.site_id, body)
     return AnalyticsReportSummaryResponse.model_validate(
         AnalyticsReportSummaryRecord.from_report(record)
     )
@@ -159,7 +159,7 @@ async def get_report(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsReportResponse:
-    record = await service.get_report(db, ctx.user_id, ctx.site_id, report_id)
+    record = await analytics_service.get_report(db, ctx.user_id, ctx.site_id, report_id)
     return AnalyticsReportResponse.model_validate(record)
 
 
@@ -170,7 +170,7 @@ async def update_report(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsReportSummaryResponse:
-    record = await service.update_report(db, ctx.user_id, ctx.site_id, report_id, body)
+    record = await analytics_service.update_report(db, ctx.user_id, ctx.site_id, report_id, body)
     return AnalyticsReportSummaryResponse.model_validate(
         AnalyticsReportSummaryRecord.from_report(record)
     )
@@ -182,5 +182,5 @@ async def delete_report(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> AnalyticsReportDeleteResponse:
-    record = await service.delete_report(db, ctx.user_id, ctx.site_id, report_id)
+    record = await analytics_service.delete_report(db, ctx.user_id, ctx.site_id, report_id)
     return AnalyticsReportDeleteResponse(id=record.id)

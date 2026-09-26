@@ -5,6 +5,8 @@ from src.site_structure.constants import (
     JOB_STATUSES,
     LINK_ACTIONS,
     PILLAR_ACTIONS,
+    SORT_ORDERS,
+    SUGGESTION_SORTS,
     SUGGESTION_STATES,
     WORKSPACE_TABLE,
 )
@@ -53,6 +55,14 @@ def prompt(value: Any) -> str:
 
 def pillar_action(value: Any) -> str:
     return _choice(value, PILLAR_ACTIONS, "action")
+
+
+def sort_by(value: Any) -> str:
+    return _choice(value, SUGGESTION_SORTS, "sortBy")
+
+
+def sort_order(value: Any) -> str:
+    return _choice(str(value).lower(), SORT_ORDERS, "sortOrder")
 
 
 def workspace_table(value: Any) -> str:

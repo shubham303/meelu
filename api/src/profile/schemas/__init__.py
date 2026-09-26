@@ -97,3 +97,14 @@ class ProfileResponse(EntityModel):
 class ProfileDeleteResponse(EntityModel):
     id: str
     deleted: bool = Field(default=True)
+
+
+class UserRecord(EntityModel):
+    id: str
+    email: str
+    name: str | None
+    image: str | None
+    hashed_password: str
+    is_active: bool
+    is_superuser: bool
+    is_verified: bool

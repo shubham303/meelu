@@ -3,7 +3,8 @@ from datetime import timedelta
 import pytest
 
 from src.core.database import unit_of_work
-from src.credits import service as credits
+from src.credits.schemas import GrantRequest
+from src.credits.service import InsufficientCreditsError, credit_service
 from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderAdapter, ProviderFacade, VendorResponse
 from src.providers.seo_data.service import seo_data
@@ -106,14 +107,14 @@ async def test_facade_refuses_without_credits(client, email):
     facade = ThingFacade([stable])
     caller = Caller(user_id=user_id)
     async with unit_of_work() as db:
-        await credits.grant(db, user_id, credits.GrantRequest(amount_usd=0.000001))
+        await credit_service.grant(db, user_id, GrantRequest(amount_usd=0.000001))
         await db.execute(
             __import__("sqlalchemy").text(
                 "update credit_account set balance_micros = 0 where user_id = :u"
             ),
             {"u": user_id},
         )
-    with pytest.raises(credits.InsufficientCreditsError):
+    with pytest.raises(InsufficientCreditsError):
         async with unit_of_work() as db:
             await facade.get(db, caller, "b")
     assert stable.calls == 0

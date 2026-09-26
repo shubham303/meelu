@@ -152,6 +152,13 @@ class SiteAgentUpdateRequest(SiteUpdateRequest):
         return data
 
 
+class SiteRef(EntityModel):
+    id: str
+    user_id: str
+    domain: str
+    status: str
+
+
 class SiteRecord(EntityModel):
     id: str
     user_id: str

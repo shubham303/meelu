@@ -188,6 +188,41 @@ class CompetitorUpdateRequest(RequestModel):
         return None if value is None else fields.brand_terms(value)
 
 
+class SerpSnapshotRecord(EntityModel):
+    id: str
+    keyword_id: str
+    device: str
+    fetched_at: JsDateTime
+    features: list[str]
+
+
+class SerpResultRecord(EntityModel):
+    id: str
+    snapshot_id: str
+    rank: int
+    domain: str
+    url: str
+    title: str | None
+    description: str | None
+    is_ours: bool
+
+
+class CompetitorKeywordRecord(EntityModel):
+    id: str
+    competitor_id: str
+    keyword_id: str
+    position: int | None
+    url: str | None
+    etv: float | None
+    fetched_at: JsDateTime | None
+
+
+class KeywordVector(EntityModel):
+    id: str
+    keyword: str
+    embedding: list[float]
+
+
 class PageSuggestionRecord(EntityModel):
     id: str
     job_id: str

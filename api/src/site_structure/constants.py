@@ -10,6 +10,10 @@ LINK_ACTIONS = ("create", "delete", "edit")
 
 PILLAR_ACTIONS = ("create", "expand")
 
+SUGGESTION_SORTS = ("score", "searchScore", "confidence", "createdAt", "updatedAt")
+
+SORT_ORDERS = ("asc", "desc")
+
 SCREEN_CONFIDENCE = 0.8
 
 HIERARCHY_TYPES = ("hub", "utility")

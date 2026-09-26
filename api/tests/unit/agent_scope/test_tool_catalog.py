@@ -11,7 +11,7 @@ import src.technical_seo.tools  # noqa: F401
 from src.agent import server
 from src.agent_scope.lib import SiteRef
 from src.agent_scope.registry import AGENT_SCOPES
-from src.agent_scope.service import scope_response
+from src.agent_scope.service import agent_scope_service
 from src.core.orm import Base
 
 SITE = SiteRef(id="site_test_0001", name="Acme", domain="acme.example")
@@ -82,7 +82,7 @@ def test_only_the_shared_reads_are_untagged():
 
 
 def test_provider_tools_hide_until_the_scope_lists_their_domain():
-    body = scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
+    body = agent_scope_service.scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
     assert "seo_serp_snapshot" not in allowed_for({"pages"}, body.writes)
     assert "seo_serp_snapshot" in allowed_for({"pages"}, body.writes, {"seo-data"})
 
@@ -96,14 +96,22 @@ def test_untagged_writes_are_only_the_note_tools():
     assert untagged == {"save_note", "update_note", "delete_note"}
 
 
-def test_pages_desk_sees_seven_tools():
-    body = scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
+def test_pages_desk_sees_eight_tools():
+    body = agent_scope_service.scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
     allowed = allowed_for({"pages"}, body.writes)
-    assert allowed == SHARED_READS | {"search_page", "save_note", "update_note", "delete_note"}
+    assert allowed == SHARED_READS | {
+        "search_page",
+        "set_page_type",
+        "save_note",
+        "update_note",
+        "delete_note",
+    }
 
 
 def test_loading_the_analytics_desk_adds_the_engine():
-    body = scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE, "analytics")
+    body = agent_scope_service.scope_response(
+        "ask-pages", AGENT_SCOPES["ask-pages"], SITE, "analytics"
+    )
     allowed = allowed_for({"pages", "analytics"}, body.writes)
     assert "cluster" in allowed
     assert "forecast" in allowed
@@ -113,7 +121,7 @@ def test_loading_the_analytics_desk_adds_the_engine():
 def test_every_write_in_a_scope_is_a_registered_write():
     cat = catalog()
     for action, scope in AGENT_SCOPES.items():
-        body = scope_response(action, scope, None if scope.is_global else SITE)
+        body = agent_scope_service.scope_response(action, scope, None if scope.is_global else SITE)
         for w in body.writes:
             assert w in cat, (action, w)
             assert cat[w]["meelu/writes"] is True, (action, w)
@@ -134,7 +142,7 @@ def test_prompts_name_only_tools_the_desk_can_call():
     cat = catalog()
     schema = schema_words()
     for action, scope in AGENT_SCOPES.items():
-        body = scope_response(action, scope, None if scope.is_global else SITE)
+        body = agent_scope_service.scope_response(action, scope, None if scope.is_global else SITE)
         external = {t for tpl in body.mcp_servers.values() for t in (tpl.get("tools") or [])}
         allowed = allowed_for({scope.desk}, body.writes) | external | {"add_desk"}
         for token in set(TOKEN.findall(body.system_prompt)):
