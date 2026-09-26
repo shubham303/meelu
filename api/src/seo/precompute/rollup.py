@@ -6,14 +6,12 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.seo.constants import CTR_MIN_SAMPLE, IMPRESSIONS_FLOOR, YEAR_DAYS
+from src.seo.keyword_gsc_pages.repository import seo_keyword_gsc_pages
+from src.seo.keywords.repository import seo_keywords
+from src.seo.page_facts.repository import seo_page_facts
 from src.seo.precompute.embed import seo_embed_service
-from src.seo.repositories import (
-    seo_keyword_gsc_pages,
-    seo_keywords,
-    seo_page_facts,
-    seo_site_states,
-)
-from src.seo.schemas import RollupResult
+from src.seo.precompute.schemas import RollupResult
+from src.seo.state.repository import seo_site_states
 from src.site_pages.llm_extraction.repository import site_page_llm_extractions
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas import SitePageRecord
@@ -44,20 +42,17 @@ def expected_ctr(curve: dict[str, float], position: float) -> float | None:
 
 
 def heading_texts(headings: list[Any]) -> list[str]:
-    return [
-        str(h["text"]) for h in headings if isinstance(h, dict) and h.get("text") is not None
-    ]
+    return [str(h["text"]) for h in headings if isinstance(h, dict) and h.get("text") is not None]
 
 
 def page_fact_values(
     page: SitePageRecord, page_type: str | None, search: PageWindowTotals | None
 ) -> dict[str, Any]:
-    live = (
-        page.status is not None and 200 <= page.status <= 299 and not page.blocked_by_robots
+    live = page.status is not None and 200 <= page.status <= 299 and not page.blocked_by_robots
+    noindex = (
+        "noindex" in (page.robots_directives or "").lower()
+        or "noindex" in (page.x_robots_tag or "").lower()
     )
-    noindex = "noindex" in (page.robots_directives or "").lower() or "noindex" in (
-        page.x_robots_tag or ""
-    ).lower()
     return {
         "page_id": page.id,
         "url": page.url,

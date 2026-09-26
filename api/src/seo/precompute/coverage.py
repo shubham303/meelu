@@ -4,16 +4,16 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.seo.clusters.repository import seo_keyword_clusters
 from src.seo.constants import CLUSTER_ATTACH_DISTANCE, CONTENT_TOP, LEXICAL_WEIGHT
-from src.seo.repositories import (
-    seo_keyword_clusters,
-    seo_keyword_content_pages,
-    seo_keyword_gsc_pages,
-    seo_keywords,
-    seo_page_facts,
-    seo_site_states,
-)
-from src.seo.schemas import KeywordGscPageRecord, KeywordVector, PageFactsRecord
+from src.seo.keyword_content_pages.repository import seo_keyword_content_pages
+from src.seo.keyword_gsc_pages.repository import seo_keyword_gsc_pages
+from src.seo.keyword_gsc_pages.schemas import KeywordGscPageRecord
+from src.seo.keywords.repository import seo_keywords
+from src.seo.keywords.schemas import KeywordVector
+from src.seo.page_facts.repository import seo_page_facts
+from src.seo.page_facts.schemas import PageFactsRecord
+from src.seo.state.repository import seo_site_states
 from src.site_pages.repositories.chunks import site_chunks
 
 

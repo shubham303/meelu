@@ -194,7 +194,7 @@ async def test_screen_review_rank(client, email, screener, monkeypatch):
     from sqlalchemy import update
 
     from src.core.database import SessionLocal
-    from src.seo.models.page_suggestion import SeoPageSuggestion
+    from src.seo.page_suggestions.model import SeoPageSuggestion
 
     async with SessionLocal() as db:
         await db.execute(

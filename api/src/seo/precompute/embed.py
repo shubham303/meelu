@@ -1,9 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.embed_worker.models import embed_model, embed_texts
+from src.seo.keywords.repository import seo_keywords
+from src.seo.keywords.schemas import KeywordVector
 from src.seo.precompute.coverage import seo_coverage_service
-from src.seo.repositories import seo_keywords
-from src.seo.schemas import KeywordVector
 
 BATCH = 300
 

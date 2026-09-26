@@ -7,16 +7,14 @@ from sklearn.cluster import AgglomerativeClustering
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import unit_of_work
+from src.seo.clusters.repository import seo_keyword_clusters
 from src.seo.constants import CLUSTER_ATTACH_DISTANCE, CLUSTER_DISTANCE, CLUSTER_MAX_KEYWORDS
+from src.seo.keyword_content_pages.repository import seo_keyword_content_pages
+from src.seo.keyword_gsc_pages.repository import seo_keyword_gsc_pages
+from src.seo.keywords.repository import seo_keywords
+from src.seo.page_facts.repository import seo_page_facts
 from src.seo.precompute.coverage import seo_coverage_service
-from src.seo.repositories import (
-    seo_keyword_clusters,
-    seo_keyword_content_pages,
-    seo_keyword_gsc_pages,
-    seo_keywords,
-    seo_page_facts,
-    seo_site_states,
-)
+from src.seo.state.repository import seo_site_states
 from src.site_pages.repositories.chunks import site_chunks
 
 EMBED_BATCH = 200

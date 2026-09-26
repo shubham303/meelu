@@ -1,5 +1,6 @@
 import src.agent.tools.core  # noqa: F401
 import src.providers.seo_data.tools  # noqa: F401
+import src.seo.export.tools  # noqa: F401
 from src.agent import server
 from src.agent_scope.analytics import ACTIONS as ANALYTICS_ACTIONS
 from src.agent_scope.content import ACTIONS as CONTENT_ACTIONS

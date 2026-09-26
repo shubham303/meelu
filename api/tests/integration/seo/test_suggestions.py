@@ -15,13 +15,13 @@ async def create(client, job_id, rows):
     from sqlalchemy import select
 
     from src.core.database import SessionLocal
-    from src.seo.suggestions import seo_suggestion_service
-    from src.seo.models.job import SeoJob
-    from src.seo.schemas import NewPageSuggestion
+    from src.seo.jobs.model import SeoJob
+    from src.seo.page_suggestions.schemas import NewPageSuggestion
+    from src.seo.page_suggestions.service import seo_page_suggestion_service
 
     async with SessionLocal() as db:
         job = (await db.execute(select(SeoJob).where(SeoJob.id == job_id))).scalar_one()
-        result = await seo_suggestion_service.create_many(
+        result = await seo_page_suggestion_service.create_many(
             db, job.user_id, job.site_id, job_id, [NewPageSuggestion(**r) for r in rows]
         )
         await db.commit()
@@ -30,7 +30,7 @@ async def create(client, job_id, rows):
 
 async def set_state(suggestion_id, state):
     from src.core.database import SessionLocal
-    from src.seo.models.page_suggestion import SeoPageSuggestion
+    from src.seo.page_suggestions.model import SeoPageSuggestion
 
     async with SessionLocal() as db:
         await db.execute(

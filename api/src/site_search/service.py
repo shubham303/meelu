@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.seo.service import seo_service
+from src.seo.precompute.service import seo_precompute_service
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas import SitePageBrief
 from src.site_search.repositories.site_page_index_status import site_page_index_statuses
@@ -280,7 +280,7 @@ class SiteSearchService:
         if updated is None:
             raise _not_found()
         if body.status == "completed":
-            await seo_service.run_rollup(db, user_id, site_id)
+            await seo_precompute_service.run_rollup(db, user_id, site_id)
         return updated
 
     async def ingest_days(

@@ -22,7 +22,7 @@ from src.crawl_jobs.schemas import (
     CrawlStatusResponse,
     CrawlTargetResponse,
 )
-from src.seo.service import seo_service
+from src.seo.precompute.service import seo_precompute_service
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.service import site_page_service
 from src.sites.repository import sites
@@ -237,7 +237,7 @@ class CrawlJobService:
 
         await sites.merge(db, user_id, target.id, self._site_patch(body))
         if status == "completed":
-            await seo_service.request_precompute(db, user_id, target.id)
+            await seo_precompute_service.request_precompute(db, user_id, target.id)
         return settled
 
     async def stop(

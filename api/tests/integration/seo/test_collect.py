@@ -177,7 +177,7 @@ async def test_collect_keywords_and_ceiling(client, email, vendor, monkeypatch):
 
     from sqlalchemy import update
 
-    from src.seo.models.job import SeoJob
+    from src.seo.jobs.model import SeoJob
 
     async with database.SessionLocal() as db:
         await db.execute(

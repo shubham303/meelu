@@ -1,28 +1,29 @@
 from src.agent_scope.ask import AskDesk, ask_prompt
 from src.agent_scope.lib import AgentScope, desk_guides, desk_tables
-from src.seo.models.competitor import SeoCompetitor, SeoCompetitorKeyword
-from src.seo.models.job import SeoJob
-from src.seo.models.keyword import SeoKeyword, SeoKeywordCluster
-from src.seo.models.keyword_pages import SeoKeywordContentPage, SeoKeywordGscPage
-from src.seo.models.page_facts import SeoPageFacts
-from src.seo.models.page_suggestion import SeoPageSuggestion, SeoPageSuggestionKeyword
-from src.seo.models.serp import SeoSerpResult, SeoSerpSnapshot
-from src.seo.models.site_state import SeoSiteState
-from src.seo.tools import (
+from src.seo.clusters.model import SeoKeywordCluster
+from src.seo.collect.tools import (
     collect_competitor_keywords,
     collect_competitors,
     collect_keywords,
     collect_serps,
-    finish_seo_job,
-    propose_cannibalisation,
-    propose_gap_pages,
-    propose_page_edits,
-    propose_topic_pages,
-    rank_page_suggestions,
-    save_page_suggestion,
-    screen_page_suggestions,
-    start_seo_job,
 )
+from src.seo.competitor_keywords.model import SeoCompetitorKeyword
+from src.seo.competitors.model import SeoCompetitor
+from src.seo.gap.tools import propose_gap_pages, propose_topic_pages
+from src.seo.generators.tools import propose_cannibalisation, propose_page_edits
+from src.seo.jobs.model import SeoJob
+from src.seo.jobs.tools import finish_seo_job, start_seo_job
+from src.seo.keyword_content_pages.model import SeoKeywordContentPage
+from src.seo.keyword_gsc_pages.model import SeoKeywordGscPage
+from src.seo.keywords.model import SeoKeyword
+from src.seo.page_facts.model import SeoPageFacts
+from src.seo.page_suggestion_keywords.model import SeoPageSuggestionKeyword
+from src.seo.page_suggestions.model import SeoPageSuggestion
+from src.seo.page_suggestions.tools import save_page_suggestion
+from src.seo.pipeline.tools import rank_page_suggestions, screen_page_suggestions
+from src.seo.serp_results.model import SeoSerpResult
+from src.seo.serp_snapshots.model import SeoSerpSnapshot
+from src.seo.state.model import SeoSiteState
 from src.sites.models.site import Site
 
 DESK = "seo"
