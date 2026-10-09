@@ -29,7 +29,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       APP_ORIGINS: ${APP_ORIGINS}
       UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
-      AUTH_JWKS_URL: http://dashboard:3000/auth/jwks
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL}
       AUTH_ISSUER: ${BETTER_AUTH_URL}
       AUTH_AUDIENCE: ${BETTER_AUTH_URL}
       DODO_PAYMENTS_API_KEY: ${DODO_PAYMENTS_API_KEY:-}
@@ -94,11 +94,11 @@ services:
     build:
       context: ../dashboard
       args:
-        MEELU_API_URL: http://api:8000
+        MEELU_API_URL: ${MEELU_API_URL}
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      MEELU_API_URL: http://api:8000
+      MEELU_API_URL: ${MEELU_API_URL}
       AUTH_DATABASE_URL: ${AUTH_DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL}
