@@ -61,32 +61,64 @@ authenticate with a workspace API key from **Dashboard → Settings** in the
 
 ## Production and test (Coolify)
 
-Prod and test run on a VPS under [Coolify](https://coolify.io), from
-`deploy/compose.yml`. That file has no Postgres, no container names and no
-published ports, so the two environments run side by side and Coolify's proxy
-handles domains and HTTPS.
+Meelu is used only through the desktop app. The servers run on one Hostinger
+VPS (`srv2048855`, `31.220.20.109`, Ubuntu 24.04) under Coolify, from
+`deploy/compose.yml`, behind Cloudflare.
 
-1. Create the VPS from Hostinger's Coolify template, or run Coolify's installer
-   on Ubuntu. Give it at least 8 GB of RAM.
-2. Add Cloudflare R2 as an S3 storage target
-   (`https://<account-id>.r2.cloudflarestorage.com`).
-3. Create one project with two environments, `production` and `test`.
-4. In each environment, add a PostgreSQL database. Set its image to
-   `paradedb/paradedb:0.25.2-pg17`, add
-   `shared_preload_libraries = 'pg_search'` to its custom configuration, and
-   schedule backups to R2.
-5. In each environment, add an application from the GitHub repo with the
-   Docker Compose build pack and compose path `/deploy/compose.yml`. Use branch
-   `main` for production and `test` for test, and turn on auto-deploy.
-6. Set the environment variables. `DATABASE_URL` is the database's internal
-   URL with the scheme changed to `postgresql+psycopg://`. `CORS_ORIGINS` and
-   `DODO_PAYMENTS_RETURN_URL` must use the environment's domain. Add the vendor
-   keys.
-7. Give `dashboard` a domain on port 3000 and `agent` a domain on port 8484.
-   The Electron app connects to the agent domain.
+| What | Production | Test |
+|---|---|---|
+| Git branch (auto-deploys on push) | `main` | `test` |
+| UI the app loads | `https://ui.meelu.tech` | `https://test-ui.meelu.tech` |
+| Agent server (MCP) | `https://agent.meelu.tech/mcp/` | `https://test-agent.meelu.tech/mcp/` |
+| Sign-in (Supabase Auth, self-hosted) | `https://auth.meelu.tech/auth/v1` | `https://test-auth.meelu.tech/auth/v1` |
+| Database | Coolify Postgres `meelu-db-production` | `meelu-db-test` |
+| Backups to R2 `meelu-db-backups` | every 6 h, kept 30 days | daily, kept 7 days |
 
-After the first scheduled backup, restore it into the test database once, to
-prove the backups work.
+The api has no public domain; the UI proxies `/api/*` to it inside the Docker
+network. A browser that opens the UI host is sent to `meelu.tech/download`.
+
+**Services in `deploy/compose.yml`:** `migrate` (one-shot Alembic), `api`,
+`agent`, `embed-worker`, `dashboard` and `auth` (the `supabase/auth` GoTrue
+image). Each environment's Postgres holds two databases: `meelu` for the app
+and `auth` for GoTrue, owned by its own `supabase_auth_admin` role, which cannot
+connect to `meelu`. Public signup is off; create accounts through GoTrue's admin
+API with a `service_role` JWT signed with that environment's `AUTH_JWT_SECRET`.
+Password-reset and confirmation emails go out through Resend from
+`noreply@meelu.tech`.
+
+**Environment variables** live on each Coolify application. Only
+`NEXT_PUBLIC_*` are build-time; every secret is runtime-only. Required:
+`DATABASE_URL`, `CORS_ORIGINS`, `APP_ORIGINS`, `DODO_PAYMENTS_BASE_URL`,
+`DODO_PAYMENTS_RETURN_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `AUTH_EXTERNAL_URL`, `AUTH_SITE_URL`,
+`AUTH_DATABASE_URL`, `AUTH_JWT_SECRET`, `RESEND_API_KEY`,
+`AGENT_ALLOWED_HOSTS`, plus the vendor keys.
+
+**Security layers:**
+- Cloudflare proxies every web host (SSL Full strict, HSTS, managed WAF, a
+  rate limit on sign-in endpoints, a rule that only lets `coolify.meelu.tech`
+  answer from India except `/webhooks/`).
+- The Hostinger firewall accepts 80/443 only from Cloudflare's IP ranges and
+  22 from anywhere (SSH is key-only). Nothing reaches the server around
+  Cloudflare.
+- Traefik redirects http to https permanently at the entrypoint
+  (`/data/coolify/proxy/docker-compose.yml`); re-add those three
+  `redirections` lines if the proxy configuration is ever reset.
+- Coolify is at `https://coolify.meelu.tech` and emails alerts (failed deploys
+  and backups, disk, unreachable server) through Resend.
+
+**Desktop app releases:** run the `App build` workflow (Actions → App build →
+flavour `prod` or `test`) or push a tag `app-v*`. It builds the macOS arm64 and
+x64 dmgs and the Windows installer, and uploads them with `SHA256SUMS.txt` to
+the R2 bucket `meelu-downloads`, served at `https://downloads.meelu.tech`
+(test builds under `/test/`). The installers are unsigned until the Apple and
+Microsoft certificates arrive.
+
+**Restoring a backup:** download the `pg-dump-all-*.gz` from R2 (or
+`/data/coolify/backups/databases/...` on the server), start a scratch
+`paradedb/paradedb:0.25.2-pg17` container with `POSTGRES_USER=meelu`, wait for
+it to finish initialising, and pipe the dump into `psql -U meelu`. Restore into
+a scratch container first and check it before touching a live database.
 
 ## Operating it
 
