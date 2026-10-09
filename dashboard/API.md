@@ -73,8 +73,9 @@ Any other key-authenticated request counts as `agent`. The desktop app sends
 
 ## Auth (`/api/auth`)
 
-Sign-in uses Supabase. The api swaps a Supabase access token for its own
-session cookie.
+Sign-in uses Better Auth, which runs inside the dashboard at `/auth/*` with its
+own database. The dashboard trades a short-lived Better Auth JWT for the api's
+session cookie; the api verifies it against the dashboard's `/auth/jwks`.
 
 | Method | Path | Purpose |
 |---|---|---|

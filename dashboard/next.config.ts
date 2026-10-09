@@ -2,15 +2,13 @@ import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin : "";
-
 const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://www.google.com https://*.gstatic.com",
   "font-src 'self' data:",
-  `connect-src 'self' ${SUPABASE}`.trim(),
+  "connect-src 'self'",
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
   "object-src 'none'",

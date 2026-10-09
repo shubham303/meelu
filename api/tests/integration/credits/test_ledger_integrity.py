@@ -54,7 +54,7 @@ async def test_concurrent_charges_keep_the_ledger_consistent(client, email):
 
     await asyncio.gather(*(charge(n) for n in range(20)))
 
-    assert await stored_balance_usd(user_id) == pytest.approx(5.0 - 0.2)
+    assert await stored_balance_usd(user_id) == pytest.approx(1.0 - 0.2)
     assert await stored_balance_usd(user_id) == pytest.approx(await ledger_sum_usd(user_id))
 
     async with unit_of_work() as db:
@@ -83,7 +83,10 @@ async def test_every_ledger_entry_explains_itself(client, email):
         assert entry["deltaUsd"] != 0
 
 
-async def test_amounts_are_exact_in_micros(client, email):
+async def test_amounts_are_exact_in_micros(client, email, monkeypatch):
+    from src.settings import settings
+
+    monkeypatch.setattr(settings, "credits_signup_grant_usd", 5.0)
     await signup(client, email)
     user_id = await user_id_of(client)
 

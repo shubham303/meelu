@@ -10,7 +10,8 @@ the embedding worker and the dashboard.
 | API          | `meelu-api:latest`               | long-running FastAPI on port 8100 (loopback)      |
 | Agent server | `meelu-agent:latest`             | long-running MCP over HTTP on port 8484 (loopback)|
 | Embed worker | `meelu-embed-worker:latest`      | long-running, chunks and embeds pages             |
-| Dashboard    | `meelu-dashboard:latest`         | long-running Next.js on port 3000, proxies /api   |
+| Auth DB      | `paradedb/paradedb:0.25.2-pg17`  | one-shot: creates the `auth` database if missing  |
+| Dashboard    | `meelu-dashboard:latest`         | long-running Next.js on port 3000, proxies /api, runs sign-in at /auth |
 
 Startup order is enforced, not hoped for: Postgres has to report healthy, then
 `migrate` has to exit 0, and only then do the api, the agent server, the
@@ -26,8 +27,23 @@ worker and the dashboard start. So the schema is never behind the code that quer
 ```bash
 cp .env.example .env
 # set POSTGRES_PASSWORD — e.g. openssl rand -base64 24
+# set BETTER_AUTH_SECRET — e.g. openssl rand -base64 32
 docker compose up -d --build
 ```
+
+Sign-in is Better Auth, inside the dashboard. Its accounts live in a separate
+`auth` database in the same Postgres; the `auth-db` one-shot creates it on every
+`up` if it is missing, and the dashboard creates its tables when it starts. To
+create it by hand instead (for `npm run dev` against the compose Postgres):
+
+```bash
+psql postgres://craftmate:$POSTGRES_PASSWORD@localhost:5434/craftmate -c 'CREATE DATABASE auth'
+```
+
+and run the dashboard with `AUTH_DATABASE_URL=postgres://craftmate:$POSTGRES_PASSWORD@localhost:5434/auth`,
+`BETTER_AUTH_SECRET=<anything long>` and `BETTER_AUTH_URL=http://localhost:3000`. The api needs
+`AUTH_JWKS_URL=http://localhost:3000/auth/jwks` and `AUTH_ISSUER` / `AUTH_AUDIENCE` set to the same
+origin. Without `RESEND_API_KEY`, `npm run dev` prints each email code to its console.
 
 The copied `.env` sets `SESSION_COOKIE_SECURE=false`. The api marks the session
 cookie Secure by default, and the local dashboard is plain `http://localhost`,
@@ -35,8 +51,8 @@ so without it the browser drops the cookie and sign-in does not stick. Keep it
 `true` (the default) anywhere that serves HTTPS. The api's `/docs` and
 `/openapi.json` are off unless `API_DOCS_ENABLED=true`.
 
-Open <http://localhost:3000>, sign up with any email and password, walk through
-onboarding. The account is provisioned with a default workspace API key, and it
+Open <http://localhost:3000>, sign up with an email and a password of at least
+12 characters, enter the emailed code, walk through onboarding. The account is provisioned with a default workspace API key, and it
 is still there after a restart — sign up once.
 
 The backend's integration tests live in `api/tests`:
@@ -70,7 +86,7 @@ VPS (`srv2048855`, `31.220.20.109`, Ubuntu 24.04) under Coolify, from
 | Git branch (auto-deploys on push) | `main` | `test` |
 | UI the app loads | `https://ui.meelu.tech` | `https://test-ui.meelu.tech` |
 | Agent server (MCP) | `https://agent.meelu.tech/mcp/` | `https://test-agent.meelu.tech/mcp/` |
-| Sign-in (Supabase Auth, self-hosted) | `https://auth.meelu.tech/auth/v1` | `https://test-auth.meelu.tech/auth/v1` |
+| Sign-in (Better Auth, inside the UI) | `https://ui.meelu.tech/auth` | `https://test-ui.meelu.tech/auth` |
 | Database | Coolify Postgres `meelu-db-production` | `meelu-db-test` |
 | Backups to R2 `meelu-db-backups` | every 6 h, kept 30 days | daily, kept 7 days |
 
@@ -78,21 +94,25 @@ The api has no public domain; the UI proxies `/api/*` to it inside the Docker
 network. A browser that opens the UI host is sent to `meelu.tech/download`.
 
 **Services in `deploy/compose.yml`:** `migrate` (one-shot Alembic), `api`,
-`agent`, `embed-worker`, `dashboard` and `auth` (the `supabase/auth` GoTrue
-image). Each environment's Postgres holds two databases: `meelu` for the app
-and `auth` for GoTrue, owned by its own `supabase_auth_admin` role, which cannot
-connect to `meelu`. Public signup is off; create accounts through GoTrue's admin
-API with a `service_role` JWT signed with that environment's `AUTH_JWT_SECRET`.
-Password-reset and confirmation emails go out through Resend from
-`noreply@meelu.tech`.
+`agent`, `embed-worker` and `dashboard`. Sign-in is Better Auth, running inside
+the dashboard at `/auth/*`: email + password, a 6-digit emailed code to confirm
+the address and to reset a password, and at most 10 accounts (`SIGNUP_CAP` in
+`dashboard/src/lib/auth-server.ts`). Each environment's Postgres holds two
+databases: `meelu` for the app and `auth` for Better Auth, owned by its own
+`auth_app` role, which has no privileges on any table in `meelu`. The dashboard creates Better
+Auth's tables in `auth` when it starts. After sign-in it trades a 5-minute
+Better Auth JWT for the api's `meelu_session` cookie; the api verifies the JWT
+against `http://dashboard:3000/auth/jwks` inside the Docker network. Codes go
+out through Resend from `noreply@meelu.tech`.
 
-**Environment variables** live on each Coolify application. Only
-`NEXT_PUBLIC_*` are build-time; every secret is runtime-only. Required:
+**Environment variables** live on each Coolify application. Nothing is
+build-time; every secret is runtime-only. Required:
 `DATABASE_URL`, `CORS_ORIGINS`, `APP_ORIGINS`, `DODO_PAYMENTS_BASE_URL`,
-`DODO_PAYMENTS_RETURN_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `AUTH_EXTERNAL_URL`, `AUTH_SITE_URL`,
-`AUTH_DATABASE_URL`, `AUTH_JWT_SECRET`, `RESEND_API_KEY`,
-`AGENT_ALLOWED_HOSTS`, plus the vendor keys.
+`DODO_PAYMENTS_RETURN_URL`, `AUTH_DATABASE_URL`
+(`postgres://auth_app:...@<db-host>:5432/auth`), `BETTER_AUTH_SECRET`,
+`BETTER_AUTH_URL` (`https://ui.meelu.tech` or `https://test-ui.meelu.tech`),
+`RESEND_API_KEY`, `AGENT_ALLOWED_HOSTS`, plus the vendor keys.
+`CREDITS_SIGNUP_GRANT_USD` defaults to 1.
 
 **Security layers:**
 - Cloudflare proxies every web host (SSL Full strict, HSTS, managed WAF, a

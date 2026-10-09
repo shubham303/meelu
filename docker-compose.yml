@@ -57,6 +57,24 @@ services:
     networks:
       - meelu
 
+  # One-shot: creates the `auth` database Better Auth keeps its users in, if it
+  # is missing. The dashboard creates the tables inside it on start.
+  auth-db:
+    image: paradedb/paradedb:0.25.2-pg17
+    container_name: meelu-auth-db
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-craftmate}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-craftmate}
+    command: ["sh", "-c", "psql -tAc \"SELECT 1 FROM pg_database WHERE datname = 'auth'\" | grep -q 1 || psql -c 'CREATE DATABASE auth'"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - meelu
+
   # One-shot: applies pending Alembic migrations and exits. Everything that
   # reads the database waits for it, so the schema is never behind the code.
   migrate:
@@ -95,14 +113,15 @@ services:
       DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
       APIFY_API_KEY: ${APIFY_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-      SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      AUTH_JWKS_URL: http://dashboard:3000/auth/jwks
+      AUTH_ISSUER: ${BETTER_AUTH_URL:-http://localhost:3000}
+      AUTH_AUDIENCE: ${BETTER_AUTH_URL:-http://localhost:3000}
       DODO_PAYMENTS_API_KEY: ${DODO_PAYMENTS_API_KEY:-}
       DODO_PAYMENTS_WEBHOOK_SECRET: ${DODO_PAYMENTS_WEBHOOK_SECRET:-}
       DODO_PAYMENTS_BASE_URL: ${DODO_PAYMENTS_BASE_URL:-https://test.dodopayments.com}
       DODO_PAYMENTS_CREDITS_PRODUCT_ID: ${DODO_PAYMENTS_CREDITS_PRODUCT_ID:-}
       DODO_PAYMENTS_RETURN_URL: ${DODO_PAYMENTS_RETURN_URL:-http://localhost:3000/dashboard}
-      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
+      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-1}
       CREDITS_SITE_DAILY_USD: ${CREDITS_SITE_DAILY_USD:-0.4}
       CREDITS_BILLING_PERIOD_HOURS: ${CREDITS_BILLING_PERIOD_HOURS:-24}
       CREDITS_BILLING_SWEEP_SECONDS: ${CREDITS_BILLING_SWEEP_SECONDS:-900}
@@ -143,7 +162,7 @@ services:
       DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
       APIFY_API_KEY: ${APIFY_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
+      CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-1}
       CREDITS_MINIMUM_BALANCE_USD: ${CREDITS_MINIMUM_BALANCE_USD:-0.2}
     volumes:
       - agentdata:/app/agent-data
@@ -162,19 +181,24 @@ services:
       context: ./dashboard
       args:
         MEELU_API_URL: ${MEELU_API_URL:-http://api:8000}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
-        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
     image: meelu-dashboard:latest
     container_name: meelu-dashboard
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      # The frontend holds no database credentials and no vendor keys — every
-      # /api path it serves is a proxy to the backend, which owns both.
+      # The frontend holds no app database credentials and no vendor keys —
+      # every /api path it serves is a proxy to the backend, which owns both.
+      # Its one database is `auth`, where Better Auth keeps sign-in accounts.
       MEELU_API_URL: ${MEELU_API_URL:-http://api:8000}
+      AUTH_DATABASE_URL: ${AUTH_DATABASE_URL:-postgres://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/auth}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
     depends_on:
       api:
         condition: service_started
+      auth-db:
+        condition: service_completed_successfully
     ports:
       # Bound to loopback by default: safe on a public VPS, still reachable at
       # http://localhost:3000 on your machine. Set DASHBOARD_BIND=0.0.0.0 to

@@ -27,8 +27,9 @@ class Settings(EnvSettings):
 
     unsplash_access_key: str = ""
 
-    supabase_url: str = ""
-    supabase_publishable_key: str = ""
+    auth_jwks_url: str = ""
+    auth_issuer: str = ""
+    auth_audience: str = ""
 
     dodo_payments_api_key: str = ""
     dodo_payments_webhook_secret: str = ""
@@ -45,7 +46,7 @@ class Settings(EnvSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
     openrouter_model: str = "deepseek/deepseek-v4.1-flash"
-    credits_signup_grant_usd: float = 5.0
+    credits_signup_grant_usd: float = 1.0
     credits_site_daily_usd: float = 0.4
     credits_minimum_balance_usd: float = 0.2
     credits_billing_period_hours: int = 24

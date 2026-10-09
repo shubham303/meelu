@@ -1,70 +1,120 @@
 "use client";
 
-import type { AuthError } from "@supabase/supabase-js";
-import { supabaseBrowser, supabaseRecovery } from "@/lib/supabase/client";
+import { createAuthClient } from "better-auth/client";
+import { emailOTPClient, jwtClient } from "better-auth/client/plugins";
+
+function buildClient() {
+  return createAuthClient({
+    baseURL: window.location.origin,
+    basePath: "/auth",
+    plugins: [emailOTPClient(), jwtClient()],
+  });
+}
+
+let client: ReturnType<typeof buildClient> | undefined;
+
+function authClient(): ReturnType<typeof buildClient> {
+  client ??= buildClient();
+  return client;
+}
 
 export interface MeeluSession {
   created: boolean;
 }
 
-export async function startMeeluSession(accessToken: string): Promise<MeeluSession> {
-  try {
-    const res = await fetch("/api/auth/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessToken }),
-    });
-    const body = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(body?.error?.message ?? "Sign in failed. Please try again.");
-    return { created: Boolean(body?.data?.created) };
-  } finally {
-    await supabaseBrowser().auth.signOut({ scope: "local" });
+export class AuthFailure extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+  ) {
+    super(message);
   }
 }
 
-function signInMessage(error: AuthError | null): string {
-  if (error?.code === "invalid_credentials") return "Wrong email or password.";
-  if (error?.code === "email_not_confirmed") return "Confirm your email address before signing in.";
-  if (error?.status === 429) return "Too many attempts. Wait a minute and try again.";
-  return "Sign in failed. Please try again.";
+interface ClientError {
+  code?: string;
+  status?: number;
+  message?: string;
+}
+
+const MESSAGES: Record<string, string> = {
+  INVALID_EMAIL_OR_PASSWORD: "Wrong email or password.",
+  EMAIL_NOT_VERIFIED: "Confirm your email address first. We sent you a new code.",
+  USER_ALREADY_EXISTS: "An account with this email already exists. Sign in instead.",
+  SIGNUPS_FULL: "Sign-ups are full right now.",
+  INVALID_EMAIL: "Enter a valid email address.",
+  PASSWORD_TOO_SHORT: "Use at least 12 characters for your password.",
+  PASSWORD_TOO_LONG: "That password is too long.",
+  INVALID_OTP: "That code is not right. Check it and try again.",
+  OTP_EXPIRED: "That code has expired. Send a new one.",
+  TOO_MANY_ATTEMPTS: "Too many wrong codes. Send a new one.",
+};
+
+function failure(error: ClientError, fallback: string): AuthFailure {
+  if (error.status === 429) {
+    return new AuthFailure("Too many attempts. Wait a minute and try again.", "RATE_LIMITED");
+  }
+  const code = error.code ?? null;
+  return new AuthFailure((code && MESSAGES[code]) || fallback, code);
+}
+
+async function startMeeluSession(accessToken: string): Promise<MeeluSession> {
+  const res = await fetch("/api/auth/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accessToken }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new AuthFailure(body?.error?.message ?? "Sign in failed. Please try again.", null);
+  return { created: Boolean(body?.data?.created) };
+}
+
+async function finishSignIn(): Promise<MeeluSession> {
+  const auth = authClient();
+  try {
+    const { data, error } = await auth.token();
+    if (error || !data?.token) throw failure(error ?? {}, "Sign in failed. Please try again.");
+    return await startMeeluSession(data.token);
+  } finally {
+    await auth.signOut().catch(() => undefined);
+  }
 }
 
 export async function signInWithPassword(email: string, password: string): Promise<MeeluSession> {
-  const { data, error } = await supabaseBrowser().auth.signInWithPassword({ email, password });
-  if (error || !data.session) throw new Error(signInMessage(error));
-  return startMeeluSession(data.session.access_token);
+  const { error } = await authClient().signIn.email({ email, password });
+  if (error) throw failure(error, "Sign in failed. Please try again.");
+  return finishSignIn();
+}
+
+export async function signUpWithPassword(name: string, email: string, password: string): Promise<void> {
+  const { error } = await authClient().signUp.email({ name: name.trim(), email, password });
+  if (error) throw failure(error, "Sign up failed. Please try again.");
+}
+
+export async function verifyEmailCode(email: string, otp: string): Promise<MeeluSession> {
+  const { error } = await authClient().emailOtp.verifyEmail({ email, otp: otp.trim() });
+  if (error) throw failure(error, "Could not check the code. Please try again.");
+  return finishSignIn();
+}
+
+export async function resendVerificationCode(email: string): Promise<void> {
+  const { error } = await authClient().emailOtp.sendVerificationOtp({ email, type: "email-verification" });
+  if (error) throw failure(error, "Could not send a new code. Please try again.");
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  const { error } = await supabaseRecovery().auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  });
-  if (error?.status === 429) throw new Error("Too many attempts. Wait a minute and try again.");
+  const { error } = await authClient().emailOtp.requestPasswordReset({ email });
+  if (error) throw failure(error, "Could not send the reset code. Please try again.");
 }
 
-export async function beginPasswordReset(
-  tokens: { accessToken: string; refreshToken: string } | null,
-): Promise<void> {
-  if (!tokens) throw new Error("This reset link has expired. Request a new one.");
-  const { error } = await supabaseRecovery().auth.setSession({
-    access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken,
-  });
-  if (error) throw new Error("This reset link has expired. Request a new one.");
-}
-
-export async function setNewPassword(password: string): Promise<MeeluSession> {
-  const recovery = supabaseRecovery();
-  const { data, error } = await recovery.auth.updateUser({ password });
-  if (error) throw new Error(error.message);
-  const session = await recovery.auth.getSession();
-  const token = session.data.session?.access_token;
-  if (!data.user || !token) throw new Error("This reset link has expired. Request a new one.");
-  try {
-    return await startMeeluSession(token);
-  } finally {
-    await recovery.auth.signOut({ scope: "local" });
-  }
+export async function resetPasswordWithCode(
+  email: string,
+  otp: string,
+  password: string,
+): Promise<MeeluSession> {
+  const { error } = await authClient().emailOtp.resetPassword({ email, otp: otp.trim(), password });
+  if (error) throw failure(error, "Could not set the new password. Please try again.");
+  return signInWithPassword(email, password);
 }
 
 export async function signOutEverywhere(): Promise<void> {

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 import uuid
@@ -89,24 +90,59 @@ def email():
     return f"user-{uuid.uuid4().hex[:12]}@example.com"
 
 
+AUTH_ORIGIN = "https://ui.test"
+AUTH_KID = "test-key"
+
+
+def _auth_keypair():
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from jwt.algorithms import OKPAlgorithm
+
+    private = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+    public = json.loads(OKPAlgorithm.to_jwk(private.public_key()))
+    return private, {**public, "kid": AUTH_KID, "alg": "EdDSA"}
+
+
+AUTH_PRIVATE_KEY, AUTH_PUBLIC_JWK = _auth_keypair()
+
+
+def mint_token(email, name="Test User", verified=True, key=None, kid=AUTH_KID, **claims):
+    import time
+
+    import jwt
+
+    now = int(time.time())
+    payload = {
+        "sub": f"ba-{email}",
+        "email": email,
+        "emailVerified": verified,
+        "name": name,
+        "iss": AUTH_ORIGIN,
+        "aud": AUTH_ORIGIN,
+        "iat": now,
+        "exp": now + 300,
+        **claims,
+    }
+    return jwt.encode(payload, key or AUTH_PRIVATE_KEY, algorithm="EdDSA", headers={"kid": kid})
+
+
 @pytest.fixture(autouse=True)
-def fake_supabase(monkeypatch):
-    from src.identity import supabase
+def better_auth_keys(monkeypatch):
+    from src.identity import better_auth
+    from src.settings import settings
 
-    async def fetch_user(access_token: str) -> supabase.SupabaseUser:
-        kind, _, rest = access_token.partition("|")
-        if kind != "test":
-            raise supabase.SupabaseAuthError("The sign-in token is invalid or expired.")
-        email, _, name = rest.partition("|")
-        return supabase.SupabaseUser(
-            id=f"sb-{email}", email=email, name=name, image=None, email_confirmed=True
-        )
+    class TestKeys(better_auth.JwksKeys):
+        async def download(self):
+            return {"keys": [AUTH_PUBLIC_JWK]}
 
-    monkeypatch.setattr(supabase, "fetch_user", fetch_user)
+    monkeypatch.setattr(settings, "auth_jwks_url", f"{AUTH_ORIGIN}/auth/jwks")
+    monkeypatch.setattr(settings, "auth_issuer", AUTH_ORIGIN)
+    monkeypatch.setattr(settings, "auth_audience", AUTH_ORIGIN)
+    monkeypatch.setattr(better_auth, "jwks", TestKeys())
 
 
 async def signup(client, email, name="Test User"):
-    r = await client.post("/api/auth/session", json={"accessToken": f"test|{email}|{name}"})
+    r = await client.post("/api/auth/session", json={"accessToken": mint_token(email, name)})
     assert r.status_code == 200, r.text
     return r
 

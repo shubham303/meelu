@@ -1,6 +1,8 @@
+import json
+
 from httpx import ASGITransport, AsyncClient
 
-from tests.conftest import signup
+from tests.conftest import mint_token, signup
 
 
 async def test_session_creates_user_once(client, email):
@@ -30,14 +32,14 @@ async def test_session_links_existing_email(client, email):
     from src.profile.repository import users
 
     async with unit_of_work() as db:
-        await users.create(db, "sb-old", email, "Old", None, True)
+        await users.create(db, "old-provider-id", email, "Old", None, True)
         await users.update(db, (await users.find_by_email(db, email)).id, {"auth_id": None})
 
     r = await signup(client, email)
     assert r.json()["data"]["created"] is False
 
     async with unit_of_work() as db:
-        assert (await users.find_by_email(db, email)).auth_id == f"sb-{email}"
+        assert (await users.find_by_email(db, email)).auth_id == f"ba-{email}"
 
 
 async def test_session_cookie_flow(client, email):
@@ -151,16 +153,10 @@ async def test_api_key_of_inactive_user_is_refused(client, email):
     assert refused.value.status_code == 401
 
 
-async def test_unconfirmed_email_cannot_sign_in(client, email, monkeypatch):
-    from src.identity import supabase
-
-    async def unconfirmed(access_token: str) -> supabase.SupabaseUser:
-        return supabase.SupabaseUser(
-            id=f"sb-{email}", email=email, name="", image=None, email_confirmed=False
-        )
-
-    monkeypatch.setattr(supabase, "fetch_user", unconfirmed)
-    r = await client.post("/api/auth/session", json={"accessToken": "anything"})
+async def test_unconfirmed_email_cannot_sign_in(client, email):
+    r = await client.post(
+        "/api/auth/session", json={"accessToken": mint_token(email, verified=False)}
+    )
     assert r.status_code == 403
     assert r.json() == {"error": {"message": "Confirm your email address before signing in."}}
 
@@ -269,17 +265,81 @@ async def test_session_rejects_empty_token(client):
     assert r.status_code == 400
 
 
-async def test_supabase_failures_map_to_401_or_503(monkeypatch):
+async def test_session_rejects_tokens_that_fail_verification(client, email):
+    import time
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    now = int(time.time())
+    rejected = [
+        mint_token(email, exp=now - 10, iat=now - 400),
+        mint_token(email, iss="https://evil.test"),
+        mint_token(email, aud="https://evil.test"),
+        mint_token(email, key=Ed25519PrivateKey.generate()),
+        mint_token(email, kid="unknown-key"),
+        mint_token(""),
+        jwt.encode(
+            {"sub": "x", "email": email}, key=None, algorithm="none", headers={"kid": "test-key"}
+        ),
+        jwt.encode(
+            {"sub": "x", "email": email}, "secret", algorithm="HS256", headers={"kid": "test-key"}
+        ),
+    ]
+    for token in rejected:
+        r = await client.post("/api/auth/session", json={"accessToken": token})
+        assert r.status_code == 401, token
+        assert r.json() == {"error": {"message": "The sign-in token is invalid or expired."}}
+
+
+async def test_unknown_kid_refreshes_the_key_set(monkeypatch, email):
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from jwt.algorithms import OKPAlgorithm
+
+    from src.identity import better_auth
+    from tests.conftest import AUTH_PUBLIC_JWK
+
+    rotated = Ed25519PrivateKey.generate()
+    rotated_jwk = {**json.loads(OKPAlgorithm.to_jwk(rotated.public_key())), "kid": "rotated"}
+    published = [AUTH_PUBLIC_JWK]
+    downloads = []
+
+    class RotatingKeys(better_auth.JwksKeys):
+        async def download(self):
+            downloads.append(1)
+            return {"keys": list(published)}
+
+    keys = RotatingKeys()
+    monkeypatch.setattr(better_auth, "jwks", keys)
+    assert (await better_auth.verify_token(mint_token(email))).email == email
+    assert (await better_auth.verify_token(mint_token(email))).email_verified is True
+    assert len(downloads) == 1
+
+    published.append(rotated_jwk)
+    monkeypatch.setattr(better_auth, "REFRESH_INTERVAL_SECONDS", 0)
+    identity = await better_auth.verify_token(mint_token(email, key=rotated, kid="rotated"))
+    assert identity.id == f"ba-{email}"
+    assert len(downloads) == 2
+
+
+async def test_jwks_outage_maps_to_503(client, monkeypatch, email):
+    from src.identity import better_auth
+
+    class DownKeys(better_auth.JwksKeys):
+        async def download(self):
+            raise better_auth.AuthUnavailableError(better_auth.UNAVAILABLE)
+
+    monkeypatch.setattr(better_auth, "jwks", DownKeys())
+    r = await client.post("/api/auth/session", json={"accessToken": mint_token(email)})
+    assert r.status_code == 503
+    assert r.json() == {"error": {"message": "Sign-in is unavailable right now. Try again."}}
+
+
+async def test_jwks_download_failures_are_unavailable(monkeypatch):
     import httpx
     import pytest
 
-    from src.identity import supabase
-    from src.settings import settings
-
-    monkeypatch.undo()
-    real = supabase.fetch_user
-    monkeypatch.setattr(settings, "supabase_url", "https://supabase.test")
-    monkeypatch.setattr(settings, "supabase_publishable_key", "anon")
+    from src.identity import better_auth
 
     original = httpx.AsyncClient
 
@@ -294,22 +354,16 @@ async def test_supabase_failures_map_to_401_or_503(monkeypatch):
     def down(request):
         raise httpx.ConnectError("refused", request=request)
 
-    cases = [
-        (lambda r: httpx.Response(401, json={"msg": "bad jwt"}), supabase.SupabaseAuthError),
-        (lambda r: httpx.Response(200, text="<html>"), supabase.SupabaseUnavailableError),
-        (lambda r: httpx.Response(502, text="bad gateway"), supabase.SupabaseUnavailableError),
-        (down, supabase.SupabaseUnavailableError),
-    ]
-    for handler, expected in cases:
+    for handler in (
+        lambda r: httpx.Response(502, text="bad gateway"),
+        lambda r: httpx.Response(200, text="<html>"),
+        down,
+    ):
         respond_with(handler)
-        with pytest.raises(expected):
-            await real("token")
+        with pytest.raises(better_auth.AuthUnavailableError):
+            await better_auth.JwksKeys().download()
 
-    def malformed(request):
-        raise httpx.LocalProtocolError("Illegal header value")
-
-    respond_with(malformed)
-    with pytest.raises(supabase.SupabaseAuthError):
-        await real("bad\ntoken")
-    with pytest.raises(supabase.SupabaseAuthError):
-        await real("   ")
+    respond_with(lambda r: httpx.Response(200, json={"keys": [{"kty": "nonsense", "kid": "x"}]}))
+    keys = better_auth.JwksKeys()
+    with pytest.raises(better_auth.AuthTokenError):
+        await keys.get("x")

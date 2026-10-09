@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.logging import get_logger
 from src.credits.service import credit_service
-from src.identity import supabase
+from src.identity import better_auth
 from src.keys.repository import api_keys, hash_key
 from src.profile.repository import access_tokens, profiles, users
 from src.profile.schemas import UserRecord
@@ -26,10 +26,10 @@ class SignIn:
 class IdentityService:
     async def sign_in(self, db: AsyncSession, access_token: str) -> SignIn:
         try:
-            identity = await supabase.fetch_user(access_token)
-        except supabase.SupabaseAuthError as e:
+            identity = await better_auth.verify_token(access_token)
+        except better_auth.AuthTokenError as e:
             raise HTTPException(401, str(e)) from e
-        except supabase.SupabaseUnavailableError as e:
+        except better_auth.AuthUnavailableError as e:
             raise HTTPException(503, str(e)) from e
 
         user, created = await self._resolve_user(db, identity)
@@ -41,9 +41,9 @@ class IdentityService:
         return SignIn(user=user, token=token, created=created)
 
     async def _resolve_user(
-        self, db: AsyncSession, identity: supabase.SupabaseUser
+        self, db: AsyncSession, identity: better_auth.AuthIdentity
     ) -> tuple[UserRecord, bool]:
-        if not identity.email_confirmed:
+        if not identity.email_verified:
             raise HTTPException(403, "Confirm your email address before signing in.")
         user = await users.find_by_auth_id(db, identity.id)
         if user is not None:
@@ -61,7 +61,7 @@ class IdentityService:
             email=identity.email,
             name=identity.name,
             image=identity.image,
-            is_verified=identity.email_confirmed,
+            is_verified=identity.email_verified,
         )
         await self._seed(db, user)
         return user, True
@@ -70,13 +70,13 @@ class IdentityService:
         self,
         db: AsyncSession,
         user: UserRecord,
-        identity: supabase.SupabaseUser,
+        identity: better_auth.AuthIdentity,
         link: bool = False,
     ) -> UserRecord:
         changes: dict = {}
         if link:
             changes["auth_id"] = identity.id
-        if identity.email_confirmed and not user.is_verified:
+        if identity.email_verified and not user.is_verified:
             changes["is_verified"] = True
         if identity.image and not user.image:
             changes["image"] = identity.image
