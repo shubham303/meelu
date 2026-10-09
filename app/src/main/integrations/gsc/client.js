@@ -184,7 +184,7 @@ export async function searchAnalyticsDay(property, day) {
   const { rows } = await querySearchAnalytics(property, {
     startDate: day,
     endDate: day,
-    dimensions: ["query", "page"],
+    dimensions: ["query", "page", "device"],
   });
   return rows;
 }

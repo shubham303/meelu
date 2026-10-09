@@ -7,7 +7,6 @@ import numpy as np
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.agent.context import tenant_names
 from src.agent.workspace import workspace_tables
 from src.core.logging import get_logger
 from src.core.pagination import PaginatedApiResponse, PaginationParams
@@ -20,14 +19,13 @@ from src.site_pages.repositories.chunks import site_chunks
 from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas import SitePageBrief
+from src.site_pages.schemas.llm_extraction import extracted_details
 from src.site_structure.constants import (
     PILLAR_COVERED,
     PILLAR_DONE_FRACTION,
     PILLAR_OVERLAP,
     PILLAR_PARTLY_COVERED,
     PILLAR_STALE_FRACTION,
-    STRUCTURAL_SHARE,
-    STRUCTURAL_TYPES,
     PillarAction,
     SuggestionState,
 )
@@ -222,10 +220,9 @@ class PillarPageSuggestionService:
         by_id = {p.id: p for p in points}
         vectors = {p.id: p.vector for p in points}
         if body.source_table:
-            _, schema = tenant_names(user_id)
             try:
                 groups = self._workspace_groups(
-                    await workspace_tables.rows(db, schema, body.source_table), body.source_table
+                    await workspace_tables.rows(user_id, body.source_table), body.source_table
                 )
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
@@ -241,13 +238,18 @@ class PillarPageSuggestionService:
         candidates = list({p for g in groups for p in g.page_ids if p in live})
         links: dict[str, set[str]] = {}
         for src, dst in await site_page_links.pairs_into(db, site_id, candidates):
-            links.setdefault(src, set()).add(dst)
+            if src not in by_id or not clustering.is_structural(by_id[src]):
+                links.setdefault(src, set()).add(dst)
         existing = await pillar_page_suggestions.member_sets(db, site_id)
         rejected_sets = [m for state, m in existing if state in REJECTED_STATES]
         open_sets = [m for state, m in existing if state not in REJECTED_STATES]
         kept: list[NewPillarPageSuggestion] = []
         for group in groups:
             members = [p for p in dict.fromkeys(group.page_ids) if p in live]
+            structural = [m for m in members if m in by_id and clustering.is_structural(by_id[m])]
+            if structural:
+                result.structural_pages += len(structural)
+                members = [m for m in members if m not in structural]
             if len(members) < body.min_size:
                 result.too_small += 1
                 continue
@@ -256,8 +258,8 @@ class PillarPageSuggestionService:
                 result.too_loose += 1
                 continue
             known = [by_id[m] for m in members if m in by_id]
-            if clustering.structural_share(known, STRUCTURAL_TYPES) > STRUCTURAL_SHARE:
-                result.structural += 1
+            if clustering.mixed_families(known):
+                result.mixed_types += 1
                 continue
             cover = clustering.coverage(members, vectors, links)
             if cover.score >= PILLAR_COVERED:
@@ -392,6 +394,7 @@ class PillarPageSuggestionService:
     ) -> list[PagePoint]:
         vectors = await site_chunks.page_vectors(db, site_id)
         types = await site_page_llm_extractions.page_types_by_page_ids(db, site_id)
+        broad = await site_page_llm_extractions.broad_page_types_by_page_ids(db, site_id)
         return [
             PagePoint(
                 id=p.id,
@@ -400,6 +403,7 @@ class PillarPageSuggestionService:
                 page_type=types.get(p.id),
                 inlinks=p.inlinks,
                 vector=np.asarray(vectors[p.id], dtype=float),
+                broad_page_type=broad.get(p.id),
             )
             for p in live_pages
             if p.id in vectors
@@ -435,9 +439,7 @@ class PillarPageSuggestionService:
         member_ids = {p for r in rows for p in r.member_page_ids}
         wanted = member_ids | {r.covering_page_id for r in rows if r.covering_page_id}
         pages = {p.id: p for p in await site_pages.list_by_ids(db, site_id, list(wanted))}
-        types = await site_page_llm_extractions.page_types_by_page_ids(
-            db, site_id, list(member_ids)
-        )
+        extracted = await site_page_llm_extractions.by_page_ids(db, site_id, list(wanted))
         items: list[PillarReviewInput] = []
         for row in rows:
             covering = pages.get(row.covering_page_id)
@@ -450,13 +452,16 @@ class PillarPageSuggestionService:
                     search_score=row.search_score,
                     covering_url=covering.url if covering else None,
                     covering_title=covering.title if covering else None,
+                    covering_details=(
+                        extracted_details(extracted.get(covering.id)) if covering else None
+                    ),
                     members=[
                         {
                             "url": pages[m].url,
                             "title": pages[m].title or "",
                             "meta_description": pages[m].meta_description or "",
                             "inlinks": pages[m].inlinks,
-                            "page_type": types.get(m),
+                            "details": extracted_details(extracted.get(m)),
                         }
                         for m in dict.fromkeys(row.member_page_ids)
                         if m in pages

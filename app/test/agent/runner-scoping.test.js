@@ -51,7 +51,7 @@ async function turn(message, sessionId, { action = "ask-pages", askPermission = 
 const PAGES_TOOLS = ["delete_note", "find_plans", "get_plan", "run_sql", "save_note", "search_page", "update_note"];
 const CONTENT_TOOLS = [...PAGES_TOOLS, "content_create_piece", "content_update_piece"].sort();
 
-test("one task does one MCP handshake across three turns, and hides the other desks' tools", async () => {
+test("one task reads the catalog once across three turns, and sends only its own desk's tools", async () => {
   llm.script.push({ text: "one" }, { text: "two" }, { text: "three" });
   const first = await turn("turn one");
   assert.equal(first.done.ok, true, first.done.error);
@@ -62,8 +62,8 @@ test("one task does one MCP handshake across three turns, and hides the other de
   assert.equal(third.done.ok, true);
 
   assert.equal(llm.requests.length, 3);
-  assert.equal(mcp.counts["tools/list"], 2, "one catalog read by the app plus one CLI handshake");
-  assert.equal(mcp.counts.initialize, 2, "one catalog read by the app plus one CLI handshake");
+  assert.equal(mcp.counts["tools/list"], 1, "the app reads the catalog once; the CLI lists the runner's server");
+  assert.equal(mcp.counts.initialize, 1, "no connection to the agent server until a tool is called");
 
   for (const req of llm.requests) {
     assert.deepEqual(meeluTools(req), PAGES_TOOLS);
@@ -96,7 +96,7 @@ test("the system prompt sent to the model is the scope prompt plus the runner bl
   assert.ok(text.length > 0);
 });
 
-test("add_desk unhides the desk's tools on the next model call without a new handshake", async () => {
+test("add_desk sends the desk's tools on the next model call without a new handshake", async () => {
   const before = { ...mcp.counts };
   llm.script.push({ tool: "mcp__desks__add_desk", input: { desk: "content" } }, { text: "after add" });
   const start = llm.requests.length;
@@ -112,7 +112,7 @@ test("add_desk unhides the desk's tools on the next model call without a new han
   const resultText = typeof result.content === "string" ? result.content : result.content.map((c) => c.text).join("");
   assert.ok(resultText.includes("BRIEF FOR CONTENT"), "the desk brief comes back as the tool result");
 
-  assert.equal(mcp.counts["tools/list"] - before["tools/list"], 1, "new task: one CLI handshake, catalog cached");
+  assert.equal(mcp.counts["tools/list"] - before["tools/list"], 0, "new task: catalog cached, no agent server listing");
   assert.equal(scopeApi.calls.at(-1).desks, "content", "scope refetched with the added desk");
   assert.equal(scopeApi.calls.length, 3);
 });
@@ -124,31 +124,31 @@ test("silent writes of an approved job skip the permission prompt", async () => 
     return "allow";
   };
   llm.script.push(
-    { tool: "mcp__meelu__start_seo_job", input: { q: "what should I do" } },
-    { tool: "mcp__meelu__screen_page_suggestions", input: { job_id: "sjob_1" } },
-    { tool: "mcp__meelu__rank_page_suggestions", input: { job_id: "sjob_1" } },
-    { tool: "mcp__meelu__rank_page_suggestions", input: { job_id: "sjob_2" } },
+    { tool: "mcp__meelu__start_structure_job", input: { q: "link related articles" } },
+    { tool: "mcp__meelu__screen_link_suggestions", input: { job_id: "sjob_1" } },
+    { tool: "mcp__meelu__rank_link_suggestions", input: { job_id: "sjob_1" } },
+    { tool: "mcp__meelu__rank_link_suggestions", input: { job_id: "sjob_2" } },
     { text: "done" },
   );
-  const res = await turn("what should I do", undefined, { action: "ask-seo", askPermission });
+  const res = await turn("link related articles", undefined, { action: "ask-site", askPermission });
   assert.equal(res.done.ok, true, res.done.error);
-  assert.deepEqual(asked, ["start_seo_job", "screen_page_suggestions", "rank_page_suggestions"]);
+  assert.deepEqual(asked, ["start_structure_job", "screen_link_suggestions", "rank_link_suggestions"]);
 });
 
 test("the local review tool judges every suggestion and returns counts, not rows", async () => {
   llm.script.push(
     {
-      tool: "mcp__review__review_page_suggestions",
+      tool: "mcp__review__review_link_suggestions",
       input: { job_id: "sjob_9", prompt: "Highest return" },
     },
     { text: "done" },
   );
   llm.judge.answer = (text) =>
     text.includes("cold brew")
-      ? '```json\n{"verdict": "llm_rejected", "reason": "too thin", "suggestion": ""}\n```'
-      : '{"verdict": "reviewed", "reason": "worth it", "suggestion": "Rewrite the intro."}';
+      ? '```json\n{"verdict": "review_rejected", "reason": "too thin"}\n```'
+      : '{"verdict": "review_approved", "reason": "worth it"}';
   const before = llm.judgeRequests.length;
-  const res = await turn("review the drafts", undefined, { action: "ask-seo" });
+  const res = await turn("review the drafts", undefined, { action: "ask-site" });
   assert.equal(res.done.ok, true, res.done.error);
 
   assert.equal(llm.judgeRequests.length - before, 2, "one model call per suggestion");
@@ -157,8 +157,8 @@ test("the local review tool judges every suggestion and returns counts, not rows
   assert.equal(scopeApi.reviewCalls[0].body.jobId, "sjob_9");
   assert.equal(scopeApi.reviewCalls[0].body.prompt, "Highest return");
   assert.deepEqual(scopeApi.reviewCalls[1].body.verdicts, [
-    { id: "sug_1", verdict: "reviewed", suggestion: "Rewrite the intro." },
-    { id: "sug_2", verdict: "llm_rejected", suggestion: "" },
+    { id: "sug_1", verdict: "review_approved" },
+    { id: "sug_2", verdict: "review_rejected" },
   ]);
 
   const toolResult = JSON.stringify(llm.requests.at(-1).messages);

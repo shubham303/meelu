@@ -18,6 +18,8 @@ from src.site_structure.links.schemas import (
     LinkSuggestionUpdateRequest,
     MentionsRequest,
     MentionsResult,
+    PairsRequest,
+    PairsResult,
     RankRequest,
     ReconcileResult,
     RemovalsRequest,
@@ -101,6 +103,17 @@ async def propose_link_removals(
     ctx: AuthContext = Depends(require_site),
 ) -> RemovalsResult:
     return await link_suggestion_service.propose_link_removals(db, ctx.user_id, ctx.site_id, body)
+
+
+@router.post("/from-table")
+async def propose_links_from_table(
+    body: PairsRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> PairsResult:
+    return await link_suggestion_service.propose_links_from_table(
+        db, ctx.user_id, ctx.site_id, body
+    )
 
 
 @router.post("/screen")

@@ -128,6 +128,9 @@ declare global {
         platforms?: string[];
       }) => Promise<{ jobId?: string; error?: string }>;
       socialSignalsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
+      socialSignalsActive?: (
+        siteId: string,
+      ) => Promise<{ jobId: string | null; stopping: boolean } | { error: string }>;
       socialSignalsPlatforms?: () => Promise<
         | { platforms: Array<{ id: string; label: string; access: "direct" | "apify"; available: boolean }> }
         | { error: string }
@@ -135,24 +138,6 @@ declare global {
       onSocialSignalsEvent?: (
         cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
       ) => () => void;
-      leadsRun?: (payload: {
-        campaignId?: string;
-      }) => Promise<{ jobId?: string; error?: string }>;
-      leadsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
-      onLeadsEvent?: (
-        cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
-      ) => () => void;
-      prospectSources?: () => Promise<
-        | {
-            sources: Array<{
-              id: string;
-              label: string;
-              access: "free" | "apify";
-              available: boolean;
-            }>;
-          }
-        | { error: string }
-      >;
     };
   }
 }
@@ -559,7 +544,7 @@ const SHEET_DEFAULT = 672;
 type ChatItem =
   | { kind: "user"; text: string; files?: string[] }
   | { kind: "assistant"; text: string }
-  | { kind: "tool"; text: string }
+  | { kind: "tool"; text: string; name?: string }
   | { kind: "chart"; html: string }
   | {
       kind: "permission";
@@ -709,6 +694,13 @@ function AgentTaskChat({
   }, [autoStart]);
 
   const push = (item: ChatItem) => setItems((prev) => [...prev, item]);
+  const showProgress = (name: string, done: number, total: number) =>
+    setItems((prev) => {
+      const text = `${name} · ${done}/${total} reviewed`;
+      const at = prev.findLastIndex((item) => item.kind === "tool" && item.name === name);
+      if (at === -1) return [...prev, { kind: "tool", name, text }];
+      return prev.map((item, i) => (i === at ? { kind: "tool", name, text } : item));
+    });
   const appendAssistant = (text: string) =>
     setItems((prev) => {
       const last = prev[prev.length - 1];
@@ -784,7 +776,14 @@ function AgentTaskChat({
       } else if (event === "text" && typeof data.text === "string") {
         appendAssistant(data.text);
       } else if (event === "tool" && typeof data.name === "string") {
-        push({ kind: "tool", text: data.name });
+        push({ kind: "tool", text: data.name, name: data.name });
+      } else if (
+        event === "progress" &&
+        typeof data.tool === "string" &&
+        typeof data.done === "number" &&
+        typeof data.total === "number"
+      ) {
+        showProgress(data.tool, data.done, data.total);
       } else if (event === "chart" && typeof data.html === "string") {
         push({ kind: "chart", html: data.html });
       } else if (event === "permission") {

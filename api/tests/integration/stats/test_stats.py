@@ -8,7 +8,7 @@ from src.site_pages.models.site_page import SitePage
 from tests.conftest import signup
 
 EMPTY = {
-    "content": {"drafts": 0, "blocked": 0},
+    "content": {"pieces": 0},
     "seo": {"pages": 0},
 }
 
@@ -21,17 +21,8 @@ async def user_id_for(email):
 
 async def seed_rows(user_id, site_id):
     async with unit_of_work() as db:
-        for status in ("draft", "draft", "draft", "blocked", "blocked"):
-            db.add(
-                ContentPiece(
-                    id=uid("cpc"),
-                    user_id=user_id,
-                    site_id=site_id,
-                    channel_key="linkedin",
-                    title="Launch",
-                    status=status,
-                )
-            )
+        for _ in range(5):
+            db.add(ContentPiece(id=uid("cpc"), user_id=user_id, site_id=site_id, title="Launch"))
         await db.flush()
 
         for i, blocked in enumerate([False, False, False, True]):
@@ -69,7 +60,7 @@ async def test_stats_rollups(client, email):
     r = await client.get("/api/v1/stats")
     assert r.status_code == 200
     assert r.json()["data"] == {
-        "content": {"drafts": 3, "blocked": 2},
+        "content": {"pieces": 5},
         "seo": {"pages": 3},
     }
 

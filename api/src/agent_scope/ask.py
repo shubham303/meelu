@@ -32,7 +32,7 @@ def ask_prompt(d: AskDesk) -> Callable[[SiteRef | None], str]:
             "## The three rules of an Ask",
             "- **A question gets an answer, then you stop.** Say what grounds it. Do no work nobody asked for.",
             "- **An instruction becomes a brief.** Before any write or bulk action, say what you will do, to how many things, and what it produces. Get a clear yes, then do exactly that shape.",
-            "- **Answer with links to rows, never the rows.** Name the pages, drafts or prospects and point at them. The work lives on the desk, not in the chat.",
+            "- **Answer with links to rows, never the rows.** Name the pages, drafts or posts and point at them. The work lives on the desk, not in the chat.",
             "",
             "## When the ask belongs to another desk",
             "Load that desk and carry on. The desks you can load sit under *Other desks* below. Loading needs no permission, so do not ask. The second rule still applies once it loads: a write gets a yes first. Refuse only what no loadable desk covers: a button or screen, or a desk not on offer. Then say in one line which desk or screen owns it and stop. No apology, no workaround. Where the rest lives:",

@@ -19,7 +19,7 @@ async def workspace(client, email):
 
 
 async def make_piece(client, **overrides):
-    body = {"title": "Untitled piece", "channelKey": "website", **overrides}
+    body = {"title": "Untitled piece", **overrides}
     r = await client.post("/api/v1/content/pieces", json=body)
     assert r.status_code == 201, r.text
     return r.json()["data"]

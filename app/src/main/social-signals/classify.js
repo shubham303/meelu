@@ -2,31 +2,28 @@ import { jsonCall } from "./llm.js";
 
 export const BATCH_SIZE = 10;
 const SNIPPET_CHARS = 600;
-const INTENTS = new Set([
-  "seeking_tool",
-  "seeking_help",
-  "complaining",
-  "recommending",
-  "praising",
-  "discussion",
-  "other",
-]);
-const SENTIMENTS = new Set(["positive", "neutral", "negative"]);
+const EXAMPLE_CHARS = 240;
 
-function system({ mode, topic, siteContext }) {
-  return `You classify social posts for a marketer doing social listening.
-The search is in ${mode === "brand" ? `brand mode: the marketer is watching for mentions of "${topic}"` : `topic mode: the marketer wants conversations about "${topic}" they could usefully join`}.
-${siteContext ? `Their product, for judging relevance:\n${siteContext}\n` : ""}
-For every numbered post, judge it on its own text. Reply with ONLY a JSON object — no prose, no code fences — of this exact shape:
-{"results":[{"i":0,"isQuestion":false,"isMention":false,"intent":"seeking_tool","sentiment":"neutral","relevance":0.0,"keepReason":"..."}]}
+function system({ line, siteContext, rejected }) {
+  const examples = rejected.length
+    ? `\nThe marketer already marked these posts found by the same line as NOT relevant. Treat posts like them as noise:\n${rejected
+        .map((r, i) => `(${i + 1}) ${r.slice(0, EXAMPLE_CHARS)}`)
+        .join("\n")}\n`
+    : "";
+  return `You check social posts for a marketer who will decide which ones to reply to.
+They described the conversations they want, in their own words:
+"${line}"
+${siteContext ? `\nTheir site, for judging fit:\n${siteContext}\n` : ""}${examples}
+For every numbered post, ask one question: does this post match what the marketer wrote, including who is posting and what that person wants? A post on the same topic by the wrong kind of person, or wanting something else, does not match. Sharing an article, a job ad, a promotion, or another meaning of the same words does not match.
 
-- i: the post's number, one result per post, every post covered.
-- isQuestion: the author is asking something.
-- isMention: the post mentions the searched topic or brand by name.
-- intent: one of seeking_tool, seeking_help, complaining, recommending, praising, discussion, other.
-- sentiment: positive, neutral or negative toward the subject.
-- relevance: 0 to 1 — how much a reply from this marketer would belong under this post. A post merely sharing an article scores low; a person asking for exactly what the product does scores high. Posts about an unrelated meaning of the same words score near 0.
-- keepReason: one plain sentence telling the marketer why this post is worth their attention. For posts below 0.4 relevance, one sentence on why it is noise.
+Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
+{"results":[{"i":0,"fits":true,"relevance":0.0,"why":"...","angle":"..."}]}
+
+- i: the post's number; one result per post, every post covered.
+- fits: true only when a reply from this site would belong under the post.
+- relevance: 0 to 1, how well it matches the line. Posts that do not fit score below 0.4.
+- why: one plain sentence telling the marketer why this post is worth their time, or for a post that does not fit, why it is noise.
+- angle: only when fits is true, two sentences on how a reply from this site would belong in that thread: what to answer first, and what not to pitch. Never write the reply itself. Empty string otherwise.
 
 Be strict: most posts pulled by keyword search are noise, and the marketer's time is spent on every post you let through.`;
 }
@@ -35,36 +32,36 @@ function batchPrompt(posts) {
   return posts
     .map((p, i) => {
       const bits = [
-        `[${i}] ${p.platform}${p.context?.subreddit ? ` r/${p.context.subreddit}` : ""} by @${p.author.handle}`,
+        `[${i}] ${p.platform}${p.context?.subreddit ? ` r/${p.context.subreddit}` : ""} by @${p.authorHandle ?? "unknown"}`,
         p.title ? `Title: ${p.title}` : "",
-        `Text: ${p.text.slice(0, SNIPPET_CHARS)}`,
+        `Text: ${(p.text ?? "").slice(0, SNIPPET_CHARS)}`,
       ];
       return bits.filter(Boolean).join("\n");
     })
     .join("\n\n");
 }
 
-export async function classifyBatch(posts, ctx, llm) {
+function unit(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : 0;
+}
+
+export async function judgeBatch(posts, ctx, llm) {
   const parsed = await jsonCall(system(ctx), batchPrompt(posts), llm);
   const byIndex = new Map();
   for (const r of Array.isArray(parsed.results) ? parsed.results : []) {
     const i = Number(r?.i);
     if (!Number.isInteger(i) || i < 0 || i >= posts.length) continue;
-    const relevance = Number(r.relevance);
+    const fits = r.fits === true;
     byIndex.set(i, {
-      classification: {
-        isQuestion: Boolean(r.isQuestion),
-        isMention: Boolean(r.isMention),
-        intent: INTENTS.has(r.intent) ? r.intent : "other",
-        sentiment: SENTIMENTS.has(r.sentiment) ? r.sentiment : "neutral",
-      },
-      relevanceScore: Number.isFinite(relevance) ? Math.min(Math.max(relevance, 0), 1) : 0,
-      keepReason: String(r.keepReason ?? "").trim() || null,
+      fits,
+      relevance: unit(r.relevance),
+      why: String(r.why ?? "").trim() || null,
+      angle: fits ? String(r.angle ?? "").trim() || null : null,
     });
   }
-  return posts.map((p, i) => {
-    const judged = byIndex.get(i);
-    if (!judged) return { ...p, relevanceScore: 0, keepReason: null };
-    return { ...p, ...judged };
-  });
+  return posts.map((p, i) => ({
+    ...p,
+    ...(byIndex.get(i) ?? { fits: false, relevance: 0, why: null, angle: null }),
+  }));
 }

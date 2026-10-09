@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   ExternalLink,
   Link2,
+  LocateFixed,
   RefreshCw,
   RotateCcw,
   Search as SearchIcon,
@@ -14,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Button, ConfirmDelete, EmptyState, Select, Spinner, Tabs, type BadgeTone } from "@/components/ui";
-import { api, useApi, usePagedApi } from "@/lib/use-api";
+import { api, usePagedApi } from "@/lib/use-api";
 import { cn, formatRelative } from "@/lib/utils";
 import {
   LINK_SUGGESTION_ACTIONS,
@@ -25,6 +28,8 @@ import {
 } from "@/lib/types";
 
 const PAGE_SIZE = 50;
+
+const FRAGMENT_WORDS = 5;
 
 type TabState = Extract<SuggestionState, "review_approved" | "user_rejected">;
 
@@ -63,16 +68,18 @@ const EMPTY_SUMMARY: SuggestionSummary = {
   userRejected: 0,
 };
 
-export function LinkSuggestions() {
+export function LinkSuggestions({
+  summary,
+  refreshSummary,
+}: {
+  summary: SuggestionSummary | null;
+  refreshSummary: () => void;
+}) {
   const [state, setState] = useState<TabState>("review_approved");
   const [action, setAction] = useState<LinkSuggestionAction | "">("");
   const [q, setQ] = useState("");
   const [needle, setNeedle] = useState("");
   const [page, setPage] = useState(1);
-
-  const { data: summary, refresh: refreshSummary } = useApi<SuggestionSummary>(
-    "/api/v1/site/structure/link-suggestions/summary",
-  );
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -126,7 +133,6 @@ export function LinkSuggestions() {
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-display text-lg text-ink">Link suggestions</h2>
           <Button
             variant="outline"
             size="sm"
@@ -292,8 +298,18 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
           <p className={cn("text-[13px] leading-relaxed text-ink", !expanded && "line-clamp-2")}>
             {row.suggestion}
           </p>
+          {row.fromChunkText ? (
+            <Passage row={row} text={row.fromChunkText} clamp={!expanded} />
+          ) : (
+            <p className="text-xs text-faint">
+              No passage pinned: {row.action === "delete" ? "find the link" : "place the link"} anywhere in the
+              body copy.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-faint">
-            {row.fromChunkHeading && <span className="truncate">in “{row.fromChunkHeading}”</span>}
+            {row.action === "delete" && row.anchor && (
+              <span className="truncate">link text “{row.anchor}”</span>
+            )}
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
           </div>
@@ -327,14 +343,6 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
           <PageLink url={row.fromUrl ?? row.fromPageId} />
           <span className="text-faint">To</span>
           <PageLink url={row.toUrl ?? row.toPageId} />
-          <span className="text-faint">Where</span>
-          <span className="text-sub">
-            {row.fromChunkHeading
-              ? `Passage ${row.fromChunkOrdinal ?? "?"} — ${row.fromChunkHeading}`
-              : row.fromChunkId
-                ? `Passage ${row.fromChunkOrdinal ?? "?"}`
-                : "No passage pinned; anywhere in the body copy."}
-          </span>
           {row.confidence !== null && row.confidence !== undefined && (
             <>
               <span className="text-faint">Screen</span>
@@ -364,6 +372,72 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
       />
     </div>
   );
+}
+
+function Passage({ row, text, clamp }: { row: LinkSuggestion; text: string; clamp: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+    }
+  };
+
+  return (
+    <div className="rounded-lg border-l-2 border-accent/60 bg-panel2/60 px-3 py-2">
+      <p className="mb-1 truncate text-[11px] text-faint">
+        {row.action === "delete" ? "The link sits in this passage" : "Add the link in this passage"}
+        {row.fromChunkHeading && <> · under “{row.fromChunkHeading}”</>}
+      </p>
+      <p className={cn("whitespace-pre-line text-xs leading-relaxed text-sub", clamp && "line-clamp-3")}>
+        <Marked text={text} mark={row.action === "delete" ? row.anchor : null} />
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]" onClick={stop} onKeyDown={stop}>
+        {row.fromUrl && (
+          <a
+            href={passageUrl(row.fromUrl, text)}
+            target="_blank"
+            rel="noreferrer"
+            title="Opens the page scrolled to this passage, highlighted (Chrome, Edge, Safari)"
+            className="inline-flex items-center gap-1 text-sub hover:text-accent"
+          >
+            <LocateFixed size={11} /> Open at passage
+          </a>
+        )}
+        <button type="button" onClick={copy} className="inline-flex items-center gap-1 text-sub hover:text-accent">
+          {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied" : "Copy passage"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Marked({ text, mark }: { text: string; mark: string | null | undefined }) {
+  const at = mark ? text.toLowerCase().indexOf(mark.toLowerCase()) : -1;
+  if (!mark || at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded bg-bad/20 px-0.5 text-ink">{text.slice(at, at + mark.length)}</mark>
+      {text.slice(at + mark.length)}
+    </>
+  );
+}
+
+function fragment(words: string[]): string {
+  return encodeURIComponent(words.join(" ")).replace(/-/g, "%2D");
+}
+
+function passageUrl(url: string, text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  const base = url.split("#")[0];
+  if (words.length === 0) return base;
+  if (words.length <= FRAGMENT_WORDS * 2) return `${base}#:~:text=${fragment(words)}`;
+  return `${base}#:~:text=${fragment(words.slice(0, FRAGMENT_WORDS))},${fragment(words.slice(-FRAGMENT_WORDS))}`;
 }
 
 function PageLink({ url }: { url: string }) {

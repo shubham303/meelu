@@ -22,16 +22,25 @@ function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
 
 export async function fetchListeningSetup(siteId, cookieHeader) {
   const opts = { siteId, cookieHeader };
-  const [config, queries, targets] = await Promise.all([
+  const [config, queries, site] = await Promise.all([
     api("/social-listening/config", opts),
     api("/social-listening/queries", opts),
-    api("/social-listening/targets", opts),
+    api(`/sites/${siteId}`, opts).catch(() => null),
   ]);
   return {
     config: config ?? {},
     queries: Array.isArray(queries) ? queries : [],
-    targets: Array.isArray(targets) ? targets : [],
+    site,
   };
+}
+
+export function siteContextOf(site) {
+  return [
+    site?.name ? `Site: ${site.name} (${site.domain ?? ""})` : "",
+    site?.summary ? `What it is: ${site.summary}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function patchQuery(siteId, queryId, patch, cookieHeader) {
@@ -57,7 +66,7 @@ export function patchRun(siteId, runId, patch, cookieHeader) {
 }
 
 export function savePosts(siteId, runId, posts, cookieHeader) {
-  if (posts.length === 0) return Promise.resolve({ inserted: 0, updated: 0 });
+  if (posts.length === 0) return Promise.resolve({ inserted: 0, known: 0, duplicates: 0 });
   return api("/social-listening/posts/bulk", {
     method: "POST",
     body: { runId, posts },
@@ -70,9 +79,9 @@ export function gatePosts(siteId, cookieHeader) {
   return api("/social-listening/posts/gate", { method: "POST", body: {}, siteId, cookieHeader });
 }
 
-export function saveClassified(siteId, posts, cookieHeader) {
-  if (posts.length === 0) return Promise.resolve({ inserted: 0, updated: 0 });
-  return api("/social-listening/posts/classified", {
+export function saveJudged(siteId, posts, cookieHeader) {
+  if (posts.length === 0) return Promise.resolve({ updated: 0 });
+  return api("/social-listening/posts/judged", {
     method: "POST",
     body: { posts },
     siteId,
@@ -94,50 +103,21 @@ export async function listMatchedPosts(siteId, cookieHeader) {
   return out;
 }
 
-export function knownPostUrls(siteId, urls, cookieHeader) {
-  if (!Array.isArray(urls) || urls.length === 0) return Promise.resolve([]);
-  return api("/social-listening/posts/known", {
-    method: "POST",
-    body: { urls },
-    siteId,
-    cookieHeader,
-  }).then((known) => (Array.isArray(known) ? known : []));
+export async function listRejectedTexts(siteId, queryId, cookieHeader, limit = 5) {
+  const rows = await api(
+    `/social-listening/posts?status=rejected&queryId=${encodeURIComponent(queryId)}&sort=newest&page=1&page_size=${limit}`,
+    { siteId, cookieHeader },
+  ).catch(() => []);
+  return (Array.isArray(rows) ? rows : [])
+    .map((r) => [r.title, r.text].filter(Boolean).join(" — "))
+    .filter(Boolean);
 }
 
-export function latestSuccessfulRun(siteId, cookieHeader) {
-  return api("/social-listening/runs?page=1&page_size=20", { siteId, cookieHeader }).then(
-    (runs) => (Array.isArray(runs) ? runs.find((r) => r?.status === "done") ?? null : null),
-  );
-}
-
-export function latestRun(siteId, cookieHeader) {
-  return api("/social-listening/runs?page=1&page_size=1", { siteId, cookieHeader }).then(
-    (runs) => (Array.isArray(runs) ? runs[0] ?? null : null),
-  );
-}
-
-function classesFor(p) {
-  const intent = p.classification?.intent;
-  const out = [];
-  if (p.classification?.isQuestion) out.push("question");
-  if (intent === "praising") out.push("praise");
-  if (intent === "complaining") out.push("complaint");
-  if (p.kind === "competitor" && ["complaining", "seeking_tool", "seeking_help"].includes(intent)) {
-    out.push("switch_opportunity");
-  }
-  if (p.kind === "brand" && ["seeking_tool", "seeking_help"].includes(intent)) {
-    out.push("feature_request");
-  }
-  return out;
-}
-
-export function toFetchedPost(p, status = "fetched", keepReason = null) {
+export function toIngestPost(p, dropReason = null) {
   return {
-    status,
-    keepReason,
     url: p.url,
     platform: p.platform,
-    kind: p.kind ?? "topic",
+    externalId: p.id != null && String(p.id) !== p.url ? String(p.id) : null,
     queryId: p.queryId ?? null,
     title: p.title ?? null,
     text: p.text ?? null,
@@ -146,38 +126,18 @@ export function toFetchedPost(p, status = "fetched", keepReason = null) {
     postedAt: p.createdAt ?? null,
     engagement: p.engagement ?? {},
     context: p.context ?? {},
-    matchedTargets: Array.isArray(p.matchedTargets) ? p.matchedTargets : [],
+    dropReason,
   };
 }
 
-export function toVerdict(p, status) {
+export function toVerdict(p, status, dropReason = null) {
   return {
     id: p.id,
     status,
-    intent: p.classification?.intent ?? null,
-    sentiment: p.classification?.sentiment ?? null,
-    isQuestion: p.classification?.isQuestion ?? null,
-    classes: classesFor(p),
-    relevance: p.relevanceScore ?? null,
+    dropReason: status === "dropped" ? dropReason : null,
+    relevance: p.relevance ?? null,
     compositeScore: p.compositeScore ?? null,
-    keepReason: p.keepReason ?? null,
-  };
-}
-
-export function fromApiPost(row) {
-  return {
-    id: row.id,
-    url: row.url,
-    platform: row.platform,
-    kind: row.kind,
-    queryId: row.queryId ?? null,
-    title: row.title ?? null,
-    text: row.text ?? "",
-    author: { handle: row.authorHandle ?? "unknown", displayName: row.authorName ?? null },
-    createdAt: row.postedAt ?? row.createdAt,
-    engagement: row.engagement ?? {},
-    context: row.context ?? {},
-    matchedTargets: row.matchedTargets ?? [],
-    similarity: row.similarity ?? null,
+    keepReason: p.why ?? null,
+    suggestedAngle: status === "to_reply" ? p.angle ?? null : null,
   };
 }

@@ -17,7 +17,6 @@ dependencies = [
     "alembic",
     "pydantic>=2",
     "pydantic-settings",
-    "pwdlib[argon2]",
     "pgvector",
     "structlog",
     "httpx",
@@ -28,6 +27,7 @@ dependencies = [
     "numpy",
     "tzdata>=2026.3",
     "apscheduler>=3.11.3",
+    "pycountry>=26.2.16",
 ]
 
 [project.optional-dependencies]

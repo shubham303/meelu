@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ids import uid
 from src.social_listening.models.query import SocialListeningQuery
-from src.social_listening.schemas import QueryEmbeddingInput, QueryResponse
+from src.social_listening.schemas import QueryEmbeddingInput
 
 
 class SocialListeningQueryRepository:
@@ -22,18 +22,6 @@ class SocialListeningQueryRepository:
             .limit(1)
         )
         return result.scalars().first()
-
-    async def list_by_ids(
-        self, db: AsyncSession, site_id: str, ids: list[str]
-    ) -> list[QueryResponse]:
-        if not ids:
-            return []
-        result = await db.execute(
-            select(SocialListeningQuery)
-            .where(SocialListeningQuery.site_id == site_id, SocialListeningQuery.id.in_(ids))
-            .order_by(SocialListeningQuery.seq.asc())
-        )
-        return [self._response(r) for r in result.scalars().all()]
 
     async def existing_texts(self, db: AsyncSession, site_id: str, texts: list[str]) -> set[str]:
         if not texts:
@@ -72,12 +60,12 @@ class SocialListeningQueryRepository:
 
     async def update(
         self, db: AsyncSession, row: SocialListeningQuery, values: dict[str, Any]
-    ) -> QueryResponse:
+    ) -> SocialListeningQuery:
         for key, value in values.items():
             setattr(row, key, value)
         row.updated_at = datetime.now(UTC)
         await db.flush()
-        return self._response(row)
+        return row
 
     async def delete(self, db: AsyncSession, row: SocialListeningQuery) -> None:
         await db.delete(row)
@@ -148,27 +136,13 @@ class SocialListeningQueryRepository:
         )
         await db.flush()
 
-    async def list(self, db: AsyncSession, site_id: str) -> list[QueryResponse]:
+    async def list(self, db: AsyncSession, site_id: str) -> list[SocialListeningQuery]:
         result = await db.execute(
             select(SocialListeningQuery)
             .where(SocialListeningQuery.site_id == site_id)
             .order_by(SocialListeningQuery.seq.asc())
         )
-        return [self._response(r) for r in result.scalars().all()]
-
-    def _response(self, row: SocialListeningQuery) -> QueryResponse:
-        return QueryResponse(
-            id=row.id,
-            site_id=row.site_id,
-            text=row.text,
-            enabled=row.enabled,
-            source=row.source,
-            keywords=row.keywords,
-            negative_keywords=row.negative_keywords,
-            embedded=row.embedding is not None,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
+        return list(result.scalars().all())
 
 
 social_listening_queries = SocialListeningQueryRepository()

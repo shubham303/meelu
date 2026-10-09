@@ -415,3 +415,23 @@ async def test_list_filters(client, site):
     assert r.json() == {
         "error": {"message": "sort: Input should be 'created', 'started', 'finished' or 'fetched'"}
     }
+
+
+async def test_settled_frontier_seeds_the_next_plan(client, site):
+    r = await open_crawl(client)
+    job_id = r.json()["data"]["job"]["id"]
+    r = await client.patch(
+        f"/api/v1/site/crawl-jobs/{job_id}",
+        json={
+            "status": "completed",
+            "frontier": ["https://jobs.example.com/b", "https://jobs.example.com/a"],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    r = await open_crawl(client)
+    assert r.status_code == 202, r.text
+    assert r.json()["data"]["plan"]["linkFrontier"] == [
+        "https://jobs.example.com/a",
+        "https://jobs.example.com/b",
+    ]

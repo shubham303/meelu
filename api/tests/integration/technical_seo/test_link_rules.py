@@ -63,7 +63,16 @@ async def test_link_rules_read_the_edge_table(client, email):
         sitemap_url_count=1,
         sitemap_at_root=True,
     )
-    r = await client.post("/api/v1/site/pages", json={"pages": pages()})
+    crawled = pages()
+    r = await client.post(
+        "/api/v1/site/pages",
+        json={"pages": [{k: v for k, v in p.items() if k != "links"} for p in crawled]},
+    )
+    assert r.status_code == 200, r.text
+    r = await client.post(
+        "/api/v1/site/pages/links",
+        json={"pages": [{"url": p["url"], "links": p["links"]} for p in crawled]},
+    )
     assert r.status_code == 200, r.text
     r = await client.post("/api/v1/site/pages/graph", json={})
     assert r.status_code == 200, r.text

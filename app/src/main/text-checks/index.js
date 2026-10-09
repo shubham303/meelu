@@ -1,6 +1,6 @@
 import { checkReadability } from "@meelu/readability";
 import { checkAiDetect } from "./ai-detect.js";
-import { checkChannelRules } from "./channel-rules.js";
+import { checkPageRules } from "./page-rules.js";
 import { checkSimilarity } from "./similarity.js";
 
 const CHECKS = {
@@ -13,12 +13,12 @@ const CHECKS = {
   },
   similarity: checkSimilarity,
   ai_detector: checkAiDetect,
-  channel_rules: checkChannelRules,
+  page_rules: checkPageRules,
 };
 
 export const AVAILABLE_CHECKS = Object.keys(CHECKS);
 
-export async function runTextChecks({ text, tools, siteId, excludePageIds, excludeUrls, channelKey, hasMedia } = {}, { cookieHeader = "", modelDir = null } = {}) {
+export async function runTextChecks({ text, tools, siteId, excludePageIds, excludeUrls } = {}, { cookieHeader = "", modelDir = null } = {}) {
   const body = typeof text === "string" ? text : "";
   const wanted = Array.isArray(tools) && tools.length ? tools : AVAILABLE_CHECKS;
   const unknown = wanted.filter((t) => !CHECKS[t]);
@@ -27,8 +27,6 @@ export async function runTextChecks({ text, tools, siteId, excludePageIds, exclu
     siteId,
     cookieHeader,
     modelDir,
-    channelKey: typeof channelKey === "string" ? channelKey : null,
-    hasMedia: !!hasMedia,
     excludePageIds: Array.isArray(excludePageIds) ? excludePageIds : [],
     excludeUrls: Array.isArray(excludeUrls) ? excludeUrls : [],
   };

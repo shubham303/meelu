@@ -5,11 +5,16 @@ from src.providers.registry import ProviderAdapter, VendorResponse
 SEO_CAPABILITIES = frozenset(
     {
         "keywords.overview",
+        "keywords.history",
         "keywords.ideas",
+        "keywords.suggestions",
+        "keywords.related",
+        "backlinks.pages_summary",
         "keywords.trends",
         "domains.ranked_keywords",
         "domains.competitors",
-        "domains.overview",
+        "backlinks.domain_intersection",
+        "serp.history",
         "domains.relevant_pages",
         "serp.organic",
         "serp.competitors",
@@ -22,41 +27,57 @@ DEFAULT_LOCALE = {"location_code": 2840, "language_code": "en"}
 
 
 class SeoDataAdapter(ProviderAdapter):
-    async def keyword_overview(self, keywords: list[str], locale: dict) -> VendorResponse:
+    def keyword_overview(self, keywords: list[str], locale: dict) -> dict:
         raise self.unsupported("keywords.overview")
 
-    async def keyword_ideas(self, seeds: list[str], locale: dict, limit: int) -> VendorResponse:
+    def keyword_history(self, keywords: list[str], locale: dict) -> dict:
+        raise self.unsupported("keywords.history")
+
+    def keyword_ideas(self, seeds: list[str], locale: dict, limit: int) -> dict:
         raise self.unsupported("keywords.ideas")
 
-    async def trends_explore(self, keywords: list[str], locale: dict) -> VendorResponse:
+    def keyword_suggestions(self, seed: str, locale: dict, limit: int) -> dict:
+        raise self.unsupported("keywords.suggestions")
+
+    def related_keywords(self, seed: str, locale: dict, limit: int) -> dict:
+        raise self.unsupported("keywords.related")
+
+    def bulk_pages_summary(self, targets: list[str]) -> dict:
+        raise self.unsupported("backlinks.pages_summary")
+
+    def trends_explore(self, keywords: list[str], locale: dict) -> dict:
         raise self.unsupported("keywords.trends")
 
-    async def ranked_keywords(
-        self, target: str, locale: dict, limit: int, filters: list | None
-    ) -> VendorResponse:
+    def ranked_keywords(self, target: str, locale: dict, limit: int, filters: list | None) -> dict:
         raise self.unsupported("domains.ranked_keywords")
 
-    async def competitors_domain(self, target: str, locale: dict, limit: int) -> VendorResponse:
+    def competitors_domain(self, target: str, locale: dict, limit: int) -> dict:
         raise self.unsupported("domains.competitors")
 
-    async def domain_rank_overview(self, target: str, locale: dict) -> VendorResponse:
-        raise self.unsupported("domains.overview")
+    def backlinks_domain_intersection(
+        self, targets: list[str], exclude_targets: list[str], limit: int
+    ) -> dict:
+        raise self.unsupported("backlinks.domain_intersection")
 
-    async def relevant_pages(self, target: str, locale: dict, limit: int) -> VendorResponse:
+    def historical_serps(self, keyword: str, locale: dict, date_from: str) -> dict:
+        raise self.unsupported("serp.history")
+
+    def relevant_pages(self, target: str, locale: dict, limit: int) -> dict:
         raise self.unsupported("domains.relevant_pages")
 
-    async def serp_organic(self, keyword: str, locale: dict, options: dict) -> VendorResponse:
+    def serp_organic(self, keyword: str, locale: dict, device: str, depth: int) -> dict:
         raise self.unsupported("serp.organic")
 
-    async def serp_competitors(
-        self, keywords: list[str], locale: dict, limit: int
-    ) -> VendorResponse:
+    def serp_competitors(self, keywords: list[str], locale: dict, limit: int) -> dict:
         raise self.unsupported("serp.competitors")
 
-    async def lighthouse(self, url: str, for_mobile: bool) -> VendorResponse:
+    def lighthouse(self, url: str, for_mobile: bool) -> dict:
         raise self.unsupported("pages.lighthouse")
 
-    async def llm_mentions(
+    def llm_mentions(
         self, targets: list[dict[str, Any]], platform: str, locale: dict, limit: int
-    ) -> VendorResponse:
+    ) -> dict:
         raise self.unsupported("llm.mentions")
+
+    async def send(self, query: dict) -> VendorResponse:
+        raise NotImplementedError

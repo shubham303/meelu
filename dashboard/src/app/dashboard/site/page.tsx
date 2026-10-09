@@ -1,15 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowRight,
-  BarChart3,
   FileText,
   Network,
-  Search as SearchIcon,
   ShieldCheck,
-  type LucideIcon,
 } from "lucide-react";
 import { PageEnter, Stagger } from "@/components/animate";
 import {
@@ -24,6 +19,7 @@ import { formatRelative } from "@/lib/utils";
 import { CrawlButton, CrawlNotes } from "./crawl-button";
 import { CrawlProgress } from "./crawl-progress";
 import { SiteRecordSection } from "./record-section";
+import { SectionCard } from "@/components/section-card";
 import { SiteAskButton } from "./site-ask";
 import { useCrawl } from "./tracked";
 import type { SiteDiscovery, SiteProfile, SiteIssueSummary } from "@/lib/types";
@@ -166,23 +162,8 @@ export default function SiteDeskPage() {
   );
 }
 
-interface SearchSummary {
-  hasData: boolean;
-  operatingBlind: boolean;
-  lastDay?: string;
-  active?: { id: string } | null;
-}
-
-interface TrafficSummary {
-  hasData: boolean;
-  lastDay: string | null;
-  active?: { id: string } | null;
-}
-
 function Sections({ pages }: { pages: number }) {
   const { data: summary } = useApi<SiteIssueSummary>("/api/v1/site/technical-seo/summary");
-  const { data: search } = useApi<SearchSummary>("/api/v1/site/search-data");
-  const { data: traffic } = useApi<TrafficSummary>("/api/v1/site/traffic");
   const { data: discovery } = useApi<SiteDiscovery>("/api/v1/site/pages/discovery");
   const blocked = (discovery?.orphans ?? 0) + (discovery?.unreachable ?? 0) + (discovery?.deep ?? 0);
   const open = (summary?.site.open ?? 0) + (summary?.pages.open ?? 0);
@@ -213,34 +194,6 @@ function Sections({ pages }: { pages: number }) {
       </SectionCard>
 
       <SectionCard
-        href="/dashboard/site/search"
-        icon={SearchIcon}
-        title="Search performance"
-        blurb="Every query Google actually sends — impressions, clicks and position, kept 16 months."
-      >
-        {search?.active && <Badge tone="accent">syncing</Badge>}
-        {search?.hasData && !search.active && (
-          <Badge tone="good">data through {search.lastDay}</Badge>
-        )}
-        {search && !search.hasData && !search.active && <Badge tone="neutral">not synced</Badge>}
-      </SectionCard>
-
-      <SectionCard
-        href="/dashboard/site/traffic"
-        icon={BarChart3}
-        title="Traffic"
-        blurb="Everything Google Analytics measures — sessions, channels, pages, events, countries, devices."
-      >
-        {traffic?.active && <Badge tone="accent">syncing</Badge>}
-        {traffic?.hasData && !traffic.active && (
-          <Badge tone="good">data through {traffic.lastDay}</Badge>
-        )}
-        {traffic && !traffic.hasData && !traffic.active && (
-          <Badge tone="neutral">not synced</Badge>
-        )}
-      </SectionCard>
-
-      <SectionCard
         href="/dashboard/site/technical-seo"
         icon={ShieldCheck}
         title="Technical SEO"
@@ -251,38 +204,6 @@ function Sections({ pages }: { pages: number }) {
       </SectionCard>
 
     </Stagger>
-  );
-}
-
-function SectionCard({
-  href,
-  icon: Icon,
-  title,
-  blurb,
-  children,
-}: {
-  href: string;
-  icon: LucideIcon;
-  title: string;
-  blurb: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <Link href={href} className="group block stagger-item">
-      <Card className="flex items-center justify-between gap-3 transition-colors hover:border-edge2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Icon size={16} className="shrink-0 text-accent" />
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-ink">{title}</p>
-            <p className="mt-0.5 truncate text-xs text-sub">{blurb}</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {children}
-          <ArrowRight size={14} className="text-faint transition-colors group-hover:text-accent" />
-        </div>
-      </Card>
-    </Link>
   );
 }
 

@@ -51,6 +51,13 @@ def link_capacity(page: PageFacts) -> int:
     return min(CAPACITY_BASE_LINKS + words // CAPACITY_WORDS_PER_LINK, CAPACITY_MAX_LINKS)
 
 
+def link_room(page: PageFacts) -> int:
+    capacity = link_capacity(page)
+    if capacity >= UNLIMITED_CAPACITY:
+        return capacity
+    return max(0, capacity - page.outlinks)
+
+
 def percentile(sorted_values: Sequence[int], value: int) -> float:
     n = len(sorted_values)
     if n == 0:

@@ -53,80 +53,8 @@ const DUPLICATES: PromptChip = {
   ].join(" "),
 };
 
-const CHANGED: PromptChip = {
-  label: "What changed in the last 90 days?",
-  prompt: [
-    "Read the measured search data and tell me what actually changed in the last 90 days — the pages and queries that gained or lost the most, with positions.",
-    "Every number should be measured, from Search Console; say plainly if the site has too few impressions for any of it to mean much.",
-    "For the biggest losers, read the page and offer one sentence on the likeliest reason.",
-  ].join(" "),
-};
-
-const STRIKING: PromptChip = {
-  label: "What is close to the top ten?",
-  prompt: [
-    "Read the striking-distance list — the queries where this site already ranks 8 to 15 with real impressions.",
-    "For each of the top few, use the inlink count the list carries to say whether the owning page needs links (it has almost none) or content (it is already well linked).",
-    "Positions are measured; do not pad the list with keywords the site does not rank for.",
-  ].join(" "),
-};
-
-const DROPPED: PromptChip = {
-  label: "Why did this page drop?",
-  prompt: [
-    "I will name a page. Read its measured search performance — the queries it receives, current window against the previous one — and its index status.",
-    "Then read the page itself and say what the numbers can support: which queries it lost, whether the position or the click-through moved, and whether the index still has it at all.",
-    "Say plainly what the data cannot tell you rather than inventing a cause.",
-  ].join(" "),
-};
-
-const INVISIBLE: PromptChip = {
-  label: "Where am I invisible?",
-  prompt: [
-    "Read the index status record and tell me which pages cannot perform at all because the index does not hold them.",
-    "A page that is crawled but not indexed is Google declining the content — say so where the bucket is large, and say what that rules out.",
-  ].join(" "),
-};
-
 export function desk(): PromptChip[] {
-  return [PROFILE, CHANGED, GAPS, BROKEN];
-}
-
-export function search(): PromptChip[] {
-  return [CHANGED, STRIKING, DROPPED, INVISIBLE];
-}
-
-export function traffic(): PromptChip[] {
-  return [
-    {
-      label: "Where does my traffic come from?",
-      prompt: [
-        "Read the measured traffic and tell me where sessions actually come from — which channels and sources carry the site, and how the mix moved against the previous period.",
-        "Say which movements are real and which are noise at this volume.",
-      ].join(" "),
-    },
-    {
-      label: "What actually converts?",
-      prompt: [
-        "Read the measured traffic and tell me which landing pages and channels produce key events, not just sessions.",
-        "Name the pages that get traffic but convert nothing, and the ones that convert well but get little traffic.",
-      ].join(" "),
-    },
-    {
-      label: "What changed and why?",
-      prompt: [
-        "Compare this period's traffic against the previous one and explain the biggest movements — which channel, landing page or country drove each change.",
-        "Distinguish a real shift from a one-day spike before drawing any conclusion.",
-      ].join(" "),
-    },
-    {
-      label: "Is organic pulling its weight?",
-      prompt: [
-        "Read the measured traffic and tell me what share Organic Search carries, how engaged those sessions are compared to other channels, and whether that share is growing.",
-        "Cross-check against the search performance record where it sharpens the answer.",
-      ].join(" "),
-    },
-  ];
+  return [PROFILE, GAPS, BROKEN];
 }
 
 export function pages(): PromptChip[] {
@@ -195,7 +123,7 @@ const LINK_ORPHANS: PromptChip = {
     "The targets are live indexable pages with zero inlinks, or a depth of four or more, that are not utility or legal pages; leave the sources unrestricted and let the search find them.",
     "A source-target pair qualifies when the target is relevant enough to earn a body link from that source, not merely any link at all.",
     "When reviewing, prefer sources that already rank or hold inlinks of their own, because a link from another orphan rescues nothing.",
-    "Also add each target's title and H1 as unlinked mentions, so passages that already name it get linked.",
+    "Also add each target's title, H1 and the key phrases in its meta description as unlinked mentions, so passages that already name it get linked.",
   ].join(" "),
 };
 
@@ -204,7 +132,7 @@ const LINK_MENTIONS: PromptChip = {
   blurb: "Turn passages that already name a page's subject into links to it.",
   prompt: [
     "Strategy: unlinked mentions. Find passages that already name a page's subject without linking to it.",
-    "The targets are money and hub pages, plus any page ranking between positions 8 and 15 in Search Console for a query with real impressions, and the phrases to look for are each target's title, its H1 and those striking-distance queries.",
+    "The targets are money and hub pages, plus any page ranking between positions 8 and 15 in Search Console for a query with real impressions, and the phrases to look for are each target's title, its H1, the short key phrases in its meta description and those striking-distance queries; phrases match word for word, so never pass the whole meta description.",
     "A mention qualifies when it refers to what the target page is actually about, rather than a homonym or a word used in passing.",
     "When reviewing, remember the anchor is the mention itself, so reject it if wrapping that phrase in a link would mislead the reader about where it goes.",
   ].join(" "),
@@ -226,20 +154,9 @@ const LINK_SKELETON: PromptChip = {
   blurb: "Home, hubs and utility pages linked the way the URL structure implies.",
   prompt: [
     "Strategy: site skeleton. Make sure the home page, the hub pages and the utility pages link to each other the way the URL structure implies.",
-    "Use the hierarchy generator for this: home to and from every hub and utility page, each parent hub to its child hubs and back, and sibling hubs to each other. Text similarity means nothing for these pages; structure is what decides.",
+    "Use the hierarchy generator for this: home to and from every utility page, and each parent hub to its child hubs and back. Text similarity means nothing for these pages; structure is what decides.",
     "A pair qualifies unless the target is a page that should not be reachable from navigation at all, such as a thank-you page, a checkout step or internal search.",
     "When reviewing, keep in mind these links usually belong in navigation or the footer, so say that in the suggestion whenever a body link would read oddly.",
-  ].join(" "),
-};
-
-const LINK_SILO: PromptChip = {
-  label: "Tighten a topic silo",
-  blurb: "Keep a section's pages linking to each other more than outward.",
-  prompt: [
-    "Strategy: silo consistency. I will name a section or topic, and the pages inside it should link to each other more than they link out.",
-    "Both the sources and the targets are the pages in that section, found by URL path or by topic cluster.",
-    "A source-target pair qualifies when the two pages cover neighbouring subtopics of the same theme, so the reader stays inside the silo.",
-    "When reviewing, prefer a link that closes a gap — a page in the section nothing else in the section links to — over another link between two pages that are already well connected.",
   ].join(" "),
 };
 
@@ -309,7 +226,7 @@ const PILLAR_QUERIES: PromptChip = {
   ].join(" "),
 };
 
-export function structure(): PromptChip[] {
+export function linkStrategies(): PromptChip[] {
   return [
     LINK_RELATED,
     LINK_MONEY,
@@ -317,12 +234,16 @@ export function structure(): PromptChip[] {
     LINK_MENTIONS,
     LINK_FRESH,
     LINK_SKELETON,
-    LINK_SILO,
     PRUNE_IRRELEVANT,
     PRUNE_OVERLINKED,
     PRUNE_WEAK_TARGETS,
-    PILLAR_CLUSTERS,
-    PILLAR_FOLDERS,
-    PILLAR_QUERIES,
   ];
+}
+
+export function pillarStrategies(): PromptChip[] {
+  return [PILLAR_CLUSTERS, PILLAR_FOLDERS, PILLAR_QUERIES];
+}
+
+export function structure(): PromptChip[] {
+  return [...linkStrategies(), ...pillarStrategies()];
 }

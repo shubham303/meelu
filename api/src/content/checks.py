@@ -1,91 +1,94 @@
 import re
+from dataclasses import dataclass
 
-from src.content.platform_seeds import PlatformSeed
 from src.content.schemas.pieces import PieceCheck
 
-LINK_RE = re.compile(r"https?://[^\s)\]>]+", re.IGNORECASE)
-HASHTAG_RE = re.compile(r"(?<![\w&])#[A-Za-z][\w]*")
+TITLE_MAX = 60
+META_MIN = 70
+META_MAX = 160
+BODY_H1_RE = re.compile(r"^#\s+\S", re.MULTILINE)
+HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s")
+IMAGE_LINE_RE = re.compile(r"^\s*!\[")
 
-BLOCK = "block"
 WARN = "warn"
 
 
-def _check(code: str, level: str, message: str) -> PieceCheck:
-    return PieceCheck(code=code, level=level, message=message)
+@dataclass(frozen=True)
+class PageFields:
+    title: str
+    h1: str
+    meta_description: str
+    target_keyword: str | None
+    body_markdown: str
 
 
-def count_links(text: str) -> int:
-    return len(LINK_RE.findall(text))
+def _check(code: str, message: str) -> PieceCheck:
+    return PieceCheck(code=code, level=WARN, message=message)
 
 
-def count_hashtags(text: str) -> int:
-    return len(HASHTAG_RE.findall(text))
+def first_paragraph(markdown: str) -> str:
+    for block in re.split(r"\n\s*\n", markdown):
+        text = block.strip()
+        if text and not HEADING_RE.match(text) and not IMAGE_LINE_RE.match(text):
+            return text
+    return ""
 
 
-def run_checks(
-    seed: PlatformSeed, body: str, *, media_count: int, site_host: str | None
-) -> list[PieceCheck]:
+def _contains(haystack: str, keyword: str) -> bool:
+    return keyword in " ".join(haystack.lower().split())
+
+
+def run_checks(page: PageFields) -> list[PieceCheck]:
     checks: list[PieceCheck] = []
-    length = len(body)
 
-    if seed.character_limit and length > seed.character_limit:
+    if len(page.title) > TITLE_MAX:
         checks.append(
             _check(
-                "character_limit",
-                BLOCK,
-                f"{seed.label} allows {seed.character_limit} characters; this is {length}. "
-                f"Cut {length - seed.character_limit}.",
+                "title_length",
+                f"Search results cut titles past about {TITLE_MAX} characters; "
+                f"this is {len(page.title)}.",
             )
         )
 
-    links = count_links(body)
-    if seed.max_links is not None and links > seed.max_links:
-        noun = "links" if seed.max_links != 1 else "link"
-        allowed = "no links" if seed.max_links == 0 else f"at most {seed.max_links} {noun}"
+    if not page.h1:
+        checks.append(_check("h1_missing", "The page has no H1."))
+
+    meta = page.meta_description
+    if not meta:
+        checks.append(_check("meta_description_missing", "The page has no meta description."))
+    elif not META_MIN <= len(meta) <= META_MAX:
         checks.append(
             _check(
-                "max_links", BLOCK, f"{seed.label} takes {allowed} in the body; this has {links}."
+                "meta_description_length",
+                f"A meta description reads best at {META_MIN}–{META_MAX} characters; "
+                f"this is {len(meta)}.",
             )
         )
 
-    hashtags = count_hashtags(body)
-    if seed.max_hashtags is not None and hashtags > seed.max_hashtags:
-        allowed = (
-            "no hashtags" if seed.max_hashtags == 0 else f"at most {seed.max_hashtags} hashtags"
-        )
+    if BODY_H1_RE.search(page.body_markdown):
         checks.append(
             _check(
-                "max_hashtags",
-                WARN,
-                f"{seed.label} works best with {allowed}; this has {hashtags}.",
+                "body_h1",
+                "The body has its own H1. The page's H1 is its own field; start the body's "
+                "headings at H2.",
             )
         )
 
-    if seed.requires_media and media_count == 0:
-        checks.append(
-            _check("requires_media", BLOCK, f"{seed.label} won't take a post without an image.")
-        )
-    if seed.max_media and media_count > seed.max_media:
-        checks.append(
-            _check(
-                "max_media",
-                BLOCK,
-                f"{seed.label} allows {seed.max_media} media items; this has {media_count}.",
-            )
-        )
-
-    if not seed.allows_promotion and site_host:
-        if site_host.lower() in body.lower():
+    keyword = page.target_keyword
+    if keyword:
+        places = {
+            "title": page.title,
+            "H1": page.h1,
+            "meta description": meta,
+            "first paragraph": first_paragraph(page.body_markdown),
+        }
+        missing = [name for name, text in places.items() if not _contains(text, keyword)]
+        if missing:
             checks.append(
                 _check(
-                    "no_promotion",
-                    BLOCK,
-                    f"{seed.label} treats links to your own site as self-promotion. Remove them.",
+                    "keyword_placement",
+                    f'The target keyword "{keyword}" is missing from the {", ".join(missing)}.',
                 )
             )
 
     return checks
-
-
-def is_blocked(checks: list[PieceCheck]) -> bool:
-    return any(c.level == BLOCK for c in checks)

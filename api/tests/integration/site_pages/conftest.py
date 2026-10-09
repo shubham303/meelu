@@ -28,7 +28,18 @@ async def save_page(client, **body):
 
 
 async def save_pages(client, items):
-    r = await client.post("/api/v1/site/pages", json={"pages": items})
+    pages = [{k: v for k, v in item.items() if k != "links"} for item in items]
+    r = await client.post("/api/v1/site/pages", json={"pages": pages})
+    assert r.status_code == 200, r.text
+    saved = r.json()["data"]
+    outlinks = [{"url": i["url"], "links": i["links"]} for i in items if "links" in i]
+    if outlinks:
+        await save_links(client, outlinks)
+    return saved
+
+
+async def save_links(client, pages):
+    r = await client.post("/api/v1/site/pages/links", json={"pages": pages})
     assert r.status_code == 200, r.text
     return r.json()["data"]
 

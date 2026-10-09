@@ -23,8 +23,8 @@ export default function DocsIndexPage() {
         <h1 className="font-display text-3xl text-ink">Docs</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sub">
           Meelu&apos;s agent server speaks MCP over HTTP. You point Claude Code, Claude Desktop,
-          Cursor or any other MCP client at it, and your assistant gains your projects,
-          prospects, posts and schedule. The pages below cover that connection, and the other
+          Cursor or any other MCP client at it, and your assistant gains your pages,
+          content, social posts and analytics. The pages below cover that connection, and the other
           servers worth having in the same conversation.
         </p>
       </header>

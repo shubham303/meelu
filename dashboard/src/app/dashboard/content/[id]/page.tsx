@@ -1,19 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
 import { ArrowLeft, Check, Copy, PanelRight, Sparkles } from "lucide-react";
-import { Badge, Button, Card, ConfirmDelete, Spinner } from "@/components/ui";
+import { Button, Card, ConfirmDelete, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
 import { cn, formatRelative } from "@/lib/utils";
-import type { SiteChannel } from "@/lib/types";
-import { STATUS_LABEL, STATUS_TONE, type ContentPiece, type PieceIssue } from "../types";
+import type { ContentPiece, PieceIssue } from "../types";
 import { ChecksPanel, CheckIcon } from "./checks-panel";
 import { buildProposal, pendingCount, resolve, type Proposal } from "./diff";
 import { Document, scrollToAnchor } from "./document";
+import { PageFields } from "./page-fields";
 import { ProposalReview } from "./proposal-review";
 import { Rail } from "./rail";
 import { useAgent } from "./use-agent";
@@ -50,8 +50,6 @@ interface ChecksBridge {
     siteId?: string;
     excludePageIds?: string[];
     excludeUrls?: string[];
-    channelKey?: string;
-    hasMedia?: boolean;
   }) => Promise<{
     results?: Record<string, CheckResult>;
     error?: string;
@@ -82,8 +80,6 @@ export default function ContentPiecePage() {
   const { data: fetched, loading, error } = useApi<ContentPiece>(`/api/v1/content/pieces/${id}`);
   const [saved, setSaved] = useState<ContentPiece | null>(null);
   const piece = saved ?? fetched;
-  const { data: channels } = useApi<SiteChannel[]>("/api/v1/content/channels");
-  const channel = channels?.find((c) => c.channelKey === piece?.channelKey);
 
   const initial = useMemo(() => (fetched ? formFrom(fetched) : null), [fetched]);
   const { form, setForm, state: saveState, error: saveError, savedAt, flush, current } = useAutosave(
@@ -98,15 +94,6 @@ export default function ContentPiecePage() {
   const [docVersion, setDocVersion] = useState(0);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const editorRef = useRef<Editor | null>(null);
-  const titleRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useLayoutEffect(() => {
-    const el = titleRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [form?.title]);
-
   const togglePanel = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
 
   const { data: issueRows, refresh: refreshIssues } = useApi<PieceIssue[]>(
@@ -124,14 +111,7 @@ export default function ContentPiecePage() {
   }, [openIssues]);
   const activeAnchor = issues.find((i) => i.id === activeIssue)?.anchorText ?? null;
 
-  const getDraft = useCallback(
-    () => ({
-      title: current()?.title ?? "",
-      body: current()?.bodyMarkdown ?? "",
-      channel: piece?.channelKey ?? "website",
-    }),
-    [current, piece?.channelKey],
-  );
+  const getDraft = useCallback(() => current(), [current]);
   const getIssues = useCallback(() => openIssuesRef.current, []);
   const agent = useAgent(id, getDraft, getIssues);
   const { launchTask, openTask, hasTask, updateTaskDraft, updateTaskHooks } = useAgentTasks();
@@ -157,9 +137,9 @@ export default function ContentPiecePage() {
     (markdown: string) => {
       setForm((f) => {
         const patch: Partial<typeof f> = { bodyMarkdown: markdown };
-        if (!f.title.trim() || f.title === "Untitled piece") {
+        if (!f.h1.trim()) {
           const heading = markdown.match(/^#\s+(.+?)\s*$/m);
-          if (heading) patch.title = heading[1].trim();
+          if (heading) patch.h1 = heading[1].trim();
         }
         return patch;
       });
@@ -180,24 +160,29 @@ export default function ContentPiecePage() {
     const fresh = await api<ContentPiece>(`/api/v1/content/pieces/${id}`);
     const live = current();
     if (!live) return;
-    if (fresh.title && fresh.title !== live.title) setForm({ title: fresh.title });
+    const fields = formFrom(fresh);
+    const changed = (["title", "h1", "metaDescription", "slug", "targetKeyword"] as const).filter(
+      (key) => fields[key] !== live[key],
+    );
+    if (changed.length > 0) setForm(Object.fromEntries(changed.map((key) => [key, fields[key]])));
     if (fresh.bodyMarkdown !== live.bodyMarkdown) {
       const proposed = propose(fresh.bodyMarkdown, "From the conversation");
       if (proposed === 0) applyMarkdown(fresh.bodyMarkdown);
     }
   }, [applyMarkdown, current, id, propose, setForm]);
 
-  const formTitle = form?.title ?? "";
-  const formBody = form?.bodyMarkdown ?? "";
-  const channelKey = piece?.channelKey ?? "website";
   const taskDraft = useMemo(
     () => ({
-      piece: `"${formTitle}" (id ${id})`,
-      channel: channelKey,
-      text: formBody ? `"""${formBody}"""` : "(empty so far)",
+      piece: `"${form?.title ?? ""}" (id ${id})`,
+      title: form?.title || "(empty)",
+      h1: form?.h1 || "(empty)",
+      metaDescription: form?.metaDescription || "(empty)",
+      slug: form?.slug || "(empty)",
+      targetKeyword: form?.targetKeyword || "(empty)",
+      text: form?.bodyMarkdown ? `"""${form.bodyMarkdown}"""` : "(empty so far)",
       openIssues: issuesDraft(openIssues),
     }),
-    [formTitle, formBody, id, channelKey, openIssues],
+    [form, id, openIssues],
   );
 
   useEffect(() => {
@@ -234,6 +219,10 @@ export default function ContentPiecePage() {
               },
             ]
           : []),
+        {
+          label: "Better keyword and links",
+          prompt: "Check the target keyword against our search data and the internal links against our crawled pages, then improve both.",
+        },
         { label: "Tighten the opening", prompt: "Tighten the opening paragraph. Keep every fact." },
         { label: "Is anything unclear?", prompt: "Is anything in this piece unclear or unsupported? Answer, don't rewrite." },
       ],
@@ -295,8 +284,6 @@ export default function ContentPiecePage() {
         text: form.bodyMarkdown,
         siteId: piece?.siteId,
         excludePageIds: piece?.sourcePageId ? [piece.sourcePageId] : [],
-        channelKey: piece?.channelKey,
-        hasMedia: !!piece && piece.mediaSource !== "none",
       });
       if (res.error) throw new Error(res.error);
       for (const [tool, result] of Object.entries(res.results ?? {})) {
@@ -357,7 +344,6 @@ export default function ContentPiecePage() {
           <span className={cn("text-xs", saveState === "error" ? "text-bad" : "text-faint")} title={saveError ?? undefined}>
             {saveLabel}
           </span>
-          <Badge tone={STATUS_TONE[piece.status]}>{STATUS_LABEL[piece.status]}</Badge>
           <Button
             variant="outline"
             size="sm"
@@ -397,21 +383,19 @@ export default function ContentPiecePage() {
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-16 py-14">
           <div className="mx-auto max-w-[680px]">
-            <textarea
-              ref={titleRef}
-              value={form.title}
-              rows={1}
-              onChange={(e) => setForm({ title: e.target.value })}
-              placeholder="Untitled piece"
-              className="w-full resize-none overflow-hidden bg-transparent font-display text-[40px] leading-[1.15] text-ink placeholder:text-faint focus:outline-none"
+            <PageFields
+              form={form}
+              onChange={setForm}
+              meta={
+                <>
+                  <span>{wordCount} words</span>
+                  <span>·</span>
+                  <span>{readingTime(wordCount)}</span>
+                  <span>·</span>
+                  <span>edited {formatRelative(piece.updatedAt)}</span>
+                </>
+              }
             />
-            <div className="mb-9 mt-3 flex flex-wrap gap-3 text-[13px] text-faint">
-              <span>{wordCount} words</span>
-              <span>·</span>
-              <span>{readingTime(wordCount)}</span>
-              <span>·</span>
-              <span>edited {formatRelative(piece.updatedAt)}</span>
-            </div>
 
             {proposal ? (
               <ProposalReview proposal={proposal} onChange={setProposal} onDone={finishProposal} />
@@ -430,7 +414,7 @@ export default function ContentPiecePage() {
           </div>
         </div>
 
-        {panel === "rail" && <Rail piece={piece} channel={channel} onDelete={() => setDeleting(true)} />}
+        {panel === "rail" && <Rail piece={piece} onDelete={() => setDeleting(true)} />}
         {panel === "checks" && (
           <ChecksPanel
             issues={issues}

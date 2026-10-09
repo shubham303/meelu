@@ -25,7 +25,8 @@ async def test_sites_create_and_list(client, email):
     assert site["sitemapUrls"] == []
     assert "userId" not in site
     assert "seq" not in site
-    assert site.get("country") is None
+    assert site["markets"] == []
+    assert site.get("language") is None
 
     r = await client.post("/api/v1/sites", json={"domain": "example.com", "name": "Dup"})
     assert r.status_code == 409
@@ -80,9 +81,19 @@ async def test_sites_by_id(client, email):
     assert r.status_code == 200
     assert r.json()["data"]["name"] == "One Renamed"
 
-    r = await client.patch(f"/api/v1/sites/{site['id']}", json={"country": "IN"})
+    r = await client.patch(
+        f"/api/v1/sites/{site['id']}", json={"markets": ["in", "UK", "in"], "language": "EN"}
+    )
     assert r.status_code == 200
-    assert r.json()["data"]["country"] == "IN"
+    assert r.json()["data"]["markets"] == ["IN", "GB"]
+    assert r.json()["data"]["language"] == "en"
+
+    r = await client.patch(f"/api/v1/sites/{site['id']}", json={"markets": ["XX"]})
+    assert r.status_code == 400
+    assert r.json()["error"]["message"] == "XX is not a two-letter country code such as US or GB."
+
+    r = await client.patch(f"/api/v1/sites/{site['id']}", json={"language": "english"})
+    assert r.status_code == 400
 
     r = await client.delete(f"/api/v1/sites/{site['id']}")
     assert r.status_code == 200
@@ -138,7 +149,7 @@ async def test_current_site_agent_patch(client, email):
     assert r.json() == {
         "error": {
             "message": "gscProperty is not part of the website record. This endpoint accepts "
-            "summary, socialLinks, country, name, domain, repoUrl, sitemapUrls."
+            "summary, socialLinks, markets, language, name, domain, repoUrl, sitemapUrls."
         }
     }
 

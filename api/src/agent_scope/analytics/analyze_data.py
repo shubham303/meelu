@@ -9,18 +9,18 @@ from src.analytics.models.analytics_reports import AnalyticsReport
 from src.analytics.models.analytics_sessions import AnalyticsSession
 from src.analytics.models.analytics_sources import AnalyticsSource
 from src.content.models.content_pieces import ContentPiece
+from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
+from src.seo.site_search.models.site_search_daily import SiteSearchDaily
+from src.seo.site_search.models.site_search_sync import SiteSearchSync
+from src.seo.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily
+from src.seo.site_traffic.models.site_traffic_events_daily import SiteTrafficEventsDaily
+from src.seo.site_traffic.models.site_traffic_geo_daily import SiteTrafficGeoDaily
+from src.seo.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
+from src.seo.site_traffic.models.site_traffic_pages_daily import SiteTrafficPagesDaily
+from src.seo.site_traffic.models.site_traffic_sync import SiteTrafficSync
+from src.seo.site_traffic.models.site_traffic_tech_daily import SiteTrafficTechDaily
+from src.seo.site_traffic.models.site_traffic_totals_daily import SiteTrafficTotalsDaily
 from src.site_pages.models.site_page import SitePage
-from src.site_search.models.site_page_index_status import SitePageIndexStatus
-from src.site_search.models.site_search_daily import SiteSearchDaily
-from src.site_search.models.site_search_sync import SiteSearchSync
-from src.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily
-from src.site_traffic.models.site_traffic_events_daily import SiteTrafficEventsDaily
-from src.site_traffic.models.site_traffic_geo_daily import SiteTrafficGeoDaily
-from src.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
-from src.site_traffic.models.site_traffic_pages_daily import SiteTrafficPagesDaily
-from src.site_traffic.models.site_traffic_sync import SiteTrafficSync
-from src.site_traffic.models.site_traffic_tech_daily import SiteTrafficTechDaily
-from src.site_traffic.models.site_traffic_totals_daily import SiteTrafficTotalsDaily
 from src.sites.models.site import Site
 from src.technical_seo.models.site_audit_run import SiteAuditRun
 from src.technical_seo.models.site_issue import SiteIssue
@@ -43,7 +43,7 @@ If the user asks to keep a dashboard, save it with analytics_save_report. Pass t
 SEGMENT_2 = """
 
 ## What you can and cannot do
-You can read anything in the Meelu workspace. Projects, prospects and posts often explain what a number means. Your Meelu writes are these four tools.
+You can read anything in the Meelu workspace. Pages, pieces and posts often explain what a number means. Your Meelu writes are these four tools.
 - analytics_update_session.
 - analytics_add_source.
 - analytics_save_report.

@@ -3,9 +3,31 @@ We have four components
 1. api : the backend (Python, FastAPI, SQLAlchemy, Alembic, uv-managed). Stores data, owns the schema, exposes the REST apis, and runs the embedding worker as its own process. The apis serve the UI; the agent does not read through them.
 2. agent server : `api/src/agent`, a second entrypoint of the same codebase (`src.agent.app`, the `agent` compose service, MCP over streamable HTTP at /mcp). It gives the agent direct SQL over Postgres (RLS-scoped, read-only on canonical tables, a per-user workspace schema for derived work), the deterministic analytics algorithms, guide prompt tools, and each desk's write tools — a desk's `tools.py` registers on the shared FastMCP instance and calls that desk's own service.
 3. dashboard : web UI (Next.js frontend only; every /api path it serves is a rewrite to api).
-4. App : electron app that renders the same dashboard.. The app also has agent harness that uses claude sdk.. the harness runs locally and connects to the agent server over HTTP.. some external mcp servers can be installed as well. Crawling, page analysis, GSC/GA fetching and the schedules run locally in the app and talk to api over HTTP. Every shared third-party data vendor (DataForSEO, Apify, and whatever comes next) lives in the api under `api/src/providers`, keyed by ONE server-side account per vendor (`DATAFORSEO_*`, `APIFY_TOKEN` in settings). One facade per domain (`seo_data`, `social_search`, `prospect_sources`) holds an ordered adapter list — primary first, fallbacks after — and the user never picks a vendor. `ProviderFacade.fetch` is the only path to a vendor: it looks the normalized request up in `provider_cache` first, otherwise walks the adapters in order, caches the response with a per-capability TTL, logs the call in `provider_call`, and charges the user's credit balance (`api/src/credits`, USD micros; the vendor's reported cost by default, `credits/pricing.py` overrides). The seo-data facade is exposed as MCP tools tagged `meelu/provider` on the agent server, which the app runner allows only when the scope lists that domain in `providers`; the social and prospect facades are REST endpoints the app's local pipelines call. GA4, GSC and mailboxes stay user-specific and stay in the app (`app/src/main/integrations`). Page classification (`api/src/site_page_llm_extraction`) runs on the server: when a crawl settles as completed, a background loop walks every page whose content hash has no fresh row and asks the `json_data_extractor` facade (OpenRouter's TypeSafe Jev decision model, `OPENROUTER_API_KEY`) a fixed set of choice questions; add a question there to extract more per page.
+4. App : electron app that renders the same dashboard.. The app also has agent harness that uses claude sdk.. the harness runs locally and connects to the agent server over HTTP.. some external mcp servers can be installed as well. Crawling, page analysis, GSC/GA fetching and the schedules run locally in the app and talk to api over HTTP. Every shared third-party data vendor (DataForSEO, Apify, and whatever comes next) lives in the api under `api/src/providers`, keyed by ONE server-side account per vendor (`DATAFORSEO_*`, `APIFY_API_KEY` in settings). One facade per domain (`seo_data`, `social_search`) holds an ordered adapter list — primary first, fallbacks after — and the user never picks a vendor. `ProviderFacade.fetch` is the only path to a vendor: it fingerprints each adapter's exact vendor query (sha256) and looks it up in `provider_cache` first, where the vendor's raw JSON response is stored, otherwise walks the adapters in order, caches the response with a per-capability TTL (keyword data and live and historical SERPs pass no TTL and are not cached; the SEO desk keeps the time series it tracks in `seo_rank_history` and `seo_volume_history`), logs the call in `provider_call`, and charges the user's credit balance (`api/src/credits`, USD micros; the vendor's reported cost by default, `credits/pricing.py` overrides). The seo-data facade is exposed as MCP tools tagged `meelu/provider` on the agent server, which the app runner allows only when the scope lists that domain in `providers`; the social facade is a REST endpoint the app's local social listening pipeline calls. GA4, GSC and mailboxes stay user-specific and stay in the app (`app/src/main/integrations`). Page classification (`api/src/site_page_llm_extraction`) runs on the server: when a crawl settles as completed, a background loop walks every page whose content hash has no fresh row and asks the `json_data_extractor` facade (a DeepSeek model through OpenRouter's chat completions endpoint, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`) a fixed set of choice questions; add a question there to extract more per page.
 dashboard and App look same. only difference is App has agentic actions.
-The Content desk writes and checks pieces only. Meelu never posts, schedules or tracks what went out; the user publishes by hand or through an external scheduler (optionally exposed to the agent as an MCP server), and the api holds only the text they wrote.
+The Content desk writes and checks web pages for the user's own site only: each piece carries a title, H1, meta description, slug, target keyword and body. There are no channels and no social posts. Meelu never publishes or tracks where a piece went; the user puts it on the site by hand. The writer loads the Site and SEO desks with `add_desk` to pick the keyword and the internal links.
+
+## Meelu suggests, the human decides
+
+Meelu is a helpful tool, not a replacement for the person using it. It does not
+try to take the human out of the loop, and it cannot: the human has judgement
+and taste that an LLM does not. Meelu's job is to observe the site and the data,
+point at what it found and explain why it matters. Deciding what to do about it
+is the human's job.
+
+A tool that tries to do everything becomes bloated and does random things. A
+tool that makes a grounded suggestion and knows its limits stays useful. For
+example, when several pages split one search query, Meelu suggests a pillar
+page, names the query and says what each existing page adds. It does not
+rewrite, retitle, merge or redirect those pages on its own. Whether to refocus
+a page, merge it or leave it alone is a call for the owner.
+
+- Every automated step ends in a suggestion the human can approve, edit or
+  reject. It never ends in a silent change to the user's site or content.
+- A suggestion carries its evidence (the data it came from, the pages
+  involved, the reason) so the human can judge it quickly.
+- Before adding a feature that acts for the user, ask whether it should only
+  suggest instead. Default to suggesting.
 
 ## Agent scoping lives in the app, not on the MCP server
 
@@ -21,15 +43,23 @@ model may add. It never lists read tools and never needs the tool catalog.
 
 The app runner (`app/src/main/agent/runner.js`) is the middleware that joins
 the two. Per task it opens ONE session with the SDK (streaming input, one CLI
-process, one MCP handshake) and keeps it alive across the user's turns. Before
-the model runs it fetches the scope, reads the tool catalog once, computes the
-allowed set (shared reads, plus reads tagged with a loaded desk, plus the
-scope's writes) and hides everything else with `disallowedTools`. `add_desk` is
-a local tool that only appends to the session's desk list; the runner notices
-the list changed, fetches the scope again, rebuilds the prompt and the hidden
-list, and continues the same session. Never add per-desk logic to the MCP
-server, never open a second MCP connection per desk, and never re-handshake
-on an ordinary turn.
+process) and keeps it alive across the user's turns. Before the model runs it
+fetches the scope, reads the tool catalog once and computes the allowed set
+(shared reads, plus reads tagged with a loaded desk, plus the scope's writes).
+The CLI never connects to the agent server: it talks to an in-process MCP
+server (`app/src/main/agent/meelu-server.js`) that lists only the allowed tools
+and forwards calls over one kept-alive connection. Hiding with `deny` or
+`disallowedTools` does not work: the CLI still sends every schema to the model.
+`add_desk` is a local tool that only appends to the session's desk list; the
+runner fetches the scope again, widens the listed set, fires `list_changed`,
+and continues the same session. Never add per-desk logic to the MCP server,
+never open a second MCP connection per desk, and never re-handshake on an
+ordinary turn.
+
+The CLI runs with `strictMcpConfig`, `ENABLE_CLAUDEAI_MCP_SERVERS=false` and
+`CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1`, so the user's own claude.ai
+connectors and the built-in Explore/Plan/general-purpose agents never reach
+the model's context.
 
 ## The agent server owns all analytics
 

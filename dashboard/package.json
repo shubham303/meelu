@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.3",
     "@tanstack/react-table": "^8.21.3",
     "@tiptap/extension-bubble-menu": "^3.31.3",
     "@tiptap/extension-image": "^3.31.3",

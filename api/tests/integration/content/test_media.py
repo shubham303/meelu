@@ -82,7 +82,6 @@ async def test_piece_can_reference_an_upload(client, workspace):
     r = await client.post(
         "/api/v1/content/pieces",
         json={
-            "channelKey": "instagram",
             "title": "Beans",
             "bodyMarkdown": "Fresh roast.",
             "mediaSource": "upload",
@@ -102,24 +101,14 @@ async def test_piece_can_reference_an_upload(client, workspace):
         json={"mediaSource": "none"},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["data"]["status"] == "blocked"
-    assert any(
-        "won't take a post without an image" in c["message"] for c in r.json()["data"]["checks"]
-    )
-
-    r = await client.patch(f"/api/v1/content/pieces/{post['id']}", json={"mediaSource": "none"})
-    assert r.status_code == 200
     cleared = r.json()["data"]
     assert cleared["mediaSource"] == "none"
     assert cleared.get("mediaUrl") is None
     assert cleared.get("mediaUploadId") is None
-    assert cleared["status"] == "blocked"
-    assert [c["code"] for c in cleared["checks"]] == ["requires_media"]
 
     r = await client.post(
         "/api/v1/content/pieces",
         json={
-            "channelKey": "instagram",
             "title": "Ghost",
             "bodyMarkdown": "Missing upload.",
             "mediaSource": "upload",

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createSdkMcpServer, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { PROVIDERS_SERVER, providersMcpServer } from "../providers/index.js";
+import { messagesEndpoint, messagesJudge } from "./messages.js";
 import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
 import { ENV_DEFAULTS, LLAMACPP_BASE_URL, OPENROUTER_BASE_URL, meeluAuthHeaders } from "../config.js";
 import { serverLimits } from "../integrations/llm/llamacpp.js";
@@ -11,6 +11,7 @@ import { modelLimits } from "../integrations/llm/openrouter.js";
 import { cachedWorkspaceKey, rememberWorkspaceKey } from "./workspace-key.js";
 import { apiFetch } from "../net.js";
 import { agentToolCatalog, allowedToolNames, forgetToolCatalog } from "./catalog.js";
+import { MEELU_SERVER, meeluMcpServer } from "./meelu-server.js";
 
 const MODEL = process.env.MEELU_AGENT_MODEL ?? "claude-haiku-4-5-20251001";
 const MAX_TURNS = 24;
@@ -34,7 +35,7 @@ const READER_MAX_TURNS = 40;
 function desksPrompt(offers) {
   if (!offers.length) return "";
   const lines = offers.map((d) => `- ${d.name}: ${d.blurb}`).join("\n");
-  return `\n\n## Other desks (load on demand)\n\nThis task loaded one desk's tools. The workspace has more:\n${lines}\n\nWhen the request needs a write or tool one of those desks owns, call \`add_desk\` with its name. Its tools are in your list from your very next call, and its tables and writes come back in the tool result, so carry on with the request in the same reply. Loading a desk needs no permission. Never send the user to that desk, and never ask whether to load it. Never load a desk just to read: you can already query every table in this prompt.`;
+  return `\n\n## Other desks (load on demand)\n\nThis task loaded one desk's tools. The workspace has more:\n${lines}\n\nWhen the request needs a write or tool one of those desks owns, call \`add_desk\` with its name. Its tools are in your list from your very next call, and its tables and writes come back in the tool result, so carry on with the request in the same reply. Loading a desk needs no permission. Never send the user to that desk, and never ask whether to load it. Load one to read as well when you need tables this prompt does not list; you can already query every table it does list.`;
 }
 
 function desksServer(offers, onAdd) {
@@ -42,7 +43,7 @@ function desksServer(offers, onAdd) {
   const names = offers.map((d) => d.name);
   const addDesk = sdkTool(
     "add_desk",
-    "Load another desk's tools when the request needs a write or tool that desk owns. They are usable from your next call; continue in the same reply.",
+    "Load another desk's tools, tables and data rules when the request needs something that desk owns. They are usable from your next call; continue in the same reply.",
     { desk: z.enum(names).describe("Desk name from the available desks list") },
     async ({ desk }) => {
       const text = await onAdd(desk);
@@ -98,11 +99,18 @@ Run in this order:
    not read body_text to choose — the generators read the passages.
 4. Generate draft suggestions with the generator that fits:
    - propose_unlinked_mentions when the strategy is about a target page that
-     other passages already talk about: give it the target page ids and the
-     phrases a passage would use for each (title, H1, queries it ranks for).
+     other passages already talk about: give it each target page id with its
+     own short phrases (title, H1, key phrases from the meta description,
+     queries it ranks for).
    - propose_hierarchy_links when the strategy is about the site's skeleton:
-     home to and from hubs and utility pages, hub to hub. Text similarity is
+     home to and from utility pages, parent hub to child hub. Text similarity is
      useless for these pages, so this tool ignores it and uses URL structure.
+   - propose_links_from_table when the strategy links one set of pages to
+     another by meaning (blog posts to services or products): write every
+     candidate pair into a workspace table with one run_sql statement
+     (from_page_id, to_page_id, reason) and hand it the table name. It keeps
+     one suggestion per pair, anchored in the closest source passage, and
+     drops pairs under the similarity floor.
    Every generator skips links that already exist, suggestions that already
    exist in any state, and source pages already at their link budget.
 5. screen_link_suggestions with the job_id. A cheap model settles every draft
@@ -463,6 +471,8 @@ export function llmEnv(gateway, anthropicKey, limits) {
   return {
     ...process.env,
     CLAUDE_AGENT_SDK_CLIENT_APP: "meelu-app/0.1.0",
+    ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+    CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
     ...(gateway
       ? {
           ANTHROPIC_BASE_URL: gateway.baseUrl,
@@ -484,6 +494,14 @@ export function llmEnv(gateway, anthropicKey, limits) {
   };
 }
 
+const JUDGE_SYSTEM = "You answer with one JSON object and nothing else.";
+
+function reviewJudge({ model, gateway, anthropicKey, limits, cwd }) {
+  const endpoint = messagesEndpoint(gateway, anthropicKey);
+  if (endpoint) return messagesJudge({ endpoint, model, system: JUDGE_SYSTEM, limits });
+  return oneShotJudge({ model, gateway, anthropicKey, limits, cwd });
+}
+
 function oneShotJudge({ model, gateway, anthropicKey, limits, cwd }) {
   return async (prompt) => {
     const q = query({
@@ -491,11 +509,12 @@ function oneShotJudge({ model, gateway, anthropicKey, limits, cwd }) {
       options: {
         model,
         cwd,
-        systemPrompt: "You answer with one JSON object and nothing else.",
+        systemPrompt: JUDGE_SYSTEM,
         mcpServers: {},
         tools: [],
         allowedTools: [],
         settingSources: [],
+        strictMcpConfig: true,
         permissionMode: "default",
         maxTurns: 1,
         env: llmEnv(gateway, anthropicKey, limits),
@@ -566,7 +585,7 @@ function resolveModel(llm) {
 
 async function buildConfig(session) {
   const { action, siteId, params, desks } = session;
-  const { cookieHeader, llm, connectors = { get: () => null }, providers = null } = session.options;
+  const { cookieHeader, llm, connectors = { get: () => null } } = session.options;
   const { gateway, model, anthropicKey } = resolveModel(llm);
 
   const [scope, apiKey] = await Promise.all([
@@ -592,8 +611,9 @@ async function buildConfig(session) {
   }
   const readOnly = isReadOnly(scope);
   const providerDomains = readOnly ? [] : (scope.providers ?? []);
-  session.catalog = catalog;
   session.access = deskAccess(catalog, [scope.desk, ...desks], writes, providerDomains, scope.silentWrites);
+  session.meeluServer?.close();
+  session.meeluServer = meeluMcpServer(ENV_DEFAULTS.agentMcpUrl, meeluHeaders, catalog, session.access.allowed);
   const readTools = [...session.access.allowed]
     .filter((n) => !writes.includes(n))
     .map((n) => `mcp__meelu__${n}`);
@@ -613,20 +633,6 @@ async function buildConfig(session) {
   } = await resolveScopeServers(scope, connectors, siteId, { readOnly });
   const extraNames = Object.keys(extraServers);
 
-  const providerServer =
-    providers && providerDomains.length > 0
-      ? providersMcpServer(providers.facades, {
-          domains: providerDomains,
-          siteId,
-          only: scope.providerTools ?? null,
-        })
-      : null;
-  const providerTools = providerServer ? providerServer.allowed : new Set();
-  const providerPrompt =
-    providerTools.size > 0
-      ? `\n\nLocal provider tools in this task: ${[...providerTools].join(", ")}. Say what you are about to do before calling one.`
-      : "";
-
   const deskOffers = scope.desks ?? [];
   const addDeskServer = desksServer(deskOffers, async (desk) => {
     if (desks.has(desk)) return `The ${desk} desk is already loaded.`;
@@ -643,7 +649,7 @@ async function buildConfig(session) {
       readOnly ? [] : (merged.providers ?? []),
       merged.silentWrites,
     );
-    await session.q.applyFlagSettings({ permissions: { deny: session.access.hidden } });
+    await session.meeluServer.show(session.access.allowed);
     return offer?.brief ?? `The ${desk} desk is loaded.`;
   });
 
@@ -657,7 +663,8 @@ async function buildConfig(session) {
   const reviewServer = reviewMcpServer(readOnly ? [] : (scope.localTools ?? []), {
     cookieHeader,
     siteId,
-    judge: oneShotJudge({ model, gateway, anthropicKey, limits, cwd: session.options.cwd }),
+    judge: reviewJudge({ model, gateway, anthropicKey, limits, cwd: session.options.cwd }),
+    progress: (data) => session.turn?.emit("progress", data),
   });
   const reviewTools = reviewServer ? reviewServer.allowed : new Set();
 
@@ -678,14 +685,12 @@ async function buildConfig(session) {
 
   const canUseTool = async (toolName, input) => {
     const server = extraNames.find((n) => toolName.startsWith(`mcp__${n}__`));
-    const providerTool = toolName.startsWith(`mcp__${PROVIDERS_SERVER}__`);
     const reviewTool = toolName.startsWith(`mcp__${REVIEW_SERVER}__`);
     const inScope =
       toolName.startsWith("mcp__meelu__") ||
       reviewTool ||
       (addDeskServer && toolName === "mcp__desks__add_desk") ||
       server !== undefined ||
-      providerTool ||
       (withWeb && (toolName === "WebSearch" || toolName === "WebFetch")) ||
       toolName === "Agent" ||
       toolName === "Task";
@@ -704,33 +709,7 @@ async function buildConfig(session) {
       };
     }
 
-    const { allowed, writes: liveWrites } = session.access;
-    if (toolName.startsWith("mcp__meelu__") && !allowed.has(short)) {
-      if (!session.catalog?.some((t) => t.name === short)) {
-        return {
-          behavior: "deny",
-          message:
-            `${short} is not registered by the agent server, so no desk can offer it. ` +
-            `Do not try it again and do not load desks looking for it — tell the user the ` +
-            `agent server does not serve ${short} and carry on with the tools you hold.`,
-        };
-      }
-      return {
-        behavior: "deny",
-        message:
-          `${short} is not in this task, which may make ` +
-          (liveWrites.length === 0 ? "no writes at all" : `only these writes: ${liveWrites.join(", ")}`) +
-          `. Do not try it again. Load the desk that owns it with add_desk if it is offered; ` +
-          `otherwise say what you wanted to change and which desk does it.`,
-      };
-    }
-
-    if (providerTool && !providerTools.has(short)) {
-      return {
-        behavior: "deny",
-        message: `${short} is not a provider tool this task registered. Do not try it again.`,
-      };
-    }
+    const liveWrites = session.access.writes;
 
     if (reviewTool && !reviewTools.has(short)) {
       return {
@@ -740,13 +719,13 @@ async function buildConfig(session) {
     }
 
     const askPermission = session.turn?.askPermission;
-    if (!askPermission || (!liveWrites.includes(short) && !providerTool && !reviewTool)) {
+    if (!askPermission || (!liveWrites.includes(short) && !reviewTool)) {
       return { behavior: "allow", updatedInput: input };
     }
 
     const silent = session.access.silentWrites ?? new Set();
     const jobId = typeof input?.job_id === "string" ? input.job_id : null;
-    if (!providerTool && jobId && session.approvedJobs.has(jobId) && (reviewTool || silent.has(short))) {
+    if (jobId && session.approvedJobs.has(jobId) && (reviewTool || silent.has(short))) {
       return { behavior: "allow", updatedInput: input };
     }
 
@@ -775,21 +754,14 @@ async function buildConfig(session) {
       (withWeb ? WEB_TOOLS_PROMPT : NO_WEB_PROMPT + STRUCTURE_PROMPT) +
       readerPrompt(withWeb) +
       promptSuffix +
-      providerPrompt +
       vendorPrompt +
       sitePrompt(siteId) +
       writesPrompt(writes, readOnly) +
       (readOnly ? readOnlyPrompt() : "") +
       desksPrompt(deskOffers),
     mcpServers: {
-      meelu: {
-        type: "http",
-        url: ENV_DEFAULTS.agentMcpUrl,
-        headers: meeluHeaders,
-        alwaysLoad: true,
-      },
+      [MEELU_SERVER]: session.meeluServer.config,
       ...extraServers,
-      ...(providerServer ? { [PROVIDERS_SERVER]: providerServer.server } : {}),
       ...(reviewServer ? { [REVIEW_SERVER]: reviewServer.server } : {}),
       ...(addDeskServer ? { desks: addDeskServer } : {}),
     },
@@ -800,7 +772,6 @@ async function buildConfig(session) {
       readOnly,
       writes,
       servers: extraNames,
-      providerTools: [...providerTools],
     reviewTools: [...reviewTools],
       notices: serverNotices,
     },
@@ -809,8 +780,7 @@ async function buildConfig(session) {
 
 function deskAccess(catalog, desks, writes, providers = [], silentWrites = []) {
   const allowed = allowedToolNames(catalog, desks.filter(Boolean), writes, providers);
-  const hidden = catalog.filter((t) => !allowed.has(t.name)).map((t) => `mcp__meelu__${t.name}`);
-  return { allowed, hidden, writes, silentWrites: new Set(silentWrites ?? []) };
+  return { allowed, writes, silentWrites: new Set(silentWrites ?? []) };
 }
 
 function userMessage(message, form, files, cwd, saveAttachments) {
@@ -841,8 +811,8 @@ class LiveSession {
     this.params = params;
     this.options = options;
     this.desks = new Set();
-    this.access = { allowed: new Set(), hidden: [], writes: [], silentWrites: new Set() };
-    this.catalog = null;
+    this.access = { allowed: new Set(), writes: [], silentWrites: new Set() };
+    this.meeluServer = null;
     this.approvedJobs = new Set();
     this.sessionId = null;
     this.q = null;
@@ -879,13 +849,13 @@ class LiveSession {
         canUseTool: config.canUseTool,
         permissionMode: "default",
         settingSources: [],
+        strictMcpConfig: true,
         includePartialMessages: true,
         maxTurns: config.scope.limits?.maxTurns ?? MAX_TURNS,
         ...(config.gateway ? {} : { maxBudgetUsd: config.scope.limits?.maxBudgetUsd ?? MAX_BUDGET_USD }),
         env: llmEnv(config.gateway, config.anthropicKey, config.limits),
       },
     });
-    await this.q.applyFlagSettings({ permissions: { deny: this.access.hidden } });
     this.pumpDone = this.pump().catch((err) => {
       const turn = this.turn;
       this.turn = null;
@@ -900,6 +870,7 @@ class LiveSession {
       this.q?.close();
     } catch {}
     this.q = null;
+    this.meeluServer?.close();
   }
 
   destroy() {

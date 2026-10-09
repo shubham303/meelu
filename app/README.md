@@ -20,8 +20,7 @@ OpenRouter, or a local endpoint):
    attach per scope.
 2. **Local workers** that call the dashboard REST API like any client: the
    crawler (`src/main/crawler/`), Search Console and Analytics syncs
-   (`src/main/integrations/`), and the env-gated background schedules for
-   auto-crawl and rank checks.
+   (`src/main/integrations/`), and the env-gated auto-crawl schedule.
 3. **App-mode UI differences** — no marketing pages or docs chrome, plus the
    app-only Connections screen (model choice, Google OAuth, connectors).
 

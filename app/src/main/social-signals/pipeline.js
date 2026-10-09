@@ -1,30 +1,31 @@
 import { randomUUID } from "node:crypto";
-import { BATCH_SIZE, classifyBatch } from "./classify.js";
-import { expandQuery } from "./expand.js";
+import { BATCH_SIZE, judgeBatch } from "./classify.js";
+import { expandLine } from "./expand.js";
 import { dropDead, withinAge } from "./filters.js";
 import { withScores } from "./rank.js";
 import {
   createRun,
   fetchListeningSetup,
-  fromApiPost,
   gatePosts,
-  knownPostUrls,
-  latestSuccessfulRun,
   listMatchedPosts,
+  listRejectedTexts,
   patchQuery,
   patchRun,
-  saveClassified,
+  saveJudged,
   savePosts,
-  toFetchedPost,
+  siteContextOf,
+  toIngestPost,
   toVerdict,
 } from "./store.js";
 
-const KEEP_THRESHOLD = 0.4;
-const CLASSIFY_CONCURRENCY = 3;
+const DEFAULT_MIN_RELEVANCE = 0.6;
+const JUDGE_CONCURRENCY = 3;
 const GATE_POLL_MS = 3000;
 const GATE_TIMEOUT_MS = 10 * 60 * 1000;
+const MAX_PER_LINE = 100;
 
 const running = new Map();
+const runningBySite = new Map();
 
 class Stopped extends Error {
   constructor() {
@@ -40,236 +41,197 @@ function chunk(list, size) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function newRunState(siteId) {
+  let halt = () => {};
+  const halted = new Promise((_, reject) => {
+    halt = () => reject(new Stopped());
+  });
+  halted.catch(() => {});
+  return { siteId, stopped: false, halted, halt };
+}
+
 export function startSignalsSearch(payload, emit, { providers, llm, cookieHeader = "" }) {
   const { siteId = null, platforms = [] } = payload;
   if (!siteId) return { error: "Pick a website first." };
+  const active = runningBySite.get(siteId);
+  if (active) return { error: "A run is already going for this site.", jobId: active };
   const jobId = randomUUID();
-  const state = { stopped: false };
+  const state = newRunState(siteId);
   running.set(jobId, state);
+  runningBySite.set(siteId, jobId);
   const input = { siteId, platforms: Array.isArray(platforms) ? platforms : [] };
-  void drive(jobId, input, state, emit, { providers, llm, cookieHeader }).finally(() =>
-    running.delete(jobId),
-  );
+  const release = () => {
+    running.delete(jobId);
+    if (runningBySite.get(siteId) === jobId) runningBySite.delete(siteId);
+  };
+  void drive(jobId, input, state, emit, { providers, llm, cookieHeader, release }).finally(release);
   return { jobId };
 }
 
 export function stopSignalsSearch(jobId) {
   const state = running.get(jobId);
   if (!state) return false;
-  state.stopped = true;
+  if (!state.stopped) {
+    state.stopped = true;
+    state.halt();
+  }
   return true;
+}
+
+export function activeSignalsSearch(siteId) {
+  const jobId = runningBySite.get(siteId) ?? null;
+  return { jobId, stopping: jobId ? running.get(jobId)?.stopped === true : false };
 }
 
 function guard(state) {
   if (state.stopped) throw new Stopped();
 }
 
-function enabled(rows) {
-  return rows.filter((r) => r?.enabled !== false);
+function until(state, promise) {
+  guard(state);
+  return Promise.race([promise, state.halted]);
 }
 
-function matched(post, terms) {
-  const hay = `${post.title ?? ""} ${post.text ?? ""}`.toLowerCase();
-  return terms.filter((t) => hay.includes(t.toLowerCase()));
-}
-
-async function expandQueries(queries, state, send, llm, siteId, cookieHeader) {
+async function searchTerms(lines, siteContext, ctx) {
+  const { state, send, llm, siteId, cookieHeader } = ctx;
+  send("stage", { stage: "terms" });
   const out = [];
-  for (const q of queries) {
-    const keywords = Array.isArray(q.keywords) ? q.keywords.filter(Boolean) : [];
+  for (const line of lines) {
+    const keywords = Array.isArray(line.keywords) ? line.keywords.filter(Boolean) : [];
     if (keywords.length > 0) {
-      out.push({ ...q, keywords, negativeKeywords: q.negativeKeywords ?? [] });
+      out.push({ ...line, keywords, negativeKeywords: line.negativeKeywords ?? [] });
       continue;
     }
     guard(state);
-    send("stage", { stage: "expanding", query: q.text });
-    const expansion = await expandQuery({ mode: "topic", topic: q.text, siteContext: "" }, llm);
-    const patched = await patchQuery(
-      siteId,
-      q.id,
-      { keywords: expansion.keywords, negativeKeywords: expansion.negativeKeywords },
-      cookieHeader,
-    );
-    out.push({ ...q, ...patched });
+    const terms = await until(state, expandLine({ line: line.text, siteContext }, llm));
+    const patched = await until(state, patchQuery(siteId, line.id, terms, cookieHeader));
+    out.push({ ...line, ...patched });
   }
+  send("terms", { lines: out.length, phrases: out.reduce((n, l) => n + l.keywords.length, 0) });
   return out;
 }
 
-function buildGroups(queries, targets) {
-  const names = (kind) =>
-    enabled(targets)
-      .filter((t) => t.kind === kind)
-      .map((t) => String(t.name ?? "").trim())
-      .filter(Boolean);
-  const groups = [];
-  const brands = names("brand");
-  const competitors = names("competitor");
-  if (brands.length) {
-    groups.push({ kind: "brand", queryId: null, keywords: brands, negativeKeywords: [] });
-  }
-  if (competitors.length) {
-    groups.push({ kind: "competitor", queryId: null, keywords: competitors, negativeKeywords: [] });
-  }
-  for (const q of queries) {
-    groups.push({
-      kind: "topic",
-      queryId: q.id,
-      keywords: q.keywords,
-      negativeKeywords: q.negativeKeywords ?? [],
-    });
-  }
-  return groups;
-}
-
-async function fetchAll(input, groups, perGroupLimit, since, send, providers, statsRef) {
+async function searchPlatforms(input, lines, perLine, since, ctx, platformStats) {
+  const { state, send, providers } = ctx;
+  send("stage", { stage: "searching" });
   const fetched = [];
   await Promise.allSettled(
     input.platforms.map(async (platform) => {
       send("platform", { platform, status: "fetching" });
       const stat = { fetched: 0, kept: 0 };
-      statsRef[platform] = stat;
-      let count = 0;
+      platformStats[platform] = stat;
       let lastError = null;
-      for (const group of groups) {
+      for (const line of lines) {
         try {
-          const posts = await providers.listening.searchPlatform({
-            platform,
-            keywords: group.keywords,
-            since,
-            limit: perGroupLimit(group),
-            siteId: input.siteId,
-          });
-          for (const p of posts) fetched.push({ ...p, kind: group.kind, queryId: group.queryId });
-          count += posts.length;
+          const posts = await until(
+            state,
+            providers.listening.searchPlatform({
+              platform,
+              keywords: line.keywords,
+              since,
+              limit: perLine(line),
+              siteId: input.siteId,
+            }),
+          );
+          for (const p of posts) fetched.push({ ...p, queryId: line.id });
+          stat.fetched += posts.length;
         } catch (err) {
+          if (err instanceof Stopped) throw err;
           lastError = err instanceof Error ? err.message : String(err);
         }
       }
-      stat.fetched = count;
-      if (lastError && count === 0) {
-        stat.error = lastError;
+      if (lastError) stat.error = lastError;
+      if (lastError && stat.fetched === 0) {
         send("platform", { platform, status: "error", error: lastError });
       } else {
-        if (lastError) stat.error = lastError;
-        send("platform", { platform, status: "done", count });
+        send("platform", { platform, status: "done", count: stat.fetched });
       }
     }),
   );
   return fetched;
 }
 
-function dedupeByUrl(posts) {
-  const seen = new Map();
-  for (const p of posts) {
-    if (!seen.has(p.url)) seen.set(p.url, p);
-  }
-  return [...seen.values()];
-}
-
-function mergeByUrl(posts) {
-  const priority = { brand: 0, competitor: 1, topic: 2 };
-  const ordered = [...posts].sort((a, b) => (priority[a.kind] ?? 3) - (priority[b.kind] ?? 3));
-  return dedupeByUrl(ordered);
-}
-
-function negativeHit(post, groups) {
-  const group = groups.find((g) => g.kind === post.kind && g.queryId === post.queryId);
+function excludedWord(post, line) {
   const hay = `${post.title ?? ""} ${post.text ?? ""}`.toLowerCase();
-  return (group?.negativeKeywords ?? []).find((k) => hay.includes(String(k).toLowerCase())) ?? null;
+  return (line?.negativeKeywords ?? []).find((k) => hay.includes(String(k).toLowerCase())) ?? null;
 }
 
-async function fetchStage(input, setup, queries, state, send, providers, platformStats, cookieHeader, runId) {
+async function fetchStage(input, setup, lines, ctx, platformStats, runId) {
+  const { state, send, cookieHeader } = ctx;
   const config = setup.config;
-  const groups = buildGroups(queries, setup.targets);
-  if (groups.length === 0) return 0;
+  const lookbackDays = Number(config.maxAgeDays) > 0 ? Number(config.maxAgeDays) : null;
+  const since = lookbackDays
+    ? new Date(Date.now() - lookbackDays * 86_400_000).toISOString()
+    : null;
 
-  let since = null;
-  const lastDone = await latestSuccessfulRun(input.siteId, cookieHeader).catch(() => null);
-  const startedAt = Date.parse(lastDone?.startedAt ?? "");
-  if (Number.isFinite(startedAt)) since = new Date(startedAt - 86_400_000).toISOString();
-  else if (Number(config.maxAgeDays) > 0) {
-    since = new Date(Date.now() - Number(config.maxAgeDays) * 86_400_000).toISOString();
-  }
+  const perKeyword = Math.max(5, Number(config.resultsPerKeyword) || 50);
+  const perLine = (line) => Math.min(perKeyword * line.keywords.length, MAX_PER_LINE);
+  const fetched = await searchPlatforms(input, lines, perLine, since, ctx, platformStats);
   guard(state);
 
-  const resultsPerKeyword = Math.max(5, Number(config.resultsPerKeyword) || 50);
-  const perGroupLimit = (group) => Math.min(resultsPerKeyword * group.keywords.length, 100);
-
-  send("stage", { stage: "fetching" });
-  const fetched = await fetchAll(input, groups, perGroupLimit, since, send, providers, platformStats);
-  guard(state);
-
-  const targetNames = enabled(setup.targets).map((t) => t.name);
-  let posts = mergeByUrl(fetched).map((p) => ({ ...p, matchedTargets: matched(p, targetNames) }));
-  const known = new Set(await knownPostUrls(input.siteId, posts.map((p) => p.url), cookieHeader));
-  posts = posts.filter((p) => {
-    if (!known.has(p.url)) return true;
-    const stat = platformStats[p.platform];
-    if (stat) stat.known = (stat.known ?? 0) + 1;
-    return false;
+  const linesById = new Map(lines.map((l) => [l.id, l]));
+  const fresh = new Set(withinAge(fetched, config.maxAgeDays));
+  const payload = fetched.map((p) => {
+    if (!fresh.has(p)) return toIngestPost(p, "too_old");
+    if (excludedWord(p, linesById.get(p.queryId))) return toIngestPost(p, "excluded_word");
+    return toIngestPost(p);
   });
-  guard(state);
-
-  const fresh = new Set(withinAge(posts, config.maxAgeDays).map((p) => p.url));
-  const payload = posts.map((p) => {
-    if (!fresh.has(p.url)) return toFetchedPost(p, "filtered", "Older than the age limit");
-    const hit = negativeHit(p, groups);
-    if (hit) return toFetchedPost(p, "filtered", `Mentions "${hit}"`);
-    return toFetchedPost(p);
-  });
+  const totals = { inserted: 0, known: 0, duplicates: 0 };
   for (const batch of chunk(payload, 200)) {
-    await savePosts(input.siteId, runId, batch, cookieHeader);
+    const res = await until(state, savePosts(input.siteId, runId, batch, cookieHeader));
+    totals.inserted += res?.inserted ?? 0;
+    totals.known += res?.known ?? 0;
+    totals.duplicates += res?.duplicates ?? 0;
     guard(state);
   }
-  send("saved", { fetched: fetched.length, new: payload.length });
-  return fetched.length;
+  send("saved", { fetched: fetched.length, ...totals });
+  return { fetched: fetched.length, inserted: totals.inserted, lookbackDays };
 }
 
-async function gateStage(input, state, send, cookieHeader) {
-  send("stage", { stage: "gating" });
+async function gateStage(input, ctx) {
+  const { state, send, cookieHeader } = ctx;
+  send("stage", { stage: "meaning" });
   const startedAt = Date.now();
-  let result = await gatePosts(input.siteId, cookieHeader);
-  send("gate", result);
-  while (result.pending > 0 && Date.now() - startedAt < GATE_TIMEOUT_MS) {
-    guard(state);
-    await sleep(GATE_POLL_MS);
-    guard(state);
-    result = await gatePosts(input.siteId, cookieHeader);
-    send("gate", result);
+  const totals = { kept: 0, dropped: 0 };
+  const poll = async () => {
+    const res = await until(state, gatePosts(input.siteId, cookieHeader));
+    totals.kept += res?.kept ?? 0;
+    totals.dropped += res?.dropped ?? 0;
+    send("gate", { pending: res?.pending ?? 0, ...totals });
+    return res;
+  };
+  let result = await poll();
+  while ((result?.pending ?? 0) > 0 && Date.now() - startedAt < GATE_TIMEOUT_MS) {
+    await until(state, sleep(GATE_POLL_MS));
+    result = await poll();
   }
-  return result;
+  return totals.kept;
 }
 
-function classifyContext(post, queriesById, setup) {
-  if (post.kind === "topic") {
-    const query = queriesById.get(post.queryId);
-    return { mode: "topic", topic: query?.text ?? "the listening queries", siteContext: "" };
-  }
-  const names = enabled(setup.targets)
-    .filter((t) => t.kind === post.kind)
-    .map((t) => t.name);
-  return { mode: "brand", topic: names.join(", "), siteContext: "" };
-}
-
-async function classifyStage(input, setup, queries, state, send, llm, cookieHeader, platformStats) {
-  const rows = await listMatchedPosts(input.siteId, cookieHeader);
-  const posts = rows.map(fromApiPost);
-  send("stage", { stage: "classifying", total: posts.length });
+async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) {
+  const { state, send, llm, cookieHeader } = ctx;
+  const posts = await until(state, listMatchedPosts(input.siteId, cookieHeader));
+  send("stage", { stage: "judging" });
+  send("judged", { judged: 0, total: posts.length, kept: 0 });
   if (posts.length === 0) return 0;
 
-  const queriesById = new Map(queries.map((q) => [q.id, q]));
-  const keepThreshold = Number.isFinite(Number(setup.config.minRelevance))
+  const minRelevance = Number.isFinite(Number(setup.config.minRelevance))
     ? Number(setup.config.minRelevance)
-    : KEEP_THRESHOLD;
-  const byContext = new Map();
+    : DEFAULT_MIN_RELEVANCE;
+  const linesById = new Map(lines.map((l) => [l.id, l]));
+  const byLine = new Map();
   for (const p of posts) {
-    const key = `${p.kind}:${p.queryId ?? ""}`;
-    if (!byContext.has(key)) byContext.set(key, { ctx: classifyContext(p, queriesById, setup), posts: [] });
-    byContext.get(key).posts.push(p);
+    if (!byLine.has(p.queryId)) byLine.set(p.queryId, []);
+    byLine.get(p.queryId).push(p);
   }
   const batches = [];
-  for (const { ctx, posts: own } of byContext.values()) {
-    for (const b of chunk(own, BATCH_SIZE)) batches.push({ ctx, posts: b });
+  for (const [queryId, own] of byLine) {
+    const rejected = queryId
+      ? await until(state, listRejectedTexts(input.siteId, queryId, cookieHeader))
+      : [];
+    const line = linesById.get(queryId)?.text ?? "the conversations the marketer listens for";
+    const judgeCtx = { line, siteContext, rejected };
+    for (const b of chunk(own, BATCH_SIZE)) batches.push({ judgeCtx, posts: b });
   }
 
   let judged = 0;
@@ -280,107 +242,90 @@ async function classifyStage(input, setup, queries, state, send, llm, cookieHead
       guard(state);
       const batch = batches[cursor];
       cursor += 1;
-      const results = withScores(await classifyBatch(batch.posts, batch.ctx, llm), batch.ctx.mode);
-      let keepers = results.filter((p) => (p.relevanceScore ?? 0) >= keepThreshold);
-      if (setup.config.dropDeadPosts !== false && keepers.length > 0) {
-        const alive = new Set((await dropDead(keepers)).map((p) => p.url));
-        keepers = keepers.filter((p) => alive.has(p.url));
-      }
-      const keptUrls = new Set(keepers.map((p) => p.url));
-      const verdicts = results.map((p) => toVerdict(p, keptUrls.has(p.url) ? "needs_reply" : "filtered"));
-      await saveClassified(input.siteId, verdicts, cookieHeader);
+      const results = withScores(await until(state, judgeBatch(batch.posts, batch.judgeCtx, llm)));
+      const fitting = results.filter((p) => p.fits && p.relevance >= minRelevance);
+      const alive = new Set(await until(state, dropDead(fitting)));
+      const verdicts = results.map((p) => {
+        if (!fitting.includes(p)) return toVerdict(p, "dropped", "judged_off_topic");
+        if (!alive.has(p)) return toVerdict(p, "dropped", "dead");
+        return toVerdict(p, "to_reply");
+      });
+      await until(state, saveJudged(input.siteId, verdicts, cookieHeader));
       judged += results.length;
-      kept += keepers.length;
-      for (const p of keepers) {
+      kept += alive.size;
+      for (const p of alive) {
         const stat = platformStats[p.platform];
         if (stat) stat.kept += 1;
       }
-      send("classified", { judged, total: posts.length, kept });
+      send("judged", { judged, total: posts.length, kept });
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CLASSIFY_CONCURRENCY, batches.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(JUDGE_CONCURRENCY, batches.length) }, worker));
   return kept;
 }
 
-async function drive(jobId, input, state, emit, { providers, llm, cookieHeader }) {
+async function drive(jobId, input, state, emit, { providers, llm, cookieHeader, release }) {
   const send = (event, data) => emit({ jobId, event, data });
+  const finish = (event, data) => {
+    release();
+    send(event, data);
+  };
+  const ctx = { state, send, llm, providers, cookieHeader, siteId: input.siteId };
   let runId = null;
   const platformStats = {};
-  let fetchedCount = 0;
-  let keptCount = 0;
+  const counts = { fetchedCount: 0, matchedCount: 0, keptCount: 0 };
 
   const finishPatch = (status, extra = {}) => {
     if (!runId) return Promise.resolve();
     return patchRun(
       input.siteId,
       runId,
-      { status, finishedAt: new Date().toISOString(), fetchedCount, keptCount, platformStats, ...extra },
+      { status, finishedAt: new Date().toISOString(), ...counts, platformStats, ...extra },
       cookieHeader,
     ).catch(() => {});
   };
 
   try {
-    const setup = await fetchListeningSetup(input.siteId, cookieHeader);
+    const setup = await until(state, fetchListeningSetup(input.siteId, cookieHeader));
     guard(state);
     if (!input.platforms.length) {
       input.platforms = Array.isArray(setup.config.platforms) ? setup.config.platforms : [];
     }
     if (!input.platforms.length) throw new Error("Pick at least one platform.");
-    const hasWork =
-      enabled(setup.queries).length > 0 || enabled(setup.targets).length > 0;
-    if (!hasWork) throw new Error("Nothing to search — add a query or a brand to watch first.");
+    const enabledLines = setup.queries.filter((q) => q?.enabled !== false);
+    if (enabledLines.length === 0) throw new Error("Add a line to listen for first.");
+    const siteContext = siteContextOf(setup.site);
     const run = await createRun(input.siteId, cookieHeader);
     runId = run?.id ?? null;
     guard(state);
 
-    const queries = await expandQueries(
-      enabled(setup.queries),
-      state,
-      send,
-      llm,
-      input.siteId,
-      cookieHeader,
-    );
+    const lines = await searchTerms(enabledLines, siteContext, ctx);
+    guard(state);
+    const fetchResult = await fetchStage(input, setup, lines, ctx, platformStats, runId);
+    counts.fetchedCount = fetchResult.fetched;
+    guard(state);
+    counts.matchedCount = await gateStage(input, ctx);
+    guard(state);
+    counts.keptCount = await judgeStage(input, setup, lines, siteContext, ctx, platformStats);
     guard(state);
 
-    fetchedCount = await fetchStage(
-      input,
-      setup,
-      queries,
-      state,
-      send,
-      providers,
-      platformStats,
-      cookieHeader,
-      runId,
-    );
-    guard(state);
-
-    await gateStage(input, state, send, cookieHeader);
-    guard(state);
-
-    keptCount = await classifyStage(
-      input,
-      setup,
-      queries,
-      state,
-      send,
-      llm,
-      cookieHeader,
-      platformStats,
-    );
-    guard(state);
-
-    send("done", { fetched: fetchedCount, kept: keptCount });
     await finishPatch("done");
+    finish("done", {
+      fetched: counts.fetchedCount,
+      inserted: fetchResult.inserted,
+      matched: counts.matchedCount,
+      kept: counts.keptCount,
+      lookbackDays: fetchResult.lookbackDays,
+      platforms: platformStats,
+    });
   } catch (err) {
     if (err instanceof Stopped) {
-      send("stopped", {});
       await finishPatch("stopped");
+      finish("stopped", {});
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
-    send("error", { message });
     await finishPatch("error", { error: message });
+    finish("error", { message });
   }
 }

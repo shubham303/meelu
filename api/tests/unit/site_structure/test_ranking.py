@@ -14,6 +14,7 @@ from src.site_structure.pipeline.ranking import (
     SiteDistribution,
     is_home,
     link_capacity,
+    link_room,
     percentile,
 )
 
@@ -117,7 +118,7 @@ def test_missing_confidence_is_the_worst_case():
 
 def test_budget_cut_happens_after_scoring_and_drops_the_weakest():
     pages, site = site_of(
-        page("src", words=0),
+        page("src", outlinks=0, words=0),
         page("a", inlinks=0, outlinks=5, page_type="money"),
         page("b", inlinks=1, outlinks=5, page_type="money"),
         page("c", inlinks=2, outlinks=5, page_type="money"),
@@ -136,7 +137,7 @@ def test_budget_cut_happens_after_scoring_and_drops_the_weakest():
 
 def test_rank_time_capacity_ignores_approved_suggestions():
     pages, site = site_of(
-        page("src", words=0),
+        page("src", outlinks=0, words=0),
         page("a", inlinks=0),
         page("b", inlinks=0),
         page("c", inlinks=0),
@@ -152,7 +153,7 @@ def _star_setup():
         for i in range(2)
     ]
     pages, site = site_of(
-        *[page(f"s{s}", words=0) for s in range(3)],
+        *[page(f"s{s}", outlinks=0, words=0) for s in range(3)],
         page("star", inlinks=0, outlinks=9, page_type="money"),
         page("other", inlinks=3, outlinks=9, page_type="money"),
         *fillers,
@@ -178,9 +179,9 @@ def test_target_discount_spreads_links_across_targets():
 
 def test_max_per_target_is_a_hard_cap():
     pages, site = site_of(
-        page("s1", words=0),
-        page("s2", words=0),
-        page("s3", words=0),
+        page("s1", outlinks=0, words=0),
+        page("s2", outlinks=0, words=0),
+        page("s3", outlinks=0, words=0),
         page("star", inlinks=0, outlinks=9, page_type="money"),
     )
     out = rank(
@@ -237,3 +238,18 @@ def test_removal_budget_is_a_third_of_outlinks():
     ranked = rank([remove(f"c{i}", "src", f"t{i}", 0.1 * i) for i in range(5)], pages, site)
     assert sum(1 for r in ranked if r.kept) == 3
     assert kept_ids(ranked) == {"c2", "c3", "c4"}
+
+
+def test_link_room_counts_the_body_links_a_page_already_has():
+    assert link_room(page("a", outlinks=0, words=900)) == 6
+    assert link_room(page("a", outlinks=4, words=900)) == 2
+    assert link_room(page("a", outlinks=20, words=900)) == 0
+    assert link_room(page("h", outlinks=50, page_type="hub")) == link_capacity(
+        page("h", page_type="hub")
+    )
+    pages, site = site_of(
+        page("full", outlinks=3, words=0),
+        page("a", inlinks=0),
+        page("b", inlinks=0),
+    )
+    assert kept_ids(rank([add(t, "full", t) for t in ("a", "b")], pages, site)) == set()

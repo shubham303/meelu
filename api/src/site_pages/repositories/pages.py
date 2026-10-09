@@ -143,6 +143,7 @@ EXPORT = (
     SitePage.chunked_from_hash,
     SitePage.body_text.is_not(None).label("has_text"),
     cast(func.jsonb_array_length(SitePage.images), Integer).label("image_count"),
+    cast(func.jsonb_array_length(SitePage.external_links), Integer).label("external_link_count"),
     IMAGE_BYTES_SQL.scalar_subquery().label("image_bytes"),
     cast(func.jsonb_array_length(SitePage.headings), Integer).label("heading_count"),
 )
@@ -225,6 +226,7 @@ CRAWL_COLUMNS = (
     "fetch_error",
     "content_type",
     "images",
+    "external_links",
     "published_at",
     "modified_at",
     "word_count",
@@ -239,6 +241,16 @@ STRIPPED_URL = func.regexp_replace(SitePage.url, "/+$", "")
 URL_PATH = func.regexp_replace(func.regexp_replace(SitePage.url, "^https?://[^/]+", ""), "/+$", "")
 
 LIVE = and_(SitePage.status.between(200, 299), ~SitePage.blocked_by_robots)
+CANONICAL_TARGET = and_(
+    LIVE,
+    ~func.coalesce(SitePage.robots_directives, "").ilike("%noindex%"),
+    ~func.coalesce(SitePage.x_robots_tag, "").ilike("%noindex%"),
+    or_(
+        SitePage.canonical.is_(None),
+        func.regexp_replace(SitePage.canonical, "/+$", "") == STRIPPED_URL,
+    ),
+    SitePage.redirect_to.is_(None),
+)
 ORPHAN = and_(LIVE, SitePage.inlinks == 0, SitePage.depth.is_distinct_from(0))
 UNREACHABLE = and_(LIVE, SitePage.inlinks > 0, SitePage.depth.is_(None))
 GONE = or_(
@@ -496,31 +508,23 @@ class SitePageRepository:
             )
         ).scalar_one_or_none()
 
-    async def normalised_urls(self, db: AsyncSession, site_id: str) -> set[str]:
-        rows = await db.execute(select(STRIPPED_URL).where(SitePage.site_id == site_id))
-        return set(rows.scalars().all())
-
-    async def link_targets(self, db: AsyncSession, site_id: str) -> dict[str, tuple[str, bool]]:
-        rows = (
-            await db.execute(
-                text(
-                    """
-    select regexp_replace(t.url, '/+$', '') as key, t.id,
-           (t.status between 200 and 299
-            and not t.blocked_by_robots
-            and coalesce(t.robots_directives, '') not ilike '%noindex%'
-            and coalesce(t.x_robots_tag, '') not ilike '%noindex%'
-            and (t.canonical is null
-                 or regexp_replace(t.canonical, '/+$', '') = regexp_replace(t.url, '/+$', ''))
-            and t.redirect_to is null) as canonical
-      from site_pages t
-     where t.site_id = :site_id
-    """
-                ),
-                {"site_id": site_id},
+    async def link_targets(
+        self, db: AsyncSession, site_id: str, urls: list[str]
+    ) -> dict[str, tuple[str, bool]]:
+        if not urls:
+            return {}
+        rows = await db.execute(
+            select(SitePage.url, SitePage.id, CANONICAL_TARGET.label("canonical")).where(
+                SitePage.site_id == site_id, SitePage.url.in_(set(urls))
             )
-        ).mappings()
-        return {str(r["key"]): (str(r["id"]), bool(r["canonical"])) for r in rows}
+        )
+        return {r.url: (r.id, bool(r.canonical)) for r in rows}
+
+    async def canonical_target_ids(self, db: AsyncSession, site_id: str) -> set[str]:
+        rows = await db.execute(
+            select(SitePage.id).where(SitePage.site_id == site_id, CANONICAL_TARGET)
+        )
+        return set(rows.scalars().all())
 
     async def changed_at_by_id(
         self, db: AsyncSession, site_id: str, ids: list[str] | None = None

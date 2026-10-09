@@ -53,13 +53,15 @@ class LazyModel(Generic[T]):
 def _load_embedder():
     from src.embed_worker.embedding import Embedder
 
-    return Embedder(search_settings().meelu_embed_model)
+    settings = search_settings()
+    return Embedder(settings.meelu_embed_model, settings.meelu_onnx_threads)
 
 
 def _load_reranker():
     from src.embed_worker.reranker import Reranker
 
-    return Reranker(search_settings().meelu_rerank_model)
+    settings = search_settings()
+    return Reranker(settings.meelu_rerank_model, settings.meelu_onnx_threads)
 
 
 embedder = LazyModel(

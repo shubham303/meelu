@@ -23,6 +23,12 @@ class SiteChunk(EntityMixin, SiteScopedMixin, Base):
             postgresql_using="gin",
         ),
         Index(
+            "site_chunks_text_trgm_idx",
+            "text",
+            postgresql_using="gin",
+            postgresql_ops={"text": "gin_trgm_ops"},
+        ),
+        Index(
             "site_chunks_pending_idx",
             "site_id",
             postgresql_where=sql_text("embedding IS NULL"),

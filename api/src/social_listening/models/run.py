@@ -17,6 +17,7 @@ class SocialListeningRun(EntityMixin, SiteScopedMixin, Base):
     )
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fetched_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    matched_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     kept_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     platform_stats: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=EMPTY_JSON_OBJECT

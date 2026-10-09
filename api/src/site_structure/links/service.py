@@ -7,11 +7,11 @@ from urllib.parse import urlsplit
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.agent.context import tenant_names
 from src.agent.workspace import workspace_tables
 from src.core.logging import get_logger
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits.service import InsufficientCreditsError
+from src.embed_worker.settings import search_settings
 from src.providers.errors import NoProviderError, ProviderRequestError
 from src.providers.json_data_extractor.service import json_data_extractor
 from src.providers.registry import Caller
@@ -19,6 +19,7 @@ from src.site_pages.llm_extraction.repository import site_page_llm_extractions
 from src.site_pages.repositories.chunks import site_chunks
 from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
+from src.site_pages.schemas.llm_extraction import extracted_details
 from src.site_structure.constants import HIERARCHY_TYPES, REMOVAL_REGION, SuggestionState
 from src.site_structure.jobs.service import structure_job_service
 from src.site_structure.links import ranking, review, screening
@@ -38,6 +39,8 @@ from src.site_structure.links.schemas import (
     MentionsRequest,
     MentionsResult,
     NewLinkSuggestion,
+    PairsRequest,
+    PairsResult,
     RankRequest,
     ReconcileResult,
     RemovalsRequest,
@@ -49,7 +52,7 @@ from src.site_structure.links.schemas import (
     WorkspaceEdge,
 )
 from src.site_structure.pipeline.page_facts import page_facts_service
-from src.site_structure.pipeline.ranking import is_home, link_capacity
+from src.site_structure.pipeline.ranking import is_home, link_room
 from src.site_structure.pipeline.schemas import (
     RankResult,
     ReviewBatch,
@@ -65,14 +68,14 @@ NOT_FOUND = "No such link suggestion on this website."
 
 REMOVAL_REASON = "The link does not serve the reader here."
 
+PAIR_REASON = "The passage covers what the target page is about."
+
 FROM_TEXT_CHARS = 3000
 
-HOME_TO_HUB = "The home page should point at this section so it is one click from the root."
 HOME_TO_UTILITY = "The home page should give this utility page a way in."
 BACK_TO_HOME = "This page should link back to the home page."
 PARENT_TO_CHILD = "This section should list its child section {child}."
 CHILD_TO_PARENT = "This section should link up to its parent section {parent}."
-SIBLINGS = "Sibling sections under {parent} should link to each other."
 
 
 def path_of(url: str) -> str:
@@ -280,39 +283,34 @@ class LinkSuggestionService:
         self, db: AsyncSession, user_id: str, site_id: str, body: MentionsRequest
     ) -> MentionsResult:
         await structure_job_service.get(db, site_id, body.job_id)
-        known = await site_pages.existing_ids(db, site_id, body.to_ids)
-        missing = [p for p in body.to_ids if p not in known]
+        to_ids = [t.to_id for t in body.targets]
+        known = await site_pages.existing_ids(db, site_id, to_ids)
+        missing = [p for p in to_ids if p not in known]
         if missing:
             raise HTTPException(404, f"No page on this website with id {', '.join(missing)}.")
-        linking: dict[str, set[str]] = {}
-        for src, dst in await site_page_links.pairs_into(db, site_id, body.to_ids):
-            linking.setdefault(dst, set()).add(src)
-        result = MentionsResult()
-        rows: list[NewLinkSuggestion] = []
-        for to_page_id in body.to_ids:
-            found: dict[str, NewLinkSuggestion] = {}
-            for phrase in body.phrases:
-                room = body.limit_per_target - len(found)
-                if room <= 0:
-                    break
-                excluded = {to_page_id} | linking.get(to_page_id, set()) | set(found)
-                for chunk_id, page_id in await site_chunks.search_text(
-                    db, site_id, phrase, excluded, room
-                ):
-                    found.setdefault(
-                        page_id,
-                        NewLinkSuggestion(
-                            job_id=body.job_id,
-                            from_page_id=page_id,
-                            to_page_id=to_page_id,
-                            from_chunk_id=chunk_id,
-                            suggestion=f'The passage mentions "{phrase}" without linking to the '
-                            "page about it; link the mention.",
-                        ),
-                    )
-            if not found:
-                result.targets_without_match.append(to_page_id)
-            rows.extend(found.values())
+        excluded = [(to_id, to_id) for to_id in to_ids] + [
+            (dst, src) for src, dst in await site_page_links.pairs_into(db, site_id, to_ids)
+        ]
+        hits = await site_chunks.phrase_hits(
+            db,
+            site_id,
+            [(t.to_id, phrase) for t in body.targets for phrase in t.phrases],
+            excluded,
+            body.limit_per_target,
+        )
+        rows = [
+            NewLinkSuggestion(
+                job_id=body.job_id,
+                from_page_id=hit.page_id,
+                to_page_id=hit.key,
+                from_chunk_id=hit.chunk_id,
+                suggestion=f'The passage mentions "{hit.phrase}" without linking to the '
+                "page about it; link the mention.",
+            )
+            for hit in hits
+        ]
+        matched = {hit.key for hit in hits}
+        result = MentionsResult(targets_without_match=[p for p in to_ids if p not in matched])
         result.inserted = await self.create_many(db, user_id, site_id, rows)
         result.skipped = len(rows) - result.inserted
         return result
@@ -321,10 +319,9 @@ class LinkSuggestionService:
         self, db: AsyncSession, user_id: str, site_id: str, body: RemovalsRequest
     ) -> RemovalsResult:
         await structure_job_service.get(db, site_id, body.job_id)
-        _, schema = tenant_names(user_id)
         try:
             edges = self._workspace_edges(
-                await workspace_tables.rows(db, schema, body.source_table), body.source_table
+                await workspace_tables.rows(user_id, body.source_table), body.source_table
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -379,6 +376,83 @@ class LinkSuggestionService:
         result.skipped = len(rows) - result.inserted
         return result
 
+    async def propose_links_from_table(
+        self, db: AsyncSession, user_id: str, site_id: str, body: PairsRequest
+    ) -> PairsResult:
+        await structure_job_service.get(db, site_id, body.job_id)
+        try:
+            edges = self._workspace_edges(
+                await workspace_tables.rows(user_id, body.source_table), body.source_table
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        floor = (
+            search_settings().meelu_search_min_similarity
+            if body.min_similarity is None
+            else body.min_similarity
+        )
+        result = PairsResult(read=len(edges), min_similarity=floor)
+        reasons: dict[tuple[str, str], str | None] = {}
+        for edge in edges:
+            if edge.from_page_id != edge.to_page_id:
+                reasons.setdefault((edge.from_page_id, edge.to_page_id), edge.reason)
+        pairs = list(reasons)
+
+        page_ids = list({p for pair in pairs for p in pair})
+        live = await site_pages.existing_ids(db, site_id, page_ids) - await site_pages.gone_ids(
+            db, site_id, page_ids
+        )
+        result.not_live = sum(1 for f, t in pairs if f not in live or t not in live)
+        pairs = [(f, t) for f, t in pairs if f in live and t in live]
+
+        linked = await site_page_links.existing_pairs(db, site_id, pairs)
+        result.already_linked = sum(1 for p in pairs if p in linked)
+        pairs = [p for p in pairs if p not in linked]
+
+        suggested = {
+            (f, t)
+            for f, t, action, _ in await link_suggestions.edge_keys(db, site_id, pairs)
+            if action is LinkAction.CREATE
+        }
+        result.already_suggested = sum(1 for p in pairs if p in suggested)
+        pairs = [p for p in pairs if p not in suggested]
+
+        best = await site_chunks.best_passages(db, site_id, pairs)
+        result.not_embedded = len(pairs) - len(best)
+        close = {pair: hit for pair, hit in best.items() if hit[1] >= floor}
+        result.below_threshold = len(best) - len(close)
+        if not close:
+            return result
+
+        by_source: dict[str, list[tuple[str, str, float]]] = {}
+        for (from_page_id, to_page_id), (chunk_id, similarity) in close.items():
+            by_source.setdefault(from_page_id, []).append((to_page_id, chunk_id, similarity))
+        left = await self._budget_left(db, site_id, list(by_source))
+        urls = await site_pages.urls_by_ids(
+            db, site_id, list({to_page_id for _, to_page_id in close})
+        )
+        rows: list[NewLinkSuggestion] = []
+        for from_page_id, hits in by_source.items():
+            hits.sort(key=lambda hit: -hit[2])
+            cap = max(0, min(body.per_source, left.get(from_page_id, body.per_source)))
+            result.over_source_cap += max(0, len(hits) - cap)
+            for to_page_id, chunk_id, similarity in hits[:cap]:
+                reason = reasons[(from_page_id, to_page_id)] or PAIR_REASON
+                rows.append(
+                    NewLinkSuggestion(
+                        job_id=body.job_id,
+                        from_page_id=from_page_id,
+                        to_page_id=to_page_id,
+                        from_chunk_id=chunk_id,
+                        suggestion=f"Link this passage to {urls.get(to_page_id, to_page_id)}. "
+                        f"{reason}",
+                        search_score=similarity,
+                    )
+                )
+        result.inserted = await self.create_many(db, user_id, site_id, rows)
+        result.skipped = len(rows) - result.inserted
+        return result
+
     async def screen_suggestions(
         self, db: AsyncSession, user_id: str, site_id: str, body: ScreenRequest
     ) -> ScreenResult:
@@ -409,10 +483,19 @@ class LinkSuggestionService:
         items = await self._inputs(
             db, site_id, SuggestionState.SCREENING_APPROVED, body.job_id, body.ids, body.limit
         )
+        outbound = await site_page_links.outbound_by_src_ids(
+            db, site_id, list({item.from_page_id for item in items})
+        )
         return ReviewBatch(
             instructions=review.INSTRUCTIONS.format(prompt=body.prompt),
             schema=review.SCHEMA,
-            items=[ReviewItem(id=item.id, state=screening.item_state(item)) for item in items],
+            items=[
+                ReviewItem(
+                    id=item.id,
+                    state=review.item_state(item, outbound.get(item.from_page_id, [])),
+                )
+                for item in items
+            ],
         )
 
     async def apply_verdicts(
@@ -523,14 +606,18 @@ class LinkSuggestionService:
         from_ids = list({r.from_page_id for r in rows if r.action is LinkAction.CREATE})
         if not from_ids:
             return rows
-        facts = await page_facts_service.for_pages(db, site_id, from_ids)
-        approved = await link_suggestions.approved_create_counts(db, site_id, from_ids)
-        full = {
-            page_id
-            for page_id, fact in facts.items()
-            if link_capacity(fact) - approved.get(page_id, 0) <= 0
-        }
+        left = await self._budget_left(db, site_id, from_ids)
+        full = {page_id for page_id, room in left.items() if room <= 0}
         return [r for r in rows if r.action is not LinkAction.CREATE or r.from_page_id not in full]
+
+    async def _budget_left(
+        self, db: AsyncSession, site_id: str, page_ids: list[str]
+    ) -> dict[str, int]:
+        facts = await page_facts_service.for_pages(db, site_id, page_ids)
+        approved = await link_suggestions.approved_create_counts(db, site_id, page_ids)
+        return {
+            page_id: link_room(fact) - approved.get(page_id, 0) for page_id, fact in facts.items()
+        }
 
     async def _inputs(
         self,
@@ -557,13 +644,12 @@ class LinkSuggestionService:
                 db, site_id, list({r.from_chunk_id for r in rows if r.from_chunk_id})
             )
         }
-        types = await site_page_llm_extractions.page_types_by_page_ids(db, site_id, to_ids)
+        extracted = await site_page_llm_extractions.by_page_ids(db, site_id, from_ids + to_ids)
         anchors: dict[tuple[str, str], str | None] = {}
         for link in await site_page_links.list_between(
             db, site_id, from_ids, to_ids, region=REMOVAL_REGION
         ):
-            if link.dst_page_id is not None:
-                anchors.setdefault((link.src_page_id, link.dst_page_id), link.anchor)
+            anchors.setdefault((link.src_page_id, link.dst_page_id), link.anchor)
         items: list[ScreeningInput] = []
         for row in rows:
             source = sources.get(row.from_page_id)
@@ -575,15 +661,18 @@ class LinkSuggestionService:
                     id=row.id,
                     action=row.action,
                     suggestion=row.suggestion,
+                    from_page_id=row.from_page_id,
+                    to_page_id=row.to_page_id,
                     from_url=source.url,
                     from_title=source.title,
                     from_content_hash=source.content_hash,
                     from_text=chunks.get(row.from_chunk_id) or source.body_text or "",
+                    from_details=extracted_details(extracted.get(row.from_page_id)),
                     to_url=target.url,
                     to_title=target.title,
                     to_meta_description=target.meta_description,
                     to_h1=list(target.h1 or []),
-                    to_page_type=types.get(row.to_page_id),
+                    to_details=extracted_details(extracted.get(row.to_page_id)),
                     to_content_hash=target.content_hash,
                     anchor=anchors.get((row.from_page_id, row.to_page_id)),
                 )
@@ -650,8 +739,6 @@ class LinkSuggestionService:
         )
         chosen: dict[tuple[str, str], Any] = {}
         for link in sorted(links, key=lambda k: k.region != REMOVAL_REGION):
-            if link.dst_page_id is None:
-                continue
             key = (link.src_page_id, link.dst_page_id)
             if key in wanted and key not in chosen:
                 chosen[key] = link
@@ -720,9 +807,6 @@ class LinkSuggestionService:
                 edges.setdefault((src.id, dst.id), why)
 
         if home is not None:
-            for hub in hubs:
-                add(home, hub, HOME_TO_HUB)
-                add(hub, home, BACK_TO_HOME)
             for page in utilities:
                 add(home, page, HOME_TO_UTILITY)
                 add(page, home, BACK_TO_HOME)
@@ -734,9 +818,6 @@ class LinkSuggestionService:
             if parent is not None:
                 add(parent, hub, PARENT_TO_CHILD.format(child=path))
                 add(hub, parent, CHILD_TO_PARENT.format(parent=parent_path))
-            for other_path, other in by_path.items():
-                if other is not hub and parent_of(other_path) == parent_path:
-                    add(hub, other, SIBLINGS.format(parent=parent_path or "/"))
 
         for (from_page_id, to_page_id), why in edges.items():
             yield from_page_id, to_page_id, why
@@ -749,6 +830,18 @@ class LinkSuggestionService:
         )
         chunk_ids = [r.from_chunk_id for r in records if r.from_chunk_id]
         chunks = {c.id: c for c in await site_chunks.list_by_ids(db, site_id, chunk_ids)}
+        removals = [r for r in records if r.action is LinkAction.DELETE]
+        anchors: dict[tuple[str, str], str | None] = {}
+        if removals:
+            for link in await site_page_links.list_between(
+                db,
+                site_id,
+                list({r.from_page_id for r in removals}),
+                list({r.to_page_id for r in removals}),
+                region=REMOVAL_REGION,
+            ):
+                if link.anchor:
+                    anchors.setdefault((link.src_page_id, link.dst_page_id), link.anchor)
         enriched = []
         for r in records:
             chunk = chunks.get(r.from_chunk_id)
@@ -759,6 +852,8 @@ class LinkSuggestionService:
                         "to_url": urls.get(r.to_page_id),
                         "from_chunk_heading": chunk.heading_path if chunk else None,
                         "from_chunk_ordinal": chunk.ordinal if chunk else None,
+                        "from_chunk_text": chunk.text if chunk else None,
+                        "anchor": anchors.get((r.from_page_id, r.to_page_id)),
                     }
                 )
             )

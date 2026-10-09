@@ -70,19 +70,39 @@ class UserRepository:
         row = result.scalar_one_or_none()
         return None if row is None else UserRecord.model_validate(row)
 
+    async def find_by_auth_id(self, db: AsyncSession, auth_id: str) -> UserRecord | None:
+        result = await db.execute(select(User).where(User.auth_id == auth_id).limit(1))
+        row = result.scalar_one_or_none()
+        return None if row is None else UserRecord.model_validate(row)
+
     async def create(
-        self, db: AsyncSession, email: str, hashed_password: str, name: str
+        self,
+        db: AsyncSession,
+        auth_id: str,
+        email: str,
+        name: str,
+        image: str | None,
+        is_verified: bool,
     ) -> UserRecord:
         row = User(
             id=uid(self.ID_PREFIX),
+            auth_id=auth_id,
             email=email,
-            hashed_password=hashed_password,
             name=name,
+            image=image,
             is_active=True,
             is_superuser=False,
-            is_verified=False,
+            is_verified=is_verified,
         )
         db.add(row)
+        await db.flush()
+        return UserRecord.model_validate(row)
+
+    async def update(self, db: AsyncSession, user_id: str, values: dict[str, Any]) -> UserRecord:
+        row = await db.get(User, user_id)
+        for key, value in values.items():
+            setattr(row, key, value)
+        row.updated_at = datetime.now(UTC)
         await db.flush()
         return UserRecord.model_validate(row)
 

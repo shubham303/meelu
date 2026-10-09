@@ -254,7 +254,8 @@ class PillarsResult(EntityModel):
     too_small: int = 0
     too_loose: int = 0
     covered: int = 0
-    structural: int = 0
+    structural_pages: int = 0
+    mixed_types: int = 0
     overlaps_open: int = 0
     overlaps_rejected: int = 0
 
@@ -314,4 +315,5 @@ class PillarReviewInput(BaseModel):
     search_score: float | None
     covering_url: str | None
     covering_title: str | None
+    covering_details: str | None
     members: list[dict[str, Any]]

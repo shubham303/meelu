@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ids import uid
 from src.social_listening.models.config import SocialListeningConfig
-from src.social_listening.schemas import ConfigResponse
 
 
 class SocialListeningConfigRepository:
@@ -25,10 +24,8 @@ class SocialListeningConfigRepository:
             site_id=site_id,
             platforms=[],
             results_per_keyword=50,
-            min_relevance=0.6,
-            min_similarity=0.8,
+            strictness="balanced",
             max_age_days=365,
-            drop_dead_posts=True,
         )
         db.add(row)
         await db.flush()
@@ -37,12 +34,12 @@ class SocialListeningConfigRepository:
 
     async def update(
         self, db: AsyncSession, row: SocialListeningConfig, values: dict[str, Any]
-    ) -> ConfigResponse:
+    ) -> SocialListeningConfig:
         for key, value in values.items():
             setattr(row, key, value)
         row.updated_at = datetime.now(UTC)
         await db.flush()
-        return ConfigResponse.model_validate(row)
+        return row
 
 
 social_listening_configs = SocialListeningConfigRepository()

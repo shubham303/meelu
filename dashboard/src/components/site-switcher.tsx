@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Globe, Layers, Plus, Trash2 } from "lucide-react";
 import { Button, Field, IconButton, Input, Modal } from "@/components/ui";
+import { bridge } from "@/components/agent/bridge";
 import { GLOBAL_HOME, SITE_ROOT, WEBSITE_HOME } from "@/components/desks";
 import { GLOBAL, setCurrentSite } from "@/lib/current-site";
 import { api, useApi, useCurrentSite } from "@/lib/use-api";
@@ -200,7 +201,7 @@ function DeleteSiteModal({
     <Modal open={!!site} onClose={onClose} title={site ? `Delete ${site.name}?` : "Delete?"}>
       <div className="space-y-4">
         <p className="text-sm text-sub">
-          Everything under {site?.name} goes with it — projects, posts, prospects, emails, pages
+          Everything under {site?.name} goes with it — pages, content, social posts, notes
           and crawls. This cannot be undone; to work on {site?.domain} again you would add it back
           and crawl it from scratch.
         </p>
@@ -260,6 +261,7 @@ function AddSiteModal({
         method: "POST",
         body: { domain, name },
       });
+      if (isApp) void bridge()?.describeSite?.(site.id);
       await onAdded(site);
       onClose();
     } catch (e) {
@@ -293,7 +295,7 @@ function AddSiteModal({
         </p>
         <p className="text-xs text-faint">
           {isApp
-            ? "That's all we need — the crawl starts from the Site desk, and your coworker writes up what the site is about once it has pages to read."
+            ? "That's all we need — your coworker reads the homepage and writes up what the site is about in the background, and the crawl starts from the Site desk."
             : "Next you'll crawl it from the Site desk. In the Meelu app your coworker then writes up what the site is about."}
         </p>
         {err && <p className="text-sm text-bad">{err}</p>}

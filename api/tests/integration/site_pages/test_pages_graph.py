@@ -135,7 +135,7 @@ async def test_link_scores_use_traffic_teleport(client, site):
 
     from src.core.database import unit_of_work
     from src.core.ids import uid
-    from src.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
+    from src.seo.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
     from src.sites.models.site import Site
 
     await save_pages(client, GRAPH)
@@ -244,4 +244,3 @@ async def test_graph_stores_regions_and_edge_facts(client, site):
     assert hidden.followable is False
     assert hidden.dst_canonical is False
     assert edges[(home, "https://example.com/page/2", "pagination")].rel == "next"
-    assert all(e.external is False for e in rows)

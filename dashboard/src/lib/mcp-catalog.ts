@@ -53,7 +53,7 @@ const GSC: CatalogEntry = {
   connect: "gsc",
   agentGuidance: [
     "Google Search Console is the only MEASURED search data available: impressions, clicks, CTR and average position for pages and queries that are actually the user's. Everything else about search volume is modelled — never blur the two, and say which is which whenever both appear in an answer.",
-    "The connection powers the Site desk's Search performance screen: syncing imports the daily query and page rows from this machine, and questions are answered from that store rather than by calling Google per question.",
+    "The connection powers the SEO desk's Search performance screen: syncing imports the daily query and page rows from this machine, and questions are answered from that store rather than by calling Google per question.",
     "The data lags Google by about three days and the sync may be further behind — check the stored coverage before making trend claims.",
     "The connection is READ-ONLY: nothing here can change anything in the user's Search Console.",
   ].join(" "),
@@ -79,7 +79,7 @@ const GA4: CatalogEntry = {
   connect: "ga4",
   agentGuidance: [
     "Google Analytics is the only MEASURED traffic data available: sessions, users, channels, landing pages, events, countries and devices for the user's own site. Search Console clicks measure a different thing (arrivals from Google search only; sessions are arrivals from everywhere) — never blur the two.",
-    "The connection powers the Site desk's Traffic screen: syncing imports 16 months of daily rollups from this machine, and the desk answers from that store rather than calling Google per question.",
+    "The connection powers the SEO desk's Traffic screen: syncing imports 16 months of daily rollups from this machine, and the desk answers from that store rather than calling Google per question.",
     "Analytics does not say which website a property measures, so the property is always chosen by the user — if none is set yet, send them to the Traffic screen to pick one.",
     "The connection is READ-ONLY: nothing here can change anything in the user's Analytics account.",
   ].join(" "),

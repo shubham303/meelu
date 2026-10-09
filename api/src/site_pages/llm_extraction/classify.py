@@ -21,7 +21,7 @@ class SitePageClassifier:
     async def classify_page(self, user_id: str, site_id: str, page: PendingPageRecord) -> bool:
         caller = Caller(user_id=user_id, site_id=site_id)
         subject = {"page_id": page.id, "content_hash": page.content_hash}
-        state = page_state(page.url, page.title, page.meta_description, page.body_text)
+        state = page_state(page.url, page.title, page.h1, page.meta_description, page.body_text)
         async with unit_of_work() as db:
             try:
                 result = await json_data_extractor.decide(db, caller, subject, state, QUESTIONS)

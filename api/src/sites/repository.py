@@ -138,8 +138,6 @@ class SiteRepository:
             )
         if f.domain:
             conds.append(Site.domain == f.domain)
-        if f.country:
-            conds.append(Site.country == f.country)
         if f.status:
             conds.append(Site.status == f.status)
         if f.has_repo is not None:

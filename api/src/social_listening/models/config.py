@@ -13,8 +13,5 @@ class SocialListeningConfig(EntityMixin, SiteScopedMixin, Base):
     results_per_keyword: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("50")
     )
-    min_relevance: Mapped[float] = mapped_column(nullable=False, server_default=text("0.6"))
-    min_similarity: Mapped[float] = mapped_column(nullable=False, server_default=text("0.8"))
+    strictness: Mapped[str] = mapped_column(nullable=False, server_default=text("'balanced'"))
     max_age_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("365"))
-    drop_dead_posts: Mapped[bool] = mapped_column(nullable=False, server_default=text("true"))
-    schedule: Mapped[str | None]

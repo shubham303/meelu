@@ -55,7 +55,12 @@ class ThingFacade(ProviderFacade):
 
     async def get(self, db, caller, key):
         return await self.fetch(
-            db, caller, "thing.get", {"key": key}, lambda a: a.get(key), timedelta(hours=1)
+            db,
+            caller,
+            "thing.get",
+            lambda _: {"key": key},
+            lambda a: a.get(key),
+            timedelta(hours=1),
         )
 
 
@@ -144,17 +149,3 @@ async def test_overdrawing_disables_the_websites_instead_of_billing_on_silently(
     assert await balance_usd(client) == pytest.approx(-1.7)
     r = await client.get("/api/v1/sites")
     assert [s["status"] for s in r.json()["data"]] == ["disabled"]
-
-
-async def test_a_stubbed_vendor_reports_no_cost(client, email):
-    """A stub that answers without calling the vendor must report cost 0.
-
-    Skips once the page-classification stub is replaced by the real call.
-    """
-    try:
-        from src.providers.json_data_extractor.openrouter_jev import mock_decision
-    except ImportError:
-        pytest.skip("the page classification stub has been removed")
-
-    await signup(client, email)
-    assert mock_decision({"url": "https://example.com/privacy"}, {}).cost_micros == 0

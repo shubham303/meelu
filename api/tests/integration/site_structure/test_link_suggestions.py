@@ -300,21 +300,24 @@ async def test_hierarchy_links(client, email):
             {"url": "https://tree.example.com/post", "page_type": "informational", "depth": 1},
         ],
     )
-    home, blog = pages["https://tree.example.com/"], pages["https://tree.example.com/blog"]
-    await seed_link(site["id"], user_id, home, blog)
+    home, blog, guides = (
+        pages[f"https://tree.example.com/{p}"] for p in ("", "blog", "blog/guides")
+    )
+    await seed_link(site["id"], user_id, blog, guides)
 
     r = await client.post(f"{BASE}/link-suggestions/hierarchy", json={"jobId": job["id"]})
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert data["homeFound"] is True
     assert data["hubs"] == 2
-    assert data["inserted"] + data["skipped"] == 8
+    assert data["inserted"] + data["skipped"] == 4
     assert data["skipped"] == 1
 
     rows = (await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})).json()["data"]
     pairs = {(r["fromPageId"], r["toPageId"]) for r in rows}
-    assert (home, blog) not in pairs
-    assert (blog, home) in pairs
+    assert (blog, guides) not in pairs
+    assert (guides, blog) in pairs
+    assert (home, blog) not in pairs and (blog, home) not in pairs
     post = pages["https://tree.example.com/post"]
     assert not any(post in pair for pair in pairs)
     assert all(r.get("fromChunkId") is None for r in rows)

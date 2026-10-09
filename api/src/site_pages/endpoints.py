@@ -28,6 +28,7 @@ from src.site_pages.schemas import (
     SitePageVisitedResult,
     SitePageVisitSweepResult,
 )
+from src.site_pages.schemas.links import SitePageOutlinksRequest, SitePageOutlinksResult
 from src.site_pages.schemas.llm_extraction import (
     PageLlmExtractionCreateRequest,
     PageLlmExtractionDeleteResponse,
@@ -35,6 +36,9 @@ from src.site_pages.schemas.llm_extraction import (
     PageLlmExtractionListResponse,
     PageLlmExtractionPageTypeRequest,
     PageLlmExtractionResponse,
+    PageLlmExtractionReviewQueueQuery,
+    PageLlmExtractionReviewQueueResponse,
+    PageLlmExtractionReviewRequest,
     PageLlmExtractionStatsResponse,
 )
 from src.site_pages.schemas.search import SitePageSearchRequest, SitePageSearchResponse
@@ -137,6 +141,15 @@ async def prune_pages(
     ctx: AuthContext = Depends(require_site),
 ) -> SitePagePruneResult:
     return await site_page_service.prune(db, ctx.site_id)
+
+
+@router.post("/site/pages/links")
+async def save_outlinks(
+    body: SitePageOutlinksRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> SitePageOutlinksResult:
+    return await site_page_service.save_outlinks(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/site/pages/graph")
@@ -251,6 +264,29 @@ async def set_extraction_page_type(
         await site_page_llm_extraction_service.set_page_type(
             db, ctx.user_id, ctx.site_id, page_id, body.page_type
         )
+    )
+
+
+@router.get("/site/page-llm-extractions/review-queue")
+async def extraction_review_queue(
+    q: Annotated[PageLlmExtractionReviewQueueQuery, Query()],
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> PageLlmExtractionReviewQueueResponse:
+    return PageLlmExtractionReviewQueueResponse.model_validate(
+        await site_page_llm_extraction_service.review_queue(db, ctx.site_id, q.limit)
+    )
+
+
+@router.post("/site/page-llm-extractions/by-page/{page_id}/review")
+async def save_extraction_review(
+    page_id: str,
+    body: PageLlmExtractionReviewRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> PageLlmExtractionResponse:
+    return PageLlmExtractionResponse.model_validate(
+        await site_page_llm_extraction_service.save_review(db, ctx.site_id, page_id, body)
     )
 
 

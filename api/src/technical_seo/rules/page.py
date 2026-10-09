@@ -45,17 +45,24 @@ def without(*props: str) -> str:
     return f"not (n->'props' @> '[{listed}]'::jsonb)"
 
 
-def home_links_none(external: bool, pattern: str) -> str:
+def home_links_none(pattern: str) -> str:
     return f"""site_pages.status = 200 and {IS_HOME}
       and not exists (
         select 1 from site_page_links e
-         where e.src_page_id = site_pages.id and e.external is {str(external).lower()}
-           and e.dst_url ~* '{pattern}'
+         where e.src_page_id = site_pages.id and e.dst_url ~* '{pattern}'
       )"""
 
 
-BODY_EXTERNAL_LINKS = """(select coalesce(sum(e.count), 0) from site_page_links e
-  where e.src_page_id = site_pages.id and e.external and e.region = 'body')"""
+def home_external_links_none(pattern: str) -> str:
+    return f"""site_pages.status = 200 and {IS_HOME}
+      and not exists (
+        select 1 from jsonb_array_elements(site_pages.external_links) x
+         where x->>'url' ~* '{pattern}'
+      )"""
+
+
+BODY_EXTERNAL_LINKS = """(select coalesce(sum((x->>'count')::int), 0)
+  from jsonb_array_elements(site_pages.external_links) x where x->>'region' = 'body')"""
 
 CONTACT_LINK = r"(^|/)contact(-us)?(/|\.|\?|$)"
 
@@ -491,7 +498,7 @@ PAGE_RULES: list[PageRule] = [
             "is a real organisation or a page that could belong to anyone. Link a contact page from "
             "the home page — the footer is the usual place."
         ),
-        where=home_links_none(False, CONTACT_LINK),
+        where=home_links_none(CONTACT_LINK),
     ),
     PageRule(
         kind="home-missing-terms-link",
@@ -503,7 +510,7 @@ PAGE_RULES: list[PageRule] = [
             "service is expected to state its terms somewhere reachable. Publish a terms page and link "
             "it from the home page footer alongside the privacy policy."
         ),
-        where=home_links_none(False, TERMS_LINK),
+        where=home_links_none(TERMS_LINK),
     ),
     PageRule(
         kind="home-missing-social-links",
@@ -515,7 +522,7 @@ PAGE_RULES: list[PageRule] = [
             "property of Organization markup is expected to repeat. Link the profiles the business "
             "actually maintains from the home page; do not add accounts nobody posts to."
         ),
-        where=home_links_none(True, SOCIAL_LINK),
+        where=home_external_links_none(SOCIAL_LINK),
     ),
     PageRule(
         kind="home-missing-google-analytics",

@@ -18,7 +18,10 @@ class Site(EntityMixin, Base):
     domain: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, server_default=text("'active'"))
-    country: Mapped[str | None]
+    markets: Mapped[list[str]] = mapped_column(
+        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
+    )
+    language: Mapped[str | None]
     repo_url: Mapped[str | None]
     summary: Mapped[str | None]
     social_links: Mapped[list[Any]] = mapped_column(

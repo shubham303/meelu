@@ -82,13 +82,25 @@ def email():
     return f"user-{uuid.uuid4().hex[:12]}@example.com"
 
 
-async def signup(client, email, password="secret123", name="Test User"):
-    r = await client.post(
-        "/api/auth/register", json={"email": email, "password": password, "name": name}
-    )
-    assert r.status_code == 201, r.text
-    r = await client.post("/api/auth/login", json={"email": email, "password": password})
-    assert r.status_code == 204, r.text
+@pytest.fixture(autouse=True)
+def fake_supabase(monkeypatch):
+    from src.identity import supabase
+
+    async def fetch_user(access_token: str) -> supabase.SupabaseUser:
+        kind, _, rest = access_token.partition("|")
+        if kind != "test":
+            raise supabase.SupabaseAuthError("The sign-in token is invalid or expired.")
+        email, _, name = rest.partition("|")
+        return supabase.SupabaseUser(
+            id=f"sb-{email}", email=email, name=name, image=None, email_confirmed=True
+        )
+
+    monkeypatch.setattr(supabase, "fetch_user", fetch_user)
+
+
+async def signup(client, email, name="Test User"):
+    r = await client.post("/api/auth/session", json={"accessToken": f"test|{email}|{name}"})
+    assert r.status_code == 200, r.text
     return r
 
 

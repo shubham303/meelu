@@ -4,8 +4,7 @@
 #   docker compose up -d --build
 #   open http://localhost:3000
 #
-# For a VPS with a domain and HTTPS, add the Caddy override:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Production and test run under Coolify from deploy/compose.yml — see DOCKER.md.
 #
 # Data lives in Postgres, in the `pgdata` volume — it survives restarts,
 # rebuilds and `docker compose down`. Only `down -v` destroys it.
@@ -91,8 +90,15 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
       DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
-      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      APIFY_API_KEY: ${APIFY_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      DODO_PAYMENTS_API_KEY: ${DODO_PAYMENTS_API_KEY:-}
+      DODO_PAYMENTS_WEBHOOK_SECRET: ${DODO_PAYMENTS_WEBHOOK_SECRET:-}
+      DODO_PAYMENTS_BASE_URL: ${DODO_PAYMENTS_BASE_URL:-https://test.dodopayments.com}
+      DODO_PAYMENTS_CREDITS_PRODUCT_ID: ${DODO_PAYMENTS_CREDITS_PRODUCT_ID:-}
+      DODO_PAYMENTS_RETURN_URL: ${DODO_PAYMENTS_RETURN_URL:-http://localhost:3000/dashboard}
       CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
       CREDITS_SITE_DAILY_USD: ${CREDITS_SITE_DAILY_USD:-0.4}
       CREDITS_BILLING_PERIOD_HOURS: ${CREDITS_BILLING_PERIOD_HOURS:-24}
@@ -102,6 +108,7 @@ services:
       MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
       MEELU_RERANK_DISABLED: ${MEELU_RERANK_DISABLED:-}
       MEELU_RERANK_MODEL: ${MEELU_RERANK_MODEL:-}
+      MEELU_ONNX_THREADS: ${MEELU_ONNX_THREADS:-}
       MEELU_SEARCH_MIN_SIMILARITY: ${MEELU_SEARCH_MIN_SIMILARITY:-}
     volumes:
       - embed-models:/app/.cache/models
@@ -131,7 +138,7 @@ services:
       DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
       AGENT_DATA_DIR: /app/agent-data
       DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
-      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      APIFY_API_KEY: ${APIFY_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
       CREDITS_MINIMUM_BALANCE_USD: ${CREDITS_MINIMUM_BALANCE_USD:-0.2}
@@ -152,6 +159,8 @@ services:
       context: ./dashboard
       args:
         MEELU_API_URL: ${MEELU_API_URL:-http://api:8000}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
     image: meelu-dashboard:latest
     container_name: meelu-dashboard
     restart: unless-stopped
@@ -191,6 +200,7 @@ services:
       MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
       MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
       MEELU_EMBED_INTERVAL_MS: ${MEELU_EMBED_INTERVAL_MS:-}
+      MEELU_ONNX_THREADS: ${MEELU_ONNX_THREADS:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     volumes:
       # Own cache, not shared with `dashboard` — that service doesn't mount

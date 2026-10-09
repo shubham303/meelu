@@ -9,14 +9,15 @@ class ContentPiece(EntityMixin, SiteScopedMixin, Base):
     __tablename__ = "content_pieces"
     __table_args__ = (
         Index("content_pieces_user_idx", "user_id", "created_at"),
-        Index("content_pieces_site_status_idx", "site_id", "status"),
-        Index("content_pieces_parent_idx", "parent_piece_id"),
+        Index("content_pieces_site_updated_idx", "site_id", "updated_at"),
     )
 
     title: Mapped[str] = mapped_column(nullable=False)
+    h1: Mapped[str] = mapped_column(nullable=False, server_default=text("''"))
+    meta_description: Mapped[str] = mapped_column(nullable=False, server_default=text("''"))
+    slug: Mapped[str | None]
+    target_keyword: Mapped[str | None]
     body_markdown: Mapped[str] = mapped_column(nullable=False, server_default=text("''"))
-    channel_key: Mapped[str] = mapped_column(nullable=False)
-    status: Mapped[str] = mapped_column(nullable=False, server_default=text("'draft'"))
     word_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     checks: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY)
     created_by: Mapped[str] = mapped_column(nullable=False, server_default=text("'user'"))
@@ -32,7 +33,4 @@ class ContentPiece(EntityMixin, SiteScopedMixin, Base):
     )
     source_page_id: Mapped[str | None] = mapped_column(
         ForeignKey("site_pages.id", ondelete="SET NULL")
-    )
-    parent_piece_id: Mapped[str | None] = mapped_column(
-        ForeignKey("content_pieces.id", ondelete="SET NULL")
     )

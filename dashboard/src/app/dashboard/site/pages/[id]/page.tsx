@@ -137,11 +137,8 @@ function PageDetail({
 }) {
   const anchors = uniqueAnchors(links?.inbound);
   const inboundPages = uniqueUrls((links?.inbound ?? []).map((l) => l.srcUrl));
-  const outbound = (links?.outbound ?? []).filter((l) => !l.external);
-  const outboundPages = uniqueUrls(outbound.map((l) => l.dstUrl));
-  const externalPages = uniqueUrls(
-    (links?.outbound ?? []).filter((l) => l.external).map((l) => l.dstUrl),
-  );
+  const outboundPages = uniqueUrls((links?.outbound ?? []).map((l) => l.dstUrl));
+  const externalPages = uniqueUrls((links?.external ?? []).map((l) => l.url));
 
   return (
     <div className="space-y-5">

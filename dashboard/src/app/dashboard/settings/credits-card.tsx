@@ -33,7 +33,7 @@ export function CreditsCard() {
           <div className="min-w-0">
             <div className="font-medium">Meelu credits</div>
             <p className="text-sm text-sub mt-0.5">
-              Search data, social listening and prospect sourcing run through Meelu&apos;s own
+              Search data and social listening run through Meelu&apos;s own
               vendor accounts. Each vendor call is charged to this balance at cost; results
               already in Meelu&apos;s database are free.
             </p>

@@ -14,7 +14,7 @@ def test_passage_input():
 @pytest.fixture(scope="module")
 def embedder():
     try:
-        return Embedder("Xenova/multilingual-e5-small")
+        return Embedder("Xenova/multilingual-e5-small", 2)
     except Exception as e:
         pytest.skip(f"model unavailable: {e}")
 

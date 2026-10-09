@@ -24,7 +24,40 @@ HIERARCHY_TYPES = frozenset({"hub", "utility"})
 
 STRUCTURAL_TYPES = frozenset({"utility", "legal", "company"})
 
-STRUCTURAL_SHARE = 0.5
+STRUCTURAL_BROAD_TYPES = frozenset(
+    {"home", "about", "careers", "contact", "legal", "account", "utility"}
+)
+
+OFFER_FAMILY = "offer"
+
+CONTENT_FAMILY = "content"
+
+UNKNOWN_FAMILY = "unknown"
+
+BROAD_PAGE_FAMILIES = {
+    "product": OFFER_FAMILY,
+    "service": OFFER_FAMILY,
+    "feature": OFFER_FAMILY,
+    "solution": OFFER_FAMILY,
+    "integration": OFFER_FAMILY,
+    "pricing": OFFER_FAMILY,
+    "location": OFFER_FAMILY,
+    "lead_capture": OFFER_FAMILY,
+    "tool": OFFER_FAMILY,
+    "article": CONTENT_FAMILY,
+    "guide": CONTENT_FAMILY,
+    "glossary": CONTENT_FAMILY,
+    "comparison": CONTENT_FAMILY,
+    "case_study": CONTENT_FAMILY,
+    "docs": CONTENT_FAMILY,
+    "event": CONTENT_FAMILY,
+}
+
+PAGE_TYPE_FAMILIES = {
+    "money": OFFER_FAMILY,
+    "informational": CONTENT_FAMILY,
+    "support": CONTENT_FAMILY,
+}
 
 REMOVAL_REGION = "body"
 

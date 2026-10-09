@@ -12,12 +12,10 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, current_user_id, require_site
-from src.content.channels.service import site_channel_service
 from src.content.media.service import post_media_service
 from src.content.piece_issues.service import content_piece_issue_service
 from src.content.pieces.service import content_piece_service
 from src.content.schemas import (
-    ContentPieceCountsResponse,
     ContentPieceCreateRequest,
     ContentPieceDeleteResponse,
     ContentPieceIssueListItemResponse,
@@ -29,8 +27,6 @@ from src.content.schemas import (
     ContentPieceResponse,
     ContentPieceUpdateRequest,
     PostMediaResponse,
-    SiteChannelResponse,
-    SiteChannelUpdateRequest,
     UnsplashDownloadRequest,
     UnsplashDownloadResponse,
     UnsplashPhotoResponse,
@@ -51,66 +47,14 @@ def actor_of(request: Request) -> str:
     return "user" if request.headers.get("x-meelu-actor") == "user" else "agent"
 
 
-@router.get("/content/channels")
-async def list_channels(
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> list[SiteChannelResponse]:
-    channels = await site_channel_service.list(db, ctx.user_id, ctx.site_id)
-    return [SiteChannelResponse.model_validate(c) for c in channels]
-
-
-@router.get("/content/channels/{channel_key}")
-async def get_channel(
-    channel_key: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> SiteChannelResponse:
-    channel = await site_channel_service.get(db, ctx.user_id, ctx.site_id, channel_key)
-    return SiteChannelResponse.model_validate(channel)
-
-
-@router.put("/content/channels/{channel_key}")
-async def update_channel(
-    channel_key: str,
-    body: SiteChannelUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> SiteChannelResponse:
-    channel = await site_channel_service.update(db, ctx.user_id, ctx.site_id, channel_key, body)
-    return SiteChannelResponse.model_validate(channel)
-
-
-@router.post("/content/channels/{channel_key}/reset")
-async def reset_channel_rules(
-    channel_key: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> SiteChannelResponse:
-    channel = await site_channel_service.reset_rules(db, ctx.user_id, ctx.site_id, channel_key)
-    return SiteChannelResponse.model_validate(channel)
-
-
 @router.get("/content/pieces")
 async def list_pieces(
-    counts: bool = Query(False),
-    status: str | None = Query(None),
-    channel: str | None = Query(None),
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
-) -> PaginatedApiResponse[ContentPieceListItemResponse] | ContentPieceCountsResponse:
-    if counts:
-        return await content_piece_service.counts(db, ctx.site_id)
-    page = await content_piece_service.list(
-        db,
-        ctx.site_id,
-        paging,
-        status=status,
-        channel_key=channel,
-        search=search,
-    )
+) -> PaginatedApiResponse[ContentPieceListItemResponse]:
+    page = await content_piece_service.list(db, ctx.site_id, paging, search=search)
     return PaginatedApiResponse[ContentPieceListItemResponse](
         data=[ContentPieceListItemResponse.model_validate(p) for p in page.data],
         pagination=page.pagination,

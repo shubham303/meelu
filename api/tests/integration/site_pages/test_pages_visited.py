@@ -42,7 +42,6 @@ async def test_sweep_marks_and_prunes(client, site):
                 "https://example.com/keep",
                 "https://example.com/also-keep",
                 "",
-                None,
             ]
         },
     )

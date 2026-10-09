@@ -22,11 +22,23 @@ def iso_date(value: Any) -> str:
     raw = str(value or "").strip()
     if raw.endswith("Z"):
         raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
+    parsed = parse_timestamp(raw)
+    if parsed is None:
         return datetime.now(UTC).isoformat()
     return (parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).isoformat()
+
+
+def parse_timestamp(raw: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        pass
+    for fmt in ("%a %b %d %H:%M:%S %z %Y", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def post(platform: str, raw: dict[str, Any]) -> dict | None:

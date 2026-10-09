@@ -4,7 +4,6 @@ import sys
 
 import src.core.tables  # noqa: F401
 from src.core.database import engine
-from src.seo.precompute.clusters import seo_cluster_service
 from src.site_pages.llm_extraction.classify import site_page_classifier
 
 from .embedding import Embedder
@@ -33,15 +32,12 @@ async def run_passes(settings: WorkerSettings, embedder: Embedder) -> int:
     listening = await embed_worker_service.run_listening_pass(embedder, model)
     if listening > 0:
         print(f"embed-worker: embedded {listening} listening row(s)")
-    seo_sites = await seo_cluster_service.run_seo_pass(embedder, model)
-    if seo_sites > 0:
-        print(f"embed-worker: rebuilt keyword clusters for {seo_sites} site(s)")
-    return pages + embedded + extracted + listening + seo_sites
+    return pages + embedded + extracted + listening
 
 
 async def run(settings: WorkerSettings) -> None:
     print(f"embed-worker: loading {settings.meelu_embed_model}…")
-    embedder = Embedder(settings.meelu_embed_model)
+    embedder = Embedder(settings.meelu_embed_model, settings.meelu_onnx_threads)
     interval = settings.meelu_embed_interval_ms / 1000
     print(
         f"embed-worker: ready — chunking and embedding every {settings.meelu_embed_interval_ms}ms"

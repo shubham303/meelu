@@ -12,6 +12,7 @@ export async function jsonCall(system, prompt, llm) {
       allowedTools: [],
       permissionMode: "default",
       settingSources: [],
+      strictMcpConfig: true,
       maxTurns: 1,
       env: llmEnv(gateway, anthropicKey, limits),
     },

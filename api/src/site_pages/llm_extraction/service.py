@@ -2,14 +2,23 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.site_pages.llm_extraction.questions import (
+    MAX_BODY_CHARS,
+    QUESTIONS,
+    invalid_review_answers,
+    read_review_answers,
+)
 from src.site_pages.llm_extraction.repository import site_page_llm_extractions
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas.llm_extraction import (
     ExtractionState,
     PageLlmExtractionCreateRequest,
     PageLlmExtractionRecord,
+    PageLlmExtractionReviewRequest,
     PageLlmExtractionStatsRecord,
     PendingPageRecord,
+    ReviewPageRecord,
+    ReviewQueueRecord,
 )
 from src.sites.repository import sites
 
@@ -77,6 +86,46 @@ class SitePageLlmExtractionService:
         )
         if saved is None:
             raise HTTPException(409, f"Page {page_id} already has a page type.")
+        return saved
+
+    async def review_queue(self, db: AsyncSession, site_id: str, limit: int) -> ReviewQueueRecord:
+        queued = await site_page_llm_extractions.review_queue(db, site_id)
+        hashes = await site_pages.content_hashes_by_ids(db, site_id, [p for p, _ in queued])
+        current = [p for p, h in queued if h is not None and hashes.get(p) == h]
+        pages = await site_pages.pending_records_by_ids(db, site_id, current[:limit])
+        return ReviewQueueRecord(
+            questions=QUESTIONS,
+            pages=[
+                ReviewPageRecord(
+                    page_id=p.id,
+                    url=p.url,
+                    title=p.title,
+                    h1=p.h1,
+                    meta_description=p.meta_description,
+                    content_hash=p.content_hash or "",
+                    body_text=(p.body_text or "")[:MAX_BODY_CHARS],
+                )
+                for p in pages
+            ],
+            total=len(current),
+        )
+
+    async def save_review(
+        self, db: AsyncSession, site_id: str, page_id: str, body: PageLlmExtractionReviewRequest
+    ) -> PageLlmExtractionRecord:
+        invalid = invalid_review_answers(body.answers)
+        if invalid:
+            raise HTTPException(422, f"Missing or unknown answer for {', '.join(invalid)}.")
+        hashes = await site_pages.content_hashes_by_ids(db, site_id, [page_id])
+        if page_id not in hashes:
+            raise HTTPException(404, f"No page {page_id} for this website.")
+        if hashes[page_id] != body.content_hash:
+            raise HTTPException(409, f"Page {page_id} changed since it was queued for review.")
+        saved = await site_page_llm_extractions.save_review(
+            db, site_id, page_id, body.content_hash, body.model, read_review_answers(body.answers)
+        )
+        if saved is None:
+            raise HTTPException(409, f"Page {page_id} is not waiting for a review.")
         return saved
 
     async def get(

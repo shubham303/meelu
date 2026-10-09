@@ -8,7 +8,6 @@ from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.core.schemas import RequestModel
 from src.providers.json_data_extractor.service import json_data_extractor
-from src.providers.prospect_sources.service import prospect_sources
 from src.providers.registry import Caller
 from src.providers.schemas import DomainStatus, ProviderCallResponse
 from src.providers.seo_data.service import seo_data
@@ -17,7 +16,7 @@ from src.providers.social_search.service import social_search
 
 router = APIRouter()
 
-FACADES = (seo_data, social_search, prospect_sources, json_data_extractor)
+FACADES = (seo_data, social_search, json_data_extractor)
 
 
 class SocialSearchRequest(RequestModel):
@@ -25,12 +24,6 @@ class SocialSearchRequest(RequestModel):
     keywords: list[str]
     since: str | None = None
     limit: int = Field(default=30, ge=1, le=100)
-
-
-class ProspectSearchRequest(RequestModel):
-    source: str
-    queries: list[str]
-    limit: int = Field(default=20, ge=1, le=100)
 
 
 def caller_of(ctx: OptionalSiteContext) -> Caller:
@@ -69,20 +62,3 @@ async def social_search_posts(
         db, caller_of(ctx), body.platform, body.keywords, body.since, body.limit
     )
     return {"posts": posts}
-
-
-@router.get("/providers/prospect-sources/sources")
-async def prospect_source_list(user_id: str = Depends(require("providers", "read"))) -> dict:
-    return {"sources": prospect_sources.available_sources()}
-
-
-@router.post("/providers/prospect-sources/search")
-async def prospect_search(
-    body: ProspectSearchRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: OptionalSiteContext = Depends(optional_site),
-) -> dict:
-    found = await prospect_sources.search_source(
-        db, caller_of(ctx), body.source, body.queries, body.limit
-    )
-    return {"prospects": found}

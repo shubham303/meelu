@@ -1,10 +1,9 @@
-import src.agent.tools.core  # noqa: F401
-import src.providers.seo_data.tools  # noqa: F401
-import src.seo.export.tools  # noqa: F401
+import src.agent.tools.core
+import src.providers.seo_data.tools
+import src.scratchpad.tools  # noqa: F401
 from src.agent import server
 from src.agent_scope.analytics import ACTIONS as ANALYTICS_ACTIONS
 from src.agent_scope.content import ACTIONS as CONTENT_ACTIONS
-from src.agent_scope.leads import ACTIONS as LEADS_ACTIONS
 from src.agent_scope.lib import AgentScope
 from src.agent_scope.pages import ACTIONS as PAGES_ACTIONS
 from src.agent_scope.plan import scope as plan
@@ -23,12 +22,11 @@ NOTE_TOOLS = (save_note, update_note, delete_note)
 AGENT_SCOPES: dict[str, AgentScope] = {
     "plan": plan,
     **SITE_ACTIONS,
+    **SEO_ACTIONS,
     **PAGES_ACTIONS,
     **TECHNICAL_SEO_ACTIONS,
     **CONTENT_ACTIONS,
-    **LEADS_ACTIONS,
     **PROFILE_ACTIONS,
-    **SEO_ACTIONS,
     **ANALYTICS_ACTIONS,
     **SOCIAL_LISTENING_ACTIONS,
 }
@@ -41,12 +39,11 @@ DESK_NAMES = frozenset(scope.desk for scope in AGENT_SCOPES.values())
 DESK_BLURBS: dict[str, str] = {
     "profile": "The business profile record — who the user is, what they sell, voice and positioning; save or clear its fields.",
     "site": "The website record and site-wide technical issues — record one the audit missed, reject or restore one.",
+    "seo": "Search Console, Analytics and the saved SEO lists — find and curate competitors and backlink opportunities.",
     "pages": "The crawled page corpus — search pages by text or crawl facts.",
     "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
-    "seo": "Search performance — keywords, clusters, competitors and page suggestions: propose pages to add, edit or merge from Search Console and keyword evidence.",
-    "content": "Written pieces — create and revise pieces, channel rules.",
-    "leads": "Lead management — campaign briefs, discovery runs, and the lead list with fit scores and evidence; shape briefs, keep stages honest, curate the shortlist.",
-    "social-listening": "Found social posts asking for what the site sells, brand and competitor mentions — set reply angles and statuses, grow the query and competitor lists, export the posts as a CSV.",
+    "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
+    "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines, export the posts as a CSV.",
     "analytics": "The analytics engine — sessions over CSVs and workspace tables: profiling, clustering, forecasting, reports.",
 }
 LOADABLE_DESKS = frozenset(DESK_BLURBS)

@@ -49,6 +49,8 @@ class LinkSuggestionRecord(EntityModel):
     to_url: str | None = None
     from_chunk_heading: str | None = None
     from_chunk_ordinal: int | None = None
+    from_chunk_text: str | None = None
+    anchor: str | None = None
 
 
 class LinkSuggestionFilter(BaseModel):
@@ -236,10 +238,29 @@ def _job_id(value: Any) -> str:
     return str(value).strip()
 
 
+class MentionTarget(RequestModel):
+    to_id: str = Field(default="", validate_default=True)
+    phrases: list[str] = Field(default_factory=list, validate_default=True)
+
+    @field_validator("to_id", mode="before")
+    @classmethod
+    def _to_id(cls, value: Any) -> str:
+        if blank(value):
+            raise ValueError("Send the toId of the target page.")
+        return str(value).strip()
+
+    @field_validator("phrases", mode="before")
+    @classmethod
+    def _phrases(cls, value: Any) -> list[str]:
+        items = list(dict.fromkeys(str(v).strip() for v in (value or []) if not blank(v)))
+        if not items:
+            raise ValueError("Give each target at least one phrase.")
+        return items
+
+
 class MentionsRequest(RequestModel):
     job_id: str = Field(default="", validate_default=True)
-    to_ids: list[str] = Field(default_factory=list)
-    phrases: list[str] = Field(default_factory=list)
+    targets: list[MentionTarget] = Field(default_factory=list, validate_default=True)
     limit_per_target: int = Field(default=50, ge=1, le=500)
 
     @field_validator("job_id", mode="before")
@@ -247,13 +268,15 @@ class MentionsRequest(RequestModel):
     def _job(cls, value: Any) -> str:
         return _job_id(value)
 
-    @field_validator("to_ids", "phrases", mode="before")
+    @field_validator("targets")
     @classmethod
-    def _non_empty(cls, value: Any) -> list[str]:
-        items = list(dict.fromkeys(str(v).strip() for v in (value or []) if not blank(v)))
-        if not items:
-            raise ValueError("Give at least one item.")
-        return items
+    def _targets(cls, value: list[MentionTarget]) -> list[MentionTarget]:
+        if not value:
+            raise ValueError("Give at least one target.")
+        ids = [t.to_id for t in value]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Give each target page once, with all its phrases.")
+        return value
 
 
 class MentionsResult(EntityModel):
@@ -286,6 +309,36 @@ class RemovalsResult(EntityModel):
     to_hub_or_home: int = 0
 
 
+class PairsRequest(RequestModel):
+    job_id: str = Field(default="", validate_default=True)
+    source_table: str = Field(default="", validate_default=True)
+    min_similarity: float | None = Field(default=None, ge=0.0, le=1.0)
+    per_source: int = Field(default=3, ge=1, le=15)
+
+    @field_validator("job_id", mode="before")
+    @classmethod
+    def _job(cls, value: Any) -> str:
+        return _job_id(value)
+
+    @field_validator("source_table", mode="before")
+    @classmethod
+    def _table(cls, value: Any) -> str:
+        return workspace_table(value)
+
+
+class PairsResult(EntityModel):
+    read: int = 0
+    not_live: int = 0
+    already_linked: int = 0
+    already_suggested: int = 0
+    not_embedded: int = 0
+    below_threshold: int = 0
+    over_source_cap: int = 0
+    inserted: int = 0
+    skipped: int = 0
+    min_similarity: float = 0.0
+
+
 class WorkspaceEdge(BaseModel):
     from_page_id: str
     to_page_id: str
@@ -313,16 +366,19 @@ class ScreeningInput(BaseModel):
     id: str
     action: LinkAction
     suggestion: str
+    from_page_id: str
+    to_page_id: str
     from_url: str
     from_title: str | None
     from_content_hash: str | None
     from_text: str
+    from_details: str
     anchor: str | None = None
     to_url: str
     to_title: str | None
     to_meta_description: str | None
     to_h1: list[str]
-    to_page_type: str | None
+    to_details: str
     to_content_hash: str | None
 
 

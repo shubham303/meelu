@@ -16,6 +16,7 @@ from src.providers.errors import (
     ProviderRequestError,
     SpendCeilingError,
 )
+from src.providers.models.provider_cache import ProviderCache
 from src.providers.repository import provider_caches, provider_calls
 from src.providers.schemas import AdapterStatus, DomainStatus
 
@@ -99,20 +100,30 @@ class ProviderFacade:
         db: AsyncSession,
         caller: Caller,
         capability: str,
-        request: dict[str, Any],
+        request: Callable[[Any], dict[str, Any]],
         call: Callable[[Any], Awaitable[VendorResponse]],
-        ttl: timedelta,
+        ttl: timedelta | None,
     ) -> Any:
-        key = cache_key(self.domain, capability, request)
         started = time.monotonic()
-        hit = await provider_caches.get_fresh(db, key)
-        if hit is not None:
-            await self._log(
-                db, caller, capability, hit.provider, key, True, 0, 0, "ok", None, started
-            )
-            if caller.spend is not None:
-                caller.spend.cache_hits += 1
-            return hit.response
+        if ttl is not None:
+            hit = await self._cached(db, capability, request)
+            if hit is not None:
+                await self._log(
+                    db,
+                    caller,
+                    capability,
+                    hit.provider,
+                    hit.cache_key,
+                    True,
+                    0,
+                    0,
+                    "ok",
+                    None,
+                    started,
+                )
+                if caller.spend is not None:
+                    caller.spend.cache_hits += 1
+                return hit.response
 
         candidates = self.adapters_for(capability)
         if not candidates:
@@ -120,6 +131,8 @@ class ProviderFacade:
 
         last: ProviderRequestError | None = None
         for adapter in candidates:
+            query = request(adapter)
+            key = cache_key(self.domain, capability, query)
             if adapter.charges:
                 if caller.spend is not None:
                     caller.spend.check()
@@ -133,17 +146,18 @@ class ProviderFacade:
             except ProviderRequestError as exc:
                 last = exc
                 continue
-            await provider_caches.upsert(
-                db,
-                cache_key=key,
-                domain=self.domain,
-                capability=capability,
-                provider=adapter.id,
-                request=request,
-                response=result.data,
-                vendor_cost_micros=result.cost_micros,
-                ttl=ttl,
-            )
+            if ttl is not None:
+                await provider_caches.upsert(
+                    db,
+                    cache_key=key,
+                    domain=self.domain,
+                    capability=capability,
+                    provider=adapter.id,
+                    request=query,
+                    response=result.data,
+                    vendor_cost_micros=result.cost_micros,
+                    ttl=ttl,
+                )
             row = await self._log(
                 db,
                 caller,
@@ -173,6 +187,20 @@ class ProviderFacade:
         assert last is not None
         await self._log_failure(caller, capability, last.provider_id, key, str(last), started)
         raise last
+
+    async def _cached(
+        self, db: AsyncSession, capability: str, request: Callable[[Any], dict[str, Any]]
+    ) -> ProviderCache | None:
+        keys = dict.fromkeys(
+            cache_key(self.domain, capability, request(adapter))
+            for adapter in self.adapters
+            if capability in adapter.capabilities
+        )
+        for key in keys:
+            hit = await provider_caches.get_fresh(db, key)
+            if hit is not None:
+                return hit
+        return None
 
     async def _log_failure(self, caller, capability, provider, key, error, started) -> None:
         async with unit_of_work() as db:

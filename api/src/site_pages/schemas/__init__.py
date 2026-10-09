@@ -8,6 +8,7 @@ from sqlalchemy import inspect
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 from src.site_pages.models.site_page import SitePage
+from src.site_pages.schemas.links import PageLink, stored_links
 from src.site_pages.stage import STAGES, page_stage
 from src.site_pages.url import normalise_url
 
@@ -176,6 +177,7 @@ class SitePageWritableFields(RequestModel):
     fetch_error: str | None = None
     content_type: str | None = None
     images: list[Any] | None = None
+    external_links: list[Any] | None = None
     published_at: datetime | None = None
     modified_at: datetime | None = None
     content_changed_at: datetime | None = None
@@ -196,6 +198,11 @@ class SitePageWritableFields(RequestModel):
     @classmethod
     def _tz(cls, v: datetime | None) -> datetime | None:
         return _utc(v)
+
+    @field_validator("external_links", mode="before")
+    @classmethod
+    def _merge_external_links(cls, v: Any) -> Any:
+        return stored_links(v)
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
@@ -241,21 +248,8 @@ class SitePageUpdateRequest(SitePageWritableFields):
         return _reject_unwritable(data)
 
 
-class PageLinkInput(RequestModel):
-    url: str
-    anchor: str | None = None
-    rel: str | None = None
-    region: str = "body"
-    count: int = 1
-    external: bool = False
-
-
 class SitePageCrawlItem(SitePageWritableFields):
     url: str
-    links: list[PageLinkInput] | None = None
-
-    def changes(self) -> dict[str, Any]:
-        return {k: v for k, v in super().changes().items() if k != "links"}
 
     @model_validator(mode="before")
     @classmethod
@@ -441,6 +435,7 @@ class SitePageRecord(SemanticMatchFields):
     fetch_error: str | None
     content_type: str | None
     images: list[Any]
+    external_links: list[Any]
     published_at: JsDateTime | None
     modified_at: JsDateTime | None
     content_changed_at: JsDateTime | None
@@ -543,6 +538,13 @@ class ChunkHit(EntityModel):
     heading_path: str | None
     text: str
     raw: float
+
+
+class PhraseHit(EntityModel):
+    key: str
+    page_id: str
+    chunk_id: str
+    phrase: str
 
 
 class CrawlKnownPageRecord(EntityModel):
@@ -674,9 +676,8 @@ class SitePageLinkRecord(EntityModel):
     id: str
     src_page_id: str
     src_url: str | None = None
-    dst_page_id: str | None
+    dst_page_id: str
     dst_url: str
-    external: bool
     region: str
     rel: str | None
     anchor: str | None
@@ -688,6 +689,7 @@ class SitePageLinkRecord(EntityModel):
 class SitePageLinksResult(EntityModel):
     inbound: list[SitePageLinkRecord]
     outbound: list[SitePageLinkRecord]
+    external: list[PageLink]
 
 
 class SitePageLinksResponse(SitePageLinksResult):

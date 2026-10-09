@@ -1,7 +1,7 @@
 {
   "name": "meelu-app",
   "version": "0.1.0",
-  "description": "Meelu desktop \u2014 the web dashboard in a window, plus the agent harness. One Next.js codebase renders web and app; the agent chrome self-gates on app mode, so the web stays a plain CRUD site.",
+  "description": "Meelu desktop — the web dashboard in a window, plus the agent harness. One Next.js codebase renders web and app; the agent chrome self-gates on app mode, so the web stays a plain CRUD site.",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -14,7 +14,7 @@
     "boot-test": "MEELU_AUTOEXIT_MS=12000 electron ."
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.235",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.283",
     "@huggingface/transformers": "^4.2.0",
     "@meelu/ai-detect": "file:packages/ai-detect",
     "@meelu/readability": "file:packages/readability",

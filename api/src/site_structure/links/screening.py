@@ -14,6 +14,8 @@ def questions(action: LinkAction, question: str | None) -> dict[str, Question]:
     return {
         "apply": choice(
             f"{ask} Judge from the source text, the target page and the suggestion. "
+            "Each page carries details an earlier model extracted about it, such as its role "
+            "and kind; read those details too before deciding. "
             "Say yes only when a reader of the source would plausibly want the target next "
             "and the change fits how the page is written.",
             {
@@ -33,12 +35,13 @@ def item_state(item: ScreeningInput) -> dict[str, Any]:
             "title": item.from_title or "",
             "text": item.from_text,
             "anchor": item.anchor or "",
+            "details": item.from_details,
         },
         "target": {
             "url": item.to_url,
             "title": item.to_title or "",
             "meta_description": item.to_meta_description or "",
             "h1": item.to_h1,
-            "page_type": item.to_page_type or "",
+            "details": item.to_details,
         },
     }

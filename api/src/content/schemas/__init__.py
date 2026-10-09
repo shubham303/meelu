@@ -1,8 +1,3 @@
-from src.content.schemas.channels import (
-    SiteChannelRecord,
-    SiteChannelResponse,
-    SiteChannelUpdateRequest,
-)
 from src.content.schemas.media import PostMediaContent, PostMediaRecord, PostMediaResponse
 from src.content.schemas.piece_issues import (
     ContentPieceIssueListItemResponse,
@@ -14,7 +9,6 @@ from src.content.schemas.piece_issues import (
     ContentPieceIssueUpdateRequest,
 )
 from src.content.schemas.pieces import (
-    ContentPieceCountsResponse,
     ContentPieceCreateRequest,
     ContentPieceDeleteResponse,
     ContentPieceListItemResponse,
@@ -35,7 +29,6 @@ from src.content.schemas.unsplash import (
 )
 
 __all__ = [
-    "ContentPieceCountsResponse",
     "ContentPieceCreateRequest",
     "ContentPieceDeleteResponse",
     "ContentPieceIssueListItemResponse",
@@ -57,9 +50,6 @@ __all__ = [
     "PostMediaContent",
     "PostMediaRecord",
     "PostMediaResponse",
-    "SiteChannelRecord",
-    "SiteChannelResponse",
-    "SiteChannelUpdateRequest",
     "UnsplashDownloadRequest",
     "UnsplashDownloadResponse",
     "UnsplashPhotoResponse",

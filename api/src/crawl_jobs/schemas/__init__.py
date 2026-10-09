@@ -111,6 +111,7 @@ class CrawlJobUpdateRequest(RequestModel):
     notes: list[str] | None = None
     error: str | None = None
     sitemap_urls: list[str] | None = None
+    frontier: list[str] | None = None
     sitemap_complete: bool | None = None
     sitemaps_used: list[str] | None = None
     sitemap_at_root: bool | None = None
@@ -124,7 +125,7 @@ class CrawlJobUpdateRequest(RequestModel):
     crawler_access: dict[str, Any] | None = None
     host_variants: dict[str, Any] | None = None
 
-    @field_validator("notes", "sitemap_urls", "sitemaps_used", mode="before")
+    @field_validator("notes", "sitemap_urls", "sitemaps_used", "frontier", mode="before")
     @classmethod
     def _validate_lists(cls, v: Any) -> list[str] | None:
         return None if v is None else [str(u) for u in v]

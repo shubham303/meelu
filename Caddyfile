@@ -1,5 +1,0 @@
-# Used only by docker-compose.prod.yml. MEELU_DOMAIN comes from .env.
-{$MEELU_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy dashboard:3000
-}

@@ -6,7 +6,6 @@ import {
   NotebookPen,
   Radar,
   Search,
-  Send,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -49,7 +48,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "SEO",
     icon: Search,
     stage: "decide",
-    blurb: "Which page to add, edit or merge — from Search Console, keywords and competitors.",
+    blurb: "How Google sees the site and what visitors do — Search Console and Analytics.",
     scope: "site",
   },
   {
@@ -58,16 +57,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "Content",
     icon: FileText,
     stage: "make",
-    blurb: "Everything you write — website copy or a post for any social channel, checked against its limits.",
-    scope: "site",
-  },
-  {
-    id: "leads",
-    href: "/dashboard/leads",
-    label: "Lead Management",
-    icon: Send,
-    stage: "earn",
-    blurb: "Source and curate the people worth talking to — found, qualified, shortlisted.",
+    blurb: "Pages for your website — keyword, internal links, title, H1 and meta description, checked on every save.",
     scope: "site",
   },
   {
@@ -76,7 +66,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "Social Listening",
     icon: Radar,
     stage: "earn",
-    blurb: "Conversations your site belongs in — questions to answer, mentions of you, and competitor threads.",
+    blurb: "Conversations your site belongs in, found from what you describe — you decide which to answer.",
     scope: "site",
   },
   {

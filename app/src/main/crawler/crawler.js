@@ -66,17 +66,11 @@ function blockedRow(url, inSitemap) {
   };
 }
 
-function pageLinks(f) {
-  return [
-    ...f.outLinks.map((l) => ({ ...l, external: false })),
-    ...f.externalLinks.map((l) => ({ ...l, count: 1, external: true })),
-  ];
-}
-
 function failedRow(url, inSitemap, status, reason, fetchError = null) {
   return {
     url,
     links: [],
+    externalLinks: [],
     status,
     inSitemap,
     blockedByRobots: false,
@@ -95,6 +89,7 @@ function redirectRow(hop, inSitemap, final, hopsLeft) {
   return {
     url: hop.url,
     links: [],
+    externalLinks: [],
     status: hop.status,
     inSitemap,
     blockedByRobots: false,
@@ -496,7 +491,8 @@ export async function crawlSite(domain, known, opts = {}) {
       h1: f.h1,
       headings: f.headings,
       bodyText: f.bodyText,
-      links: pageLinks(f),
+      links: f.outLinks,
+      externalLinks: f.externalLinks,
       canonical: f.canonical,
       robotsDirectives: f.robotsDirectives,
       viewportMeta: f.viewportMeta,

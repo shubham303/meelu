@@ -1,12 +1,12 @@
 from src.agent_scope.ask import AskDesk, ask_prompt
 from src.agent_scope.lib import AgentScope, desk_guides, desk_tables
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
+from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.site_pages.models.site_chunk import SiteChunk
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
 from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.tools import set_page_type
-from src.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.sites.models.site import Site
 
 DESK = "pages"
@@ -37,7 +37,7 @@ ASK = AskDesk(
     elsewhere=[
         "Changing the website's record or settings → **Site**; saving a note for later tasks → **Notes**.",
         "Judging audit findings and drafting fix briefs → **Technical SEO**.",
-        "Writing a page for the site → **Content**; a post → **Social**.",
+        "Writing a page for the site → **Content**.",
         "Counts, averages, groupings and trends over the whole site → **Analytics**, fed by the site's CSV download.",
     ],
 )

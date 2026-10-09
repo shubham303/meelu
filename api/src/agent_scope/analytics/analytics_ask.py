@@ -3,18 +3,18 @@ from src.analytics.models.analytics_reports import AnalyticsReport
 from src.analytics.models.analytics_sessions import AnalyticsSession
 from src.analytics.models.analytics_sources import AnalyticsSource
 from src.content.models.content_pieces import ContentPiece
+from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
+from src.seo.site_search.models.site_search_daily import SiteSearchDaily
+from src.seo.site_search.models.site_search_sync import SiteSearchSync
+from src.seo.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily
+from src.seo.site_traffic.models.site_traffic_events_daily import SiteTrafficEventsDaily
+from src.seo.site_traffic.models.site_traffic_geo_daily import SiteTrafficGeoDaily
+from src.seo.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
+from src.seo.site_traffic.models.site_traffic_pages_daily import SiteTrafficPagesDaily
+from src.seo.site_traffic.models.site_traffic_sync import SiteTrafficSync
+from src.seo.site_traffic.models.site_traffic_tech_daily import SiteTrafficTechDaily
+from src.seo.site_traffic.models.site_traffic_totals_daily import SiteTrafficTotalsDaily
 from src.site_pages.models.site_page import SitePage
-from src.site_search.models.site_page_index_status import SitePageIndexStatus
-from src.site_search.models.site_search_daily import SiteSearchDaily
-from src.site_search.models.site_search_sync import SiteSearchSync
-from src.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily
-from src.site_traffic.models.site_traffic_events_daily import SiteTrafficEventsDaily
-from src.site_traffic.models.site_traffic_geo_daily import SiteTrafficGeoDaily
-from src.site_traffic.models.site_traffic_landing_daily import SiteTrafficLandingDaily
-from src.site_traffic.models.site_traffic_pages_daily import SiteTrafficPagesDaily
-from src.site_traffic.models.site_traffic_sync import SiteTrafficSync
-from src.site_traffic.models.site_traffic_tech_daily import SiteTrafficTechDaily
-from src.site_traffic.models.site_traffic_totals_daily import SiteTrafficTotalsDaily
 from src.sites.models.site import Site
 from src.technical_seo.models.site_audit_run import SiteAuditRun
 from src.technical_seo.models.site_issue import SiteIssue
@@ -58,7 +58,7 @@ Search data lags a couple of days. Do not extend a range to today and then repor
 
 ## How to answer
 Answer the question in front of you. Do not pre-empt the next one or summarise the whole dataset. Do not ask permission to run the analysis the user asked for.
-**Answer with links to rows, never with the rows.** Name the pages, pieces and campaigns and point at them. If the answer is a chart, draw it.
+**Answer with links to rows, never with the rows.** Name the pages, pieces and posts and point at them. If the answer is a chart, draw it.
 If the ask is an instruction rather than a question, restate it as a brief for the desk that owns it. Let the user approve it. If it spans desks, it is a plan.
 
 ## What you write

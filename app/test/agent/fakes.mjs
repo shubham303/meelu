@@ -16,9 +16,9 @@ export const CATALOG = [
   { name: "cluster", desk: "analytics", writes: false },
   { name: "forecast", desk: "analytics", writes: false },
   { name: "save_profile", desk: "profile", writes: true },
-  { name: "start_seo_job", desk: "seo", writes: true },
-  { name: "screen_page_suggestions", desk: "seo", writes: true },
-  { name: "rank_page_suggestions", desk: "seo", writes: true },
+  { name: "start_structure_job", desk: "site", writes: true },
+  { name: "screen_link_suggestions", desk: "site", writes: true },
+  { name: "rank_link_suggestions", desk: "site", writes: true },
 ];
 
 const NOTE_WRITES = ["save_note", "update_note", "delete_note"];
@@ -29,12 +29,12 @@ export const SCOPES = {
     writes: NOTE_WRITES,
     systemPrompt: "PAGES DESK PROMPT. Answer about the site's pages.\n\n## The database\n\n- site_pages: url text",
   },
-  "ask-seo": {
-    desk: "seo",
-    localTools: ["review_page_suggestions"],
-    writes: [...NOTE_WRITES, "start_seo_job", "screen_page_suggestions", "rank_page_suggestions"],
-    silentWrites: ["screen_page_suggestions", "rank_page_suggestions"],
-    systemPrompt: "SEO DESK PROMPT.\n\n## The database\n\n- seo_keywords: keyword text",
+  "ask-site": {
+    desk: "site",
+    localTools: ["review_link_suggestions"],
+    writes: [...NOTE_WRITES, "start_structure_job", "screen_link_suggestions", "rank_link_suggestions"],
+    silentWrites: ["screen_link_suggestions", "rank_link_suggestions"],
+    systemPrompt: "SITE DESK PROMPT.\n\n## The database\n\n- site_link_suggestions: id text",
   },
   "ask-pages+content": {
     desk: "pages",
@@ -71,12 +71,12 @@ export async function startScopeApi() {
   const calls = [];
   const reviewCalls = [];
   const reviewItems = [
-    { id: "sug_1", state: { action: "edit", topic: "grinders" } },
-    { id: "sug_2", state: { action: "add", topic: "cold brew" } },
+    { id: "sug_1", state: { action: "create", topic: "grinders" } },
+    { id: "sug_2", state: { action: "create", topic: "cold brew" } },
   ];
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
-    if (url.pathname.startsWith("/api/v1/seo/page-suggestions/")) {
+    if (url.pathname.startsWith("/api/v1/site/structure/link-suggestions/")) {
       let body = "";
       for await (const c of req) body += c;
       const step = url.pathname.split("/").pop();
@@ -89,7 +89,7 @@ export async function startScopeApi() {
               items: reviewItems,
               needsSerp: ["sug_3"],
             }
-          : { reviewed: 2, llmRejected: 0, failed: 0, needsSerp: [] };
+          : { reviewed: 2, rejected: 0, failed: 0 };
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ data }));
       return;
@@ -201,6 +201,21 @@ export async function startLlm() {
     if (parsed && systemText(parsed).includes("one JSON object")) {
       judgeRequests.push(parsed);
       const answer = judge.answer(JSON.stringify(parsed.messages));
+      if (!parsed.stream) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            id: "msg_judge",
+            type: "message",
+            role: "assistant",
+            model: parsed.model,
+            content: [{ type: "text", text: answer }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 10, output_tokens: 3 },
+          }),
+        );
+        return;
+      }
       res.writeHead(200, { "content-type": "text/event-stream" });
       res.end(textResponse(answer));
       return;

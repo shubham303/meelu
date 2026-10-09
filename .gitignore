@@ -4,15 +4,13 @@
 !.env.example
 
 # ---------- dependencies ----------
-# Every package in the monorepo installs its own: app, dashboard, mcp-server,
-# email-mcp, gsc-mcp, github-mcp.
+# Every package in the monorepo installs its own: app, dashboard.
 # No trailing slash: the report scripts under .claude-artifacts/ share one
 # install via a symlink named node_modules, and a directory-only rule would
 # commit that symlink as a link into an ignored path — broken in a fresh clone.
 node_modules
 
 # ---------- build output ----------
-# tsc output for the MCP servers (mcp-server, email-mcp, gsc-mcp, github-mcp).
 dist/
 # Next.js, in dashboard/.
 .next/
@@ -21,7 +19,7 @@ out/
 release/
 *.tsbuildinfo
 
-# ---------- analytics-mcp (Python + uv) ----------
+# ---------- api (Python + uv) ----------
 .venv/
 __pycache__/
 *.py[cod]

@@ -49,6 +49,9 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
     from src.site_pages.models.site_page import SitePage
     from src.site_pages.models.site_page_link import SitePageLink
     from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
+    from src.site_pages.repositories.links import site_page_links
+    from src.site_pages.repositories.pages import site_pages
+    from src.site_pages.schemas.links import stored_links
     from src.site_pages.url import normalise_url
 
     made: dict[str, str] = {}
@@ -59,6 +62,9 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
             values = {**PAGE_DEFAULTS, **page}
             page_type = values.pop("page_type", None)
             page_links = values.pop("links", [])
+            external = [link for link in page_links if link.get("external")]
+            if external:
+                values["external_links"] = stored_links(external)
             row = SitePage(
                 id=uid("pg"),
                 user_id=user_id,
@@ -69,7 +75,7 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
             )
             db.add(row)
             made[values["url"]] = row.id
-            links_by_page[row.id] = page_links
+            links_by_page[row.id] = [link for link in page_links if not link.get("external")]
             if page_type is not None:
                 db.add(
                     SitePageLlmExtraction(
@@ -84,17 +90,21 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
                         updated_at=now,
                     )
                 )
+        await db.flush()
         for src_id, page_links in links_by_page.items():
             for link in page_links:
+                dst_url = normalise_url(link["url"])
+                dst_id = made.get(dst_url)
+                if dst_id is None or dst_id == src_id:
+                    continue
                 db.add(
                     SitePageLink(
                         id=uid("spl"),
                         user_id=user_id,
                         site_id=site_id,
                         src_page_id=src_id,
-                        dst_page_id=None,
-                        dst_url=normalise_url(link["url"]),
-                        external=bool(link.get("external")),
+                        dst_page_id=dst_id,
+                        dst_url=dst_url,
                         region=link.get("region", "body"),
                         rel=link.get("rel"),
                         anchor=link.get("anchor"),
@@ -105,12 +115,10 @@ async def seed_pages(site_id: str, user_id: str, pages: list[dict[str, Any]]) ->
                         updated_at=now,
                     )
                 )
-        await db.commit()
-
-    from src.site_pages.service import site_page_service
-
-    async with SessionLocal() as db:
-        await site_page_service.resolve_links(db, site_id)
+        await db.flush()
+        await site_page_links.set_dst_canonical(
+            db, site_id, await site_pages.canonical_target_ids(db, site_id)
+        )
         await db.commit()
     return made
 

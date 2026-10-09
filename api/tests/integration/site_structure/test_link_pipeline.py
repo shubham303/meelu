@@ -39,7 +39,7 @@ async def test_unlinked_mentions(client, email):
     await seed_chunk(site["id"], user_id, home, 1, text_="Pricing plans for everyone.")
     await seed_link(site["id"], user_id, home, pricing)
 
-    mentions = {"jobId": job["id"], "toIds": [pricing], "phrases": ["pricing plans"]}
+    mentions = {"jobId": job["id"], "targets": [{"toId": pricing, "phrases": ["pricing plans"]}]}
     r = await client.post(f"{BASE}/link-suggestions/mentions", json=mentions)
     assert r.status_code == 200, r.text
     assert r.json()["data"] == {"inserted": 2, "skipped": 0, "targetsWithoutMatch": []}
@@ -53,13 +53,48 @@ async def test_unlinked_mentions(client, email):
 
     r = await client.post(
         f"{BASE}/link-suggestions/mentions",
-        json={**mentions, "toIds": [guide], "phrases": ["nothing like this"]},
+        json={**mentions, "targets": [{"toId": guide, "phrases": ["nothing like this"]}]},
     )
     assert r.json()["data"]["targetsWithoutMatch"] == [guide]
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json={**mentions, "toIds": ["x"]})
+    r = await client.post(
+        f"{BASE}/link-suggestions/mentions",
+        json={**mentions, "targets": [{"toId": "x", "phrases": ["a"]}]},
+    )
     assert r.status_code == 404
-    r = await client.post(f"{BASE}/link-suggestions/mentions", json={**mentions, "phrases": []})
-    assert r.status_code == 400
+    for targets in (
+        [],
+        [{"toId": guide, "phrases": []}],
+        [{"toId": guide, "phrases": ["a"]}, {"toId": guide, "phrases": ["b"]}],
+    ):
+        r = await client.post(
+            f"{BASE}/link-suggestions/mentions", json={**mentions, "targets": targets}
+        )
+        assert r.status_code == 400, targets
+
+
+async def test_mentions_phrases_stay_with_their_target(client, email):
+    site, user_id, pages, job = await prepare(client, email)
+    home, blog, guide, pricing = (pages[f"{ORIGIN}/{p}"] for p in ("", "blog", "guide", "pricing"))
+    await seed_chunk(site["id"], user_id, home, 1, text_="Read the 100% guide on pricing tiers.")
+    await seed_chunk(site["id"], user_id, blog, 1, text_="Our pricing tiers explained.")
+    r = await client.post(
+        f"{BASE}/link-suggestions/mentions",
+        json={
+            "jobId": job["id"],
+            "targets": [
+                {"toId": pricing, "phrases": ["pricing tiers"]},
+                {"toId": guide, "phrases": ["100% guide", "0_guide"]},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["inserted"] == 3
+    rows = (await client.get(f"{BASE}/link-suggestions", params={"state": "draft"})).json()["data"]
+    assert {(r["fromPageId"], r["toPageId"]) for r in rows} == {
+        (home, pricing),
+        (blog, pricing),
+        (home, guide),
+    }
 
 
 async def test_mentions_limit_applies_per_target(client, email):
@@ -73,8 +108,7 @@ async def test_mentions_limit_applies_per_target(client, email):
         f"{BASE}/link-suggestions/mentions",
         json={
             "jobId": job["id"],
-            "toIds": [pricing],
-            "phrases": ["cheap plans", "costs"],
+            "targets": [{"toId": pricing, "phrases": ["cheap plans", "costs"]}],
             "limitPerTarget": 2,
         },
     )
@@ -122,8 +156,10 @@ async def test_screening_rejects_a_confident_no(client, email, rejecting_screene
 async def test_review_reads_only_screening_approved_and_verdicts_move_only_those(
     client, email, screener
 ):
-    _, _, pages, job = await prepare(client, email)
+    site, user_id, pages, job = await prepare(client, email)
     blog, guide, pricing, home = (pages[f"{ORIGIN}/{p}"] for p in ("blog", "guide", "pricing", ""))
+    await seed_link(site["id"], user_id, blog, home, anchor="start here")
+    await seed_link(site["id"], user_id, blog, home, region="nav", anchor="Home")
     a = (await client.post(f"{BASE}/link-suggestions", json=draft(job, blog, pricing))).json()[
         "data"
     ]
@@ -146,6 +182,20 @@ async def test_review_reads_only_screening_approved_and_verdicts_move_only_those
     ]
     assert {item["id"] for item in batch["items"]} == {a["id"], b["id"]}
     assert all("pricing" in item["state"]["target"]["url"] for item in batch["items"])
+    assert all(
+        item["state"]["target"]["details"].startswith(
+            "Page role: what the page is for on the site: money"
+        )
+        for item in batch["items"]
+    )
+    assert all("Page kind" in item["state"]["source"]["details"] for item in batch["items"])
+    assert "read those details too" in batch["instructions"]
+    from_blog = next(item for item in batch["items"] if item["id"] == a["id"])
+    assert sorted(from_blog["state"]["source"]["links"], key=lambda x: x["region"]) == [
+        {"url": f"{ORIGIN}/", "anchor": "start here", "region": "body"},
+        {"url": f"{ORIGIN}/", "anchor": "Home", "region": "nav"},
+    ]
+    assert "same line" in batch["instructions"]
 
     r = await client.post(
         f"{BASE}/link-suggestions/verdicts",

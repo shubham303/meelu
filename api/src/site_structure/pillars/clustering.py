@@ -7,6 +7,15 @@ from dataclasses import dataclass
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 
+from src.site_structure.constants import (
+    BROAD_PAGE_FAMILIES,
+    PAGE_TYPE_FAMILIES,
+    STRUCTURAL_BROAD_TYPES,
+    STRUCTURAL_TYPES,
+    UNKNOWN_FAMILY,
+)
+from src.site_structure.pipeline.ranking import is_home
+
 TOPIC_WORDS = 3
 STOPWORDS = frozenset(
     [
@@ -49,6 +58,23 @@ class PagePoint:
     page_type: str | None
     inlinks: int
     vector: np.ndarray
+    broad_page_type: str | None = None
+
+
+def is_structural(point: PagePoint) -> bool:
+    if is_home(point.url) or point.broad_page_type in STRUCTURAL_BROAD_TYPES:
+        return True
+    return point.broad_page_type in (None, "other") and point.page_type in STRUCTURAL_TYPES
+
+
+def family(point: PagePoint) -> str | None:
+    if is_structural(point):
+        return None
+    if point.broad_page_type not in (None, "other"):
+        return BROAD_PAGE_FAMILIES.get(point.broad_page_type)
+    if point.page_type is not None:
+        return PAGE_TYPE_FAMILIES.get(point.page_type)
+    return UNKNOWN_FAMILY
 
 
 def unit(vector: np.ndarray) -> np.ndarray:
@@ -57,6 +83,19 @@ def unit(vector: np.ndarray) -> np.ndarray:
 
 
 def cluster_pages(points: Sequence[PagePoint], min_cohesion: float) -> list[list[str]]:
+    by_family: dict[str, list[PagePoint]] = {}
+    for p in points:
+        kind = family(p)
+        if kind is not None:
+            by_family.setdefault(kind, []).append(p)
+    return [g for members in by_family.values() for g in _cluster(members, min_cohesion)]
+
+
+def mixed_families(points: Sequence[PagePoint]) -> bool:
+    return len({family(p) for p in points} - {UNKNOWN_FAMILY, None}) > 1
+
+
+def _cluster(points: Sequence[PagePoint], min_cohesion: float) -> list[list[str]]:
     if len(points) < 2:
         return []
     matrix = np.stack([unit(p.vector) for p in points])
@@ -129,9 +168,3 @@ def topic_for(points: Sequence[PagePoint]) -> str:
         counts.update(set(words))
     top = [word for word, _ in counts.most_common(TOPIC_WORDS)]
     return ", ".join(top) if top else "untitled topic"
-
-
-def structural_share(points: Sequence[PagePoint], structural_types: Sequence[str]) -> float:
-    if not points:
-        return 0.0
-    return sum(1 for p in points if p.page_type in structural_types) / len(points)

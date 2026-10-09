@@ -1,7 +1,5 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import text
-
 from tests.conftest import signup
 from tests.integration.technical_seo.conftest import seed_pages, user_id_of
 
@@ -66,7 +64,6 @@ async def seed_link(site_id, user_id, src, dst, region="body", anchor=None) -> N
                 src_page_id=src,
                 dst_page_id=dst,
                 dst_url=dst_url,
-                external=False,
                 region=region,
                 anchor=anchor,
                 created_at=now,
@@ -113,22 +110,22 @@ async def set_rows(model, ids, **values) -> None:
 
 
 async def workspace_table(user_id: str, name: str, columns: str, rows: list[tuple]) -> None:
-    from src.agent.context import tenant_names
-    from src.core.database import SessionLocal
+    import asyncio
 
-    _, schema = tenant_names(user_id)
-    async with SessionLocal() as db:
-        await db.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-        await db.execute(text(f'DROP TABLE IF EXISTS "{schema}"."{name}"'))
-        await db.execute(text(f'CREATE TABLE "{schema}"."{name}" ({columns})'))
-        width = len(rows[0]) if rows else 0
-        marks = ", ".join(f":c{i}" for i in range(width))
-        for row in rows:
-            await db.execute(
-                text(f'INSERT INTO "{schema}"."{name}" VALUES ({marks})'),
-                {f"c{i}": v for i, v in enumerate(row)},
-            )
-        await db.commit()
+    from src.agent.security import ensure_user
+    from src.agent.sql import tenant_txn
+
+    def write() -> None:
+        role, schema = ensure_user(user_id)
+        with tenant_txn(role, schema) as conn:
+            conn.exec_driver_sql(f'DROP TABLE IF EXISTS "{name}"')
+            conn.exec_driver_sql(f'CREATE TABLE "{name}" ({columns})')
+            width = len(rows[0]) if rows else 0
+            marks = ", ".join(["%s"] * width)
+            for row in rows:
+                conn.exec_driver_sql(f'INSERT INTO "{name}" VALUES ({marks})', tuple(row))
+
+    await asyncio.to_thread(write)
 
 
 async def prepare_site(client, email, domain, pages):

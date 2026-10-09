@@ -58,8 +58,6 @@ RULES
 
 OPEN
 
-- Unlinked mentions still runs one text query per target x phrase; folding
-  it needs a multi-phrase search on site_chunks.
 - Links that were actually added no longer count against a page's budget
   (reconcile deletes their suggestion), so capacity only limits pending
   approved suggestions.

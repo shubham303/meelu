@@ -7,7 +7,6 @@ __pycache__
 tests
 .env
 .env.*
-docker-compose.yml
 Dockerfile
 .dockerignore
 CLAUDE.md

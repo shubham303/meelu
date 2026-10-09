@@ -26,7 +26,7 @@ def test_paths():
     assert parent_of("/blog/guides") == "/blog"
 
 
-def test_home_links_to_and_from_hubs_and_utilities():
+def test_home_links_to_and_from_utilities_but_not_hubs():
     edges = edges_of(
         [
             hp("home", "/", is_home=True, page_type="money"),
@@ -35,14 +35,12 @@ def test_home_links_to_and_from_hubs_and_utilities():
         ]
     )
     assert edges == {
-        ("home", "blog"),
-        ("blog", "home"),
         ("home", "login"),
         ("login", "home"),
     }
 
 
-def test_hub_hierarchy_parent_child_and_siblings():
+def test_hub_hierarchy_parent_child_only():
     edges = edges_of(
         [
             hp("blog", "/blog"),
@@ -53,7 +51,7 @@ def test_hub_hierarchy_parent_child_and_siblings():
     )
     assert ("blog", "guides") in edges and ("guides", "blog") in edges
     assert ("blog", "reviews") in edges and ("reviews", "blog") in edges
-    assert ("guides", "reviews") in edges and ("reviews", "guides") in edges
-    assert ("blog", "shop") in edges and ("shop", "blog") in edges
+    assert ("guides", "reviews") not in edges and ("reviews", "guides") not in edges
+    assert ("blog", "shop") not in edges and ("shop", "blog") not in edges
     assert ("guides", "shop") not in edges
     assert not any(a == b for a, b in edges)

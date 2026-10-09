@@ -3,21 +3,38 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Network, Unlink, Waypoints, Layers } from "lucide-react";
-import { PageEnter, Stagger } from "@/components/animate";
-import { Badge, Card, EmptyState, Spinner, PageHeader, Tabs, type BadgeTone } from "@/components/ui";
+import { PageEnter } from "@/components/animate";
+import { Badge, Card, EmptyState, Spinner, PageHeader, Tabs } from "@/components/ui";
 import { useApi } from "@/lib/use-api";
 import { cn } from "@/lib/utils";
 import { SiteAskButton } from "../site-ask";
-import type { SiteDiscovery, SiteDiscoveryPage } from "@/lib/types";
+import type { SiteDiscovery, SiteDiscoveryPage, SuggestionSummary } from "@/lib/types";
 import * as chips from "@/features/prompt-chips/site";
 import { LinkSuggestions } from "./link-suggestions";
 import { LinkStrategies } from "./link-strategies";
 import { PillarSuggestions } from "./pillar-suggestions";
 
 type ListKey = "orphans" | "unreachable" | "deep";
+type SectionKey = "reachability" | "links" | "pillars";
 
 export default function SiteStructurePage() {
   const { data, loading, error } = useApi<SiteDiscovery>("/api/v1/site/pages/discovery");
+  const { data: linkSummary, refresh: refreshLinkSummary } = useApi<SuggestionSummary>(
+    "/api/v1/site/structure/link-suggestions/summary",
+  );
+  const { data: pillarSummary, refresh: refreshPillarSummary } = useApi<SuggestionSummary>(
+    "/api/v1/site/structure/pillar-suggestions/summary",
+  );
+  const [picked, setPicked] = useState<SectionKey | null>(null);
+  const [list, setList] = useState<ListKey>("orphans");
+
+  const problems = data ? data.orphans + data.unreachable + data.deep : 0;
+  const section: SectionKey = picked ?? (problems > 0 ? "reachability" : "links");
+
+  const openList = (key: ListKey) => {
+    setList(key);
+    setPicked("reachability");
+  };
 
   return (
     <PageEnter>
@@ -33,7 +50,7 @@ export default function SiteStructurePage() {
         actions={
           <SiteAskButton
             title="Find links — Structure"
-            hint="Pick a link strategy or write your own. The agent runs it through the link pipeline and the results land in the suggestions below."
+            hint="Pick a link strategy or write your own. The agent runs it through the link pipeline and the results land in the suggestions."
             suggestions={chips.structure()}
           />
         }
@@ -45,28 +62,102 @@ export default function SiteStructurePage() {
         </div>
       )}
       {error && <p className="text-sm text-bad">{error}</p>}
-      {data && data.live === 0 && (
-        <EmptyState
-          icon={Network}
-          title="Nothing crawled yet"
-          hint="Run a crawl from the Site desk. Link structure is computed as the crawl finishes."
-        />
-      )}
-      {data && data.live > 0 && <Discovery data={data} />}
+      {data && data.live > 0 && <Health data={data} onPick={openList} />}
       {data && (
-        <div className="mt-8">
-          <LinkStrategies />
-          <LinkSuggestions />
-          <PillarSuggestions />
+        <div className="mt-6">
+          <Tabs
+            active={section}
+            onChange={(k) => setPicked(k as SectionKey)}
+            tabs={[
+              { key: "reachability", label: "Reachability", count: problems },
+              {
+                key: "links",
+                label: "Link suggestions",
+                count: linkSummary?.reviewApproved,
+              },
+              {
+                key: "pillars",
+                label: "Pillar pages",
+                count: pillarSummary?.reviewApproved,
+              },
+            ]}
+          />
+          {section === "reachability" &&
+            (data.live === 0 ? (
+              <EmptyState
+                icon={Network}
+                title="Nothing crawled yet"
+                hint="Run a crawl from the Site desk. Link structure is computed as the crawl finishes."
+              />
+            ) : (
+              <ProblemPages data={data} list={list} onList={setList} />
+            ))}
+          {section === "links" && (
+            <>
+              <LinkStrategies title="Find links" strategies={chips.linkStrategies()} />
+              <LinkSuggestions summary={linkSummary} refreshSummary={refreshLinkSummary} />
+            </>
+          )}
+          {section === "pillars" && (
+            <>
+              <LinkStrategies title="Find pillar pages" strategies={chips.pillarStrategies()} />
+              <PillarSuggestions summary={pillarSummary} refreshSummary={refreshPillarSummary} />
+            </>
+          )}
         </div>
       )}
     </PageEnter>
   );
 }
 
-function Discovery({ data }: { data: SiteDiscovery }) {
-  const [list, setList] = useState<ListKey>("orphans");
+function Health({ data, onPick }: { data: SiteDiscovery; onPick: (key: ListKey) => void }) {
+  return (
+    <div className="space-y-3">
+      {!data.homeFound && (
+        <Card className="border-warn/40 bg-warn/5 text-sm text-ink">
+          The crawl did not read a home page at the root of this site, so click depth could not be
+          measured. Every linked page shows as unreachable until it does.
+        </Card>
+      )}
+      <Card className="grid gap-5 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-6">
+        <div className="grid grid-cols-3 gap-2">
+          <Stat
+            icon={Unlink}
+            label="Orphans"
+            value={data.orphans}
+            hint="nothing links to them"
+            onClick={() => onPick("orphans")}
+          />
+          <Stat
+            icon={Waypoints}
+            label="Unreachable"
+            value={data.unreachable}
+            hint="linked only from pages that are themselves unreachable"
+            onClick={() => onPick("unreachable")}
+          />
+          <Stat
+            icon={Layers}
+            label={`${data.deepFrom}+ clicks deep`}
+            value={data.deep}
+            hint="too far from the home page"
+            onClick={() => onPick("deep")}
+          />
+        </div>
+        <DepthBars data={data} />
+      </Card>
+    </div>
+  );
+}
 
+function ProblemPages({
+  data,
+  list,
+  onList,
+}: {
+  data: SiteDiscovery;
+  list: ListKey;
+  onList: (key: ListKey) => void;
+}) {
   const lists: Record<ListKey, { pages: SiteDiscoveryPage[]; total: number; empty: string }> = {
     orphans: {
       pages: data.orphanPages,
@@ -85,58 +176,35 @@ function Discovery({ data }: { data: SiteDiscovery }) {
     },
   };
   const current = lists[list];
+  const keys: Array<{ key: ListKey; label: string }> = [
+    { key: "orphans", label: "Orphans" },
+    { key: "unreachable", label: "Unreachable" },
+    { key: "deep", label: `${data.deepFrom}+ clicks deep` },
+  ];
 
   return (
-    <div className="space-y-5">
-      {!data.homeFound && (
-        <Card className="border-warn/40 bg-warn/5 text-sm text-ink">
-          The crawl did not read a home page at the root of this site, so click depth could not be
-          measured. Every linked page shows as unreachable until it does.
-        </Card>
-      )}
-
-      <Stagger className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Stat
-          icon={Unlink}
-          label="Orphans"
-          value={data.orphans}
-          hint="nothing links to them"
-          tone={data.orphans > 0 ? "warn" : "good"}
-        />
-        <Stat
-          icon={Waypoints}
-          label="Unreachable"
-          value={data.unreachable}
-          hint="linked only from pages that are themselves unreachable"
-          tone={data.unreachable > 0 ? "warn" : "good"}
-        />
-        <Stat
-          icon={Layers}
-          label={`${data.deepFrom}+ clicks deep`}
-          value={data.deep}
-          hint="too far from the home page"
-          tone={data.deep > 0 ? "warn" : "good"}
-        />
-      </Stagger>
-
-      <DepthBars data={data} />
-
-      <div>
-        <Tabs
-          active={list}
-          onChange={(k) => setList(k as ListKey)}
-          tabs={[
-            { key: "orphans", label: "Orphans", count: data.orphans },
-            { key: "unreachable", label: "Unreachable", count: data.unreachable },
-            { key: "deep", label: `${data.deepFrom}+ clicks deep`, count: data.deep },
-          ]}
-        />
-        {current.pages.length === 0 ? (
-          <p className="text-sm text-sub">{current.empty}</p>
-        ) : (
-          <PageList pages={current.pages} total={current.total} />
-        )}
+    <div>
+      <div className="mb-3 inline-flex rounded-lg border border-edge bg-panel p-0.5">
+        {keys.map((k) => (
+          <button
+            key={k.key}
+            type="button"
+            onClick={() => onList(k.key)}
+            className={cn(
+              "cursor-pointer rounded-md px-2.5 py-1 text-xs transition-colors",
+              list === k.key ? "bg-accent-soft text-accent" : "text-sub hover:text-ink",
+            )}
+          >
+            {k.label}
+            <span className="ml-1.5 text-faint">{lists[k.key].total}</span>
+          </button>
+        ))}
       </div>
+      {current.pages.length === 0 ? (
+        <p className="text-sm text-sub">{current.empty}</p>
+      ) : (
+        <PageList pages={current.pages} total={current.total} />
+      )}
     </div>
   );
 }
@@ -146,38 +214,38 @@ function DepthBars({ data }: { data: SiteDiscovery }) {
   if (rows.length === 0) return null;
   const max = Math.max(...rows.map((b) => b.n), 1);
   return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink">Clicks from home</h2>
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-xs uppercase tracking-wide text-sub">Clicks from home</h2>
         <span className="text-xs text-faint">{data.live} live pages</span>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {rows.map((b) => {
           const deep = (b.depth ?? 0) >= data.deepFrom;
           return (
             <div key={b.depth} className="flex items-center gap-3 text-xs">
-              <span className="w-6 shrink-0 text-right tabular-nums text-sub">{b.depth}</span>
-              <div className="h-3 flex-1 overflow-hidden rounded-full bg-panel2">
+              <span className="w-5 shrink-0 text-right tabular-nums text-sub">{b.depth}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-panel2">
                 <div
                   className={cn("h-full rounded-full", deep ? "bg-warn" : "bg-accent")}
                   style={{ width: `${Math.max((b.n / max) * 100, 1)}%` }}
                 />
               </div>
-              <span className="w-12 shrink-0 tabular-nums text-sub">{b.n}</span>
+              <span className="w-10 shrink-0 tabular-nums text-sub">{b.n}</span>
             </div>
           );
         })}
         {data.unreachable + data.orphans > 0 && (
           <div className="flex items-center gap-3 text-xs">
-            <span className="w-6 shrink-0 text-right text-faint">—</span>
+            <span className="w-5 shrink-0 text-right text-faint">—</span>
             <div className="flex-1 text-faint">not reachable from home</div>
-            <span className="w-12 shrink-0 tabular-nums text-sub">
+            <span className="w-10 shrink-0 tabular-nums text-sub">
               {data.unreachable + data.orphans}
             </span>
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -233,24 +301,29 @@ function Stat({
   label,
   value,
   hint,
-  tone,
+  onClick,
 }: {
   icon: typeof Unlink;
   label: string;
   value: number;
   hint: string;
-  tone: BadgeTone;
+  onClick: () => void;
 }) {
   return (
-    <Card className="space-y-1 stagger-item">
+    <button
+      type="button"
+      title={hint}
+      onClick={onClick}
+      className="cursor-pointer space-y-1 rounded-xl border border-edge p-3 text-left transition-colors hover:border-accent/40 hover:bg-accent-soft/40"
+    >
       <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-sub">
-        <Icon size={13} className="text-accent" />
-        {label}
+        <Icon size={13} className="shrink-0 text-accent" />
+        <span className="truncate">{label}</span>
       </div>
-      <div className="text-2xl font-semibold">{value}</div>
-      <div className="text-xs">
-        <Badge tone={tone}>{hint}</Badge>
+      <div className="flex items-center gap-2">
+        <span className="text-2xl font-semibold">{value}</span>
+        <Badge tone={value > 0 ? "warn" : "good"}>{value > 0 ? "fix" : "clear"}</Badge>
       </div>
-    </Card>
+    </button>
   );
 }

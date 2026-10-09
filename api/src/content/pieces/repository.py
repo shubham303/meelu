@@ -5,7 +5,7 @@ from sqlalchemy import Select, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.content.models.content_pieces import ContentPiece
-from src.content.schemas.pieces import ContentPieceCountsResponse, ContentPieceRecord
+from src.content.schemas.pieces import ContentPieceRecord
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
 
@@ -13,13 +13,11 @@ from src.core.pagination import PaginatedApiResponse, PaginationParams, Paginati
 class ContentPieceRepository:
     ID_PREFIX = "cpc"
 
-    async def counts_by_status(self, db: AsyncSession, site_id: str) -> ContentPieceCountsResponse:
-        rows = await db.execute(
-            select(ContentPiece.status, func.count())
-            .where(ContentPiece.site_id == site_id)
-            .group_by(ContentPiece.status)
+    async def count(self, db: AsyncSession, site_id: str) -> int:
+        total = await db.scalar(
+            select(func.count()).select_from(ContentPiece).where(ContentPiece.site_id == site_id)
         )
-        return ContentPieceCountsResponse(by_status={status: int(n) for status, n in rows.all()})
+        return int(total or 0)
 
     async def get(self, db: AsyncSession, site_id: str, piece_id: str) -> ContentPieceRecord | None:
         row = (
@@ -72,11 +70,9 @@ class ContentPieceRepository:
         site_id: str,
         paging: PaginationParams,
         *,
-        status: str | None = None,
-        channel_key: str | None = None,
         search: str | None = None,
     ) -> PaginatedApiResponse[ContentPieceRecord]:
-        query = self._query(site_id, status=status, channel_key=channel_key, search=search)
+        query = self._query(site_id, search=search)
         return await PaginationService.paginate_query(
             db,
             query.order_by(ContentPiece.updated_at.desc()),
@@ -89,19 +85,18 @@ class ContentPieceRepository:
         self,
         site_id: str,
         *,
-        status: str | None = None,
-        channel_key: str | None = None,
         search: str | None = None,
     ) -> Select:
         where = [ContentPiece.site_id == site_id]
-        if status:
-            where.append(ContentPiece.status == status)
-        if channel_key:
-            where.append(ContentPiece.channel_key == channel_key)
         if search:
             like = f"%{search}%"
             where.append(
-                or_(ContentPiece.title.ilike(like), ContentPiece.body_markdown.ilike(like))
+                or_(
+                    ContentPiece.title.ilike(like),
+                    ContentPiece.h1.ilike(like),
+                    ContentPiece.target_keyword.ilike(like),
+                    ContentPiece.body_markdown.ilike(like),
+                )
             )
         return select(ContentPiece).where(*where)
 

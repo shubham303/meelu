@@ -37,6 +37,16 @@ def defect_pages():
             ],
         ),
         page("/boom", status=500, shallow=True, inlinks=1),
+        page(
+            "/contact",
+            in_sitemap=True,
+            inlinks=1,
+            title="Contact the Audit Example Team",
+            meta_description="How to reach the people behind the audit example site, by email or phone.",
+            h1=["Contact"],
+            canonical=f"{ORIGIN}/contact",
+            word_count=400,
+        ),
         page("/dead", status=404, in_sitemap=True, shallow=True),
         page("/redirected", status=301, in_sitemap=True, redirect_hops=2, shallow=True),
         page(

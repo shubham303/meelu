@@ -8,6 +8,7 @@ class WorkerSettings(EnvSettings):
 
     database_url: str = ""
     meelu_embed_model: str = "Xenova/multilingual-e5-small"
+    meelu_onnx_threads: int = 2
     meelu_embed_interval_ms: int = 15000
     meelu_chunk_page_batch: int = 25
     meelu_embed_disabled: str = "0"
@@ -18,6 +19,7 @@ class SearchSettings(EnvSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     meelu_embed_model: str = "Xenova/multilingual-e5-small"
+    meelu_onnx_threads: int = 2
     meelu_embed_disabled: str = "0"
     meelu_rerank_model: str = "Xenova/bge-reranker-base"
     meelu_rerank_disabled: str = "0"

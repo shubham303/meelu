@@ -7,26 +7,24 @@ from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.social_listening.service import social_listening_service
 from src.social_listening.schemas import (
-    BulkUpsertResponse,
+    BulkInsertResponse,
     ConfigResponse,
     ConfigUpdateRequest,
     DeleteResponse,
     GateResponse,
-    KnownUrlsRequest,
+    JudgeResponse,
     PostFilters,
     PostPatchRequest,
     PostResponse,
     PostsBulkRequest,
-    PostsClassifyRequest,
+    PostsJudgeRequest,
     QueryPatchRequest,
     QueryResponse,
     QueryUpsertItem,
     RunResponse,
     RunUpdateRequest,
     SummaryResponse,
-    TargetPatchRequest,
-    TargetResponse,
-    TargetUpsertItem,
+    UpsertResponse,
 )
 
 router = APIRouter()
@@ -62,7 +60,7 @@ async def upsert_queries(
     body: list[QueryUpsertItem],
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-) -> BulkUpsertResponse:
+) -> UpsertResponse:
     return await social_listening_service.upsert_queries(db, ctx.user_id, ctx.site_id, body)
 
 
@@ -83,44 +81,6 @@ async def delete_query(
     ctx: AuthContext = Depends(require_site),
 ) -> DeleteResponse:
     return DeleteResponse(id=await social_listening_service.delete_query(db, ctx.site_id, query_id))
-
-
-@router.get("/social-listening/targets")
-async def list_targets(
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> list[TargetResponse]:
-    return await social_listening_service.list_targets(db, ctx.site_id)
-
-
-@router.post("/social-listening/targets")
-async def upsert_targets(
-    body: list[TargetUpsertItem],
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> BulkUpsertResponse:
-    return await social_listening_service.upsert_targets(db, ctx.user_id, ctx.site_id, body)
-
-
-@router.patch("/social-listening/targets/{target_id}")
-async def patch_target(
-    target_id: str,
-    body: TargetPatchRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-):
-    return await social_listening_service.patch_target(db, ctx.site_id, target_id, body)
-
-
-@router.delete("/social-listening/targets/{target_id}")
-async def delete_target(
-    target_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> DeleteResponse:
-    return DeleteResponse(
-        id=await social_listening_service.delete_target(db, ctx.site_id, target_id)
-    )
 
 
 @router.post("/social-listening/runs", status_code=201)
@@ -159,22 +119,13 @@ async def patch_run(
     return await social_listening_service.patch_run(db, ctx.site_id, run_id, body)
 
 
-@router.post("/social-listening/posts/known")
-async def known_post_urls(
-    body: KnownUrlsRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> list[str]:
-    return await social_listening_service.known_urls(db, ctx.site_id, body.urls)
-
-
 @router.post("/social-listening/posts/bulk")
-async def bulk_upsert_posts(
+async def ingest_posts(
     body: PostsBulkRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-) -> BulkUpsertResponse:
-    return await social_listening_service.bulk_upsert_posts(db, ctx.user_id, ctx.site_id, body)
+) -> BulkInsertResponse:
+    return await social_listening_service.ingest_posts(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/social-listening/posts/gate")
@@ -185,24 +136,19 @@ async def gate_posts(
     return await social_listening_service.gate_posts(db, ctx.user_id, ctx.site_id)
 
 
-@router.post("/social-listening/posts/classified")
-async def classify_posts(
-    body: PostsClassifyRequest,
+@router.post("/social-listening/posts/judged")
+async def judge_posts(
+    body: PostsJudgeRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-) -> BulkUpsertResponse:
-    return await social_listening_service.classify_posts(db, ctx.site_id, body)
+) -> JudgeResponse:
+    return await social_listening_service.judge_posts(db, ctx.site_id, body)
 
 
 @router.get("/social-listening/posts")
 async def list_posts(
-    kind: str | None = Query(None),
     status: str | None = Query(None),
     platform: str | None = Query(None),
-    intent: str | None = Query(None),
-    sentiment: str | None = Query(None),
-    cls: str | None = Query(None),
-    target: str | None = Query(None),
     query_id: str | None = Query(None, alias="queryId"),
     run_id: str | None = Query(None, alias="runId"),
     min_relevance: float | None = Query(None, alias="minRelevance"),
@@ -213,13 +159,8 @@ async def list_posts(
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[PostResponse]:
     filters = PostFilters(
-        kind=kind,
-        status=status,
+        statuses=[s for s in (status or "").split(",") if s] or None,
         platform=platform,
-        intent=intent,
-        sentiment=sentiment,
-        cls=cls,
-        target=target,
         query_id=query_id,
         run_id=run_id,
         min_relevance=min_relevance,
@@ -254,12 +195,3 @@ async def patch_post(
     ctx: AuthContext = Depends(require_site),
 ) -> PostResponse:
     return await social_listening_service.patch_post(db, ctx.site_id, post_id, body)
-
-
-@router.delete("/social-listening/posts/{post_id}")
-async def delete_post(
-    post_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> DeleteResponse:
-    return DeleteResponse(id=await social_listening_service.delete_post(db, ctx.site_id, post_id))

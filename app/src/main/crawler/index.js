@@ -6,6 +6,8 @@ import { crawlToken } from "./token.js";
 
 const running = new Map();
 
+const OUTLINK_BATCH = 100;
+
 function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
   const headers = {
     ...meeluAuthHeaders(cookieHeader),
@@ -68,6 +70,23 @@ export async function runCrawl(params, emit, options = {}) {
   return { jobId, siteId, started: true };
 }
 
+async function saveOutlinks(pages, siteId, cookieHeader) {
+  const withLinks = pages
+    .filter((p) => Array.isArray(p.links))
+    .map((p) => ({ url: p.url, links: p.links }));
+  const unresolved = new Set();
+  for (let i = 0; i < withLinks.length; i += OUTLINK_BATCH) {
+    const res = await api("/site/pages/links", {
+      method: "POST",
+      siteId,
+      cookieHeader,
+      body: { pages: withLinks.slice(i, i + OUTLINK_BATCH) },
+    });
+    for (const url of res.unresolved ?? []) unresolved.add(url);
+  }
+  return [...unresolved];
+}
+
 async function drive(jobId, siteId, cookieHeader, broadcast) {
   const emit = (event, data) => broadcast(event, { jobId, siteId, ...data });
   let plan;
@@ -90,8 +109,9 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
   let sweepReliable = true;
 
   const savePages = async (batch) => {
-    const rows = batch.map(({ state, ...rest }) => {
+    const rows = batch.map(({ state, links, ...rest }) => {
       void state;
+      void links;
       return rest;
     });
     try {
@@ -217,6 +237,11 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
       }
     }
 
+    const frontier = await saveOutlinks(result.pages, siteId, cookieHeader).catch((e) => {
+      result.notes.push(`The links between pages could not be saved (${readable(e)}).`);
+      return [];
+    });
+
     await api("/site/pages/graph", {
       method: "POST",
       siteId,
@@ -242,6 +267,7 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
         complete: result.complete,
         sitemapComplete: result.sitemapComplete,
         linkDiscovered: result.linkDiscovered,
+        frontier,
         notes: result.notes,
         sitemapUrls: result.sitemapUrls,
         sitemapsUsed: result.sitemapsUsed,

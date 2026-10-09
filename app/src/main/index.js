@@ -18,15 +18,18 @@ import {
 } from "./analytics-store.js";
 import { closeAgentSessions, runAgentTurn } from "./agent/runner.js";
 import { requestCrawlStop, runCrawl } from "./crawler/index.js";
-import { startSignalsSearch, stopSignalsSearch } from "./social-signals/pipeline.js";
-import { startListeningSchedule } from "./social-signals/schedule.js";
-import { startLeadsRun, stopLeadsRun } from "./leads/pipeline.js";
-import { startLeadsSchedule } from "./leads/schedule.js";
+import {
+  activeSignalsSearch,
+  startSignalsSearch,
+  stopSignalsSearch,
+} from "./social-signals/pipeline.js";
+import { startPageReviewSchedule } from "./page-review/index.js";
 import { requestRenderStop, runRender } from "./render/index.js";
 import { AVAILABLE_CHECKS, runTextChecks } from "./text-checks/index.js";
 import { inspectPageUrl, listGscProperties, requestSearchSyncStop, runIndexCheck, runSearchSync } from "./integrations/gsc/sync.js";
 import { listGaProperties, requestTrafficSyncStop, runTrafficSync } from "./integrations/ga/sync.js";
 import { startCrawlSchedule } from "./crawler/schedule.js";
+import { describeSite, startSiteSummarySchedule } from "./site-summary/index.js";
 import { createProviders } from "./providers/index.js";
 import { clearOrphanedJobs } from "./orphaned-jobs.js";
 import { appDir, screenshotDir } from "./paths.js";
@@ -129,8 +132,8 @@ function emitSignals(message) {
   if (win && !win.isDestroyed()) win.webContents.send("social-signals:event", message);
 }
 
-function emitLeads(message) {
-  if (win && !win.isDestroyed()) win.webContents.send("leads:event", message);
+function emitSummary(event, data) {
+  if (win && !win.isDestroyed()) win.webContents.send("site-summary:event", { event, data });
 }
 
 function emitRender(event, data) {
@@ -168,7 +171,6 @@ function registerAgentIpc() {
       cookieHeader,
       llm: loadLlmConfig(),
       connectors: connectorsFor(),
-      providers: createProviders({ cookieHeader }),
     };
 
     drive(emit, options)
@@ -253,6 +255,13 @@ function registerAgentIpc() {
     } catch (err) {
       return { error: err instanceof Error ? err.message : "The crawl could not start." };
     }
+  });
+
+  ipcMain.handle("site:describe", async (ev, { siteId } = {}) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    void describeSite(siteId, { cookieHeader, llm: loadLlmConfig(), emit: emitSummary, log });
+    return { started: true };
   });
 
   ipcMain.handle("site:crawlToken", (ev, { domain } = {}) => {
@@ -422,29 +431,14 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     return { stopping: stopSignalsSearch(jobId) };
   });
+  ipcMain.handle("social-signals:active", (ev, { siteId } = {}) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return activeSignalsSearch(siteId);
+  });
   ipcMain.handle("social-signals:platforms", async (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     const providers = await providersFor();
     return { platforms: await providers.listening.availablePlatforms() };
-  });
-  ipcMain.handle("leads:run", async (ev, payload) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    const providers = await providersFor();
-    const cookieHeader = await sessionCookieHeader().catch(() => "");
-    return startLeadsRun(payload ?? {}, emitLeads, {
-      providers,
-      llm: loadLlmConfig(),
-      cookieHeader,
-    });
-  });
-  ipcMain.handle("leads:stop", (ev, { jobId } = {}) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return { stopping: stopLeadsRun(jobId) };
-  });
-  ipcMain.handle("leads:sources", async (ev) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    const providers = await providersFor();
-    return { sources: await providers.prospects.availableSources() };
   });
 
   ipcMain.handle("connectors:connectGsc", async (ev) => {
@@ -651,23 +645,14 @@ function boot() {
 
   startCrawlSchedule({ cookieHeader: sessionCookieHeader, emit: emitCrawl, log });
 
-  startListeningSchedule({
+  startSiteSummarySchedule({
     cookieHeader: sessionCookieHeader,
-    emit: emitSignals,
-    log,
-    providersFor: async () =>
-      createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") }),
     llm: loadLlmConfig,
+    emit: emitSummary,
+    log,
   });
 
-  startLeadsSchedule({
-    cookieHeader: sessionCookieHeader,
-    emit: emitLeads,
-    log,
-    providersFor: async () =>
-      createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") }),
-    llm: loadLlmConfig,
-  });
+  startPageReviewSchedule({ cookieHeader: sessionCookieHeader, llm: loadLlmConfig, log });
 
 
   if (process.env.MEELU_SHOT && !app.isPackaged) {

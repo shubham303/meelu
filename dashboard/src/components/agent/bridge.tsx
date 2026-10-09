@@ -35,10 +35,17 @@ export interface TurnPayload {
   params?: Record<string, string>;
 }
 
+export interface SiteSummaryEvent {
+  event: "summary:start" | "summary:done";
+  data: { siteId: string; ok?: boolean; skipped?: boolean; summary?: string; error?: string };
+}
+
 export interface AgentBridge {
   runTurn: (payload: TurnPayload) => Promise<{ turnId?: string; error?: string }>;
   onEvent: (cb: (m: AgentEvent) => void) => () => void;
   abort: (turnId: string) => void;
+  describeSite?: (siteId: string) => Promise<{ started?: boolean; error?: string }>;
+  onSiteSummaryEvent?: (cb: (m: SiteSummaryEvent) => void) => () => void;
   crawlToken?: (domain: string) => Promise<{ token?: string | null; error?: string }>;
   respondPermission?: (
     requestId: string,

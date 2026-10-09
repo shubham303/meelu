@@ -7,6 +7,7 @@ from src.credits.schemas import GrantRequest
 from src.credits.service import InsufficientCreditsError, credit_service
 from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderAdapter, ProviderFacade, VendorResponse
+from src.providers.seo_data.adapter import DEFAULT_LOCALE
 from src.providers.seo_data.service import seo_data
 from src.providers.social_search.service import social_search
 from tests.conftest import signup
@@ -45,7 +46,12 @@ class ThingFacade(ProviderFacade):
 
     async def get(self, db, caller, key):
         return await self.fetch(
-            db, caller, "thing.get", {"key": key}, lambda a: a.get(key), timedelta(hours=1)
+            db,
+            caller,
+            "thing.get",
+            lambda _: {"key": key},
+            lambda a: a.get(key),
+            timedelta(hours=1),
         )
 
 
@@ -137,7 +143,6 @@ async def test_status_and_platform_listing(client, email):
     assert set(domains) == {
         "seo-data",
         "social-listening",
-        "prospect-sources",
         "json-data-extractor",
     }
     assert domains["seo-data"]["adapters"][0]["id"] == "dataforseo"
@@ -158,4 +163,52 @@ async def test_status_and_platform_listing(client, email):
 async def test_seo_tool_shapes_without_vendor(client, email):
     user_id = await user_id_of(client, email)
     async with unit_of_work() as db:
-        assert await seo_data.keyword_facts(db, Caller(user_id=user_id), []) == {"facts": []}
+        caller = Caller(user_id=user_id)
+        assert await seo_data.keyword_overview(db, caller, [], DEFAULT_LOCALE) == []
+
+
+async def test_social_search_falls_back_to_second_actor(client, email, monkeypatch):
+    from src.providers import apify
+    from src.settings import settings
+
+    monkeypatch.setattr(settings, "apify_api_key", "test-key")
+    calls = []
+
+    async def run_actor(provider_id, actor_id, actor_input, max_items, charges):
+        calls.append(actor_id)
+        if actor_id == "harshmaur~reddit-scraper-pro":
+            raise ProviderRequestError(provider_id, 502, "down")
+        return VendorResponse(
+            [
+                {
+                    "kind": "post",
+                    "id": "abc",
+                    "title": f"{actor_input['queries'][0]} question",
+                    "body": "body",
+                    "author": "amg",
+                    "subreddit": "SEO",
+                    "created_utc": "2099-01-01T00:00:00Z",
+                    "url": "https://www.reddit.com/r/SEO/comments/abc/q/",
+                }
+            ],
+            12_000,
+        )
+
+    monkeypatch.setattr(apify, "run_actor", run_actor)
+    await signup(client, email)
+    before = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+
+    body = {"platform": "reddit", "keywords": [f"kw-{email}"], "limit": 5}
+    for _ in range(2):
+        r = await client.post("/api/v1/providers/social-listening/search", json=body)
+        assert r.status_code == 200, r.text
+        posts = r.json()["data"]["posts"]
+        assert [p["id"] for p in posts] == ["abc"]
+
+    assert calls == ["harshmaur~reddit-scraper-pro", "fatihtahta~reddit-scraper-search-fast"]
+    after = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+    assert before - after == 12_000
+
+    r = await client.get("/api/v1/providers/calls?domain=social-listening")
+    providers = {c["provider"] for c in r.json()["data"]}
+    assert "apify/fatihtahta~reddit-scraper-search-fast" in providers

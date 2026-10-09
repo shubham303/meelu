@@ -18,15 +18,15 @@ class SitePageLink(EntityMixin, SiteScopedMixin, Base):
         Index("site_page_links_dst_idx", "site_id", "dst_page_id"),
         Index("site_page_links_src_idx", "site_id", "src_page_id"),
         Index("site_page_links_dst_url_idx", "site_id", "dst_url"),
-        Index("site_page_links_unresolved_idx", "site_id", "external", "dst_page_id"),
     )
 
     src_page_id: Mapped[str] = mapped_column(
         ForeignKey("site_pages.id", ondelete="CASCADE"), nullable=False
     )
-    dst_page_id: Mapped[str | None] = mapped_column(ForeignKey("site_pages.id", ondelete="CASCADE"))
+    dst_page_id: Mapped[str] = mapped_column(
+        ForeignKey("site_pages.id", ondelete="CASCADE"), nullable=False
+    )
     dst_url: Mapped[str] = mapped_column(nullable=False)
-    external: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     region: Mapped[str] = mapped_column(nullable=False, server_default=text("'body'"))
     rel: Mapped[str | None]
     anchor: Mapped[str | None]

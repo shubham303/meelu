@@ -11,7 +11,6 @@ the embedding worker and the dashboard.
 | Agent server | `meelu-agent:latest`             | long-running MCP over HTTP on port 8484 (loopback)|
 | Embed worker | `meelu-embed-worker:latest`      | long-running, chunks and embeds pages             |
 | Dashboard    | `meelu-dashboard:latest`         | long-running Next.js on port 3000, proxies /api   |
-| Caddy (VPS)  | `caddy:2-alpine`                 | optional overlay, terminates HTTPS                |
 
 Startup order is enforced, not hoped for: Postgres has to report healthy, then
 `migrate` has to exit 0, and only then do the api, the agent server, the
@@ -54,40 +53,34 @@ It serves MCP over streamable HTTP at `http://127.0.0.1:8484/mcp/`;
 authenticate with a workspace API key from **Dashboard → Settings** in the
 `x-api-key` header (plus `x-meelu-site` to pin a website).
 
-## VPS
+## Production and test (Coolify)
 
-Copy the repo to the host — `api/`, `dashboard/`,
-`docker-compose.yml`, `docker-compose.prod.yml`, `Caddyfile`, `.env.example`.
+Prod and test run on a VPS under [Coolify](https://coolify.io), from
+`deploy/compose.yml`. That file has no Postgres, no container names and no
+published ports, so the two environments run side by side and Coolify's proxy
+handles domains and HTTPS.
 
-Point an A record at the host, open ports 80 and 443, then:
+1. Create the VPS from Hostinger's Coolify template, or run Coolify's installer
+   on Ubuntu. Give it at least 8 GB of RAM.
+2. Add Cloudflare R2 as an S3 storage target
+   (`https://<account-id>.r2.cloudflarestorage.com`).
+3. Create one project with two environments, `production` and `test`.
+4. In each environment, add a PostgreSQL database. Set its image to
+   `paradedb/paradedb:0.25.2-pg17`, add
+   `shared_preload_libraries = 'pg_search'` to its custom configuration, and
+   schedule backups to R2.
+5. In each environment, add an application from the GitHub repo with the
+   Docker Compose build pack and compose path `/deploy/compose.yml`. Use branch
+   `main` for production and `test` for test, and turn on auto-deploy.
+6. Set the environment variables. `DATABASE_URL` is the database's internal
+   URL with the scheme changed to `postgresql+psycopg://`. `CORS_ORIGINS` and
+   `DODO_PAYMENTS_RETURN_URL` must use the environment's domain. Add the vendor
+   keys.
+7. Give `dashboard` a domain on port 3000 and `agent` a domain on port 8484.
+   The Electron app connects to the agent domain.
 
-```bash
-cp .env.example .env
-```
-
-```dotenv
-POSTGRES_PASSWORD=<openssl rand -base64 24>
-MEELU_DOMAIN=meelu.example.com
-```
-
-`POSTGRES_PASSWORD` is read only when the volume is first created. Changing it
-later does not change the existing database — reset with `down -v`, which also
-deletes the data.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
-
-Caddy requests and renews the Let's Encrypt certificate on its own and proxies
-to the dashboard over the internal network. The dashboard's own port stays
-bound to `127.0.0.1`, so nothing but Caddy can reach it from outside.
-
-### Skipping HTTPS
-
-For a quick internal test, leave off `-f docker-compose.prod.yml` and set
-`DASHBOARD_BIND=0.0.0.0` in `.env` to publish port 3000 directly. Only do that
-behind a firewall or VPN — sessions and API keys would cross the network in
-plaintext.
+After the first scheduled backup, restore it into the test database once, to
+prove the backups work.
 
 ## Operating it
 
@@ -168,8 +161,8 @@ deleting `craftmate_pgdata`.
 
 ### Backups
 
-The volume is the product now. Take a dump before anything destructive, and on
-a schedule once there are real users:
+Production backups are Coolify's scheduled backups to R2. Locally, take a dump
+before anything destructive:
 
 ```bash
 docker compose exec -T postgres pg_dump -U craftmate craftmate > backup.sql
@@ -182,9 +175,6 @@ schema that already has rows.
 ## Troubleshooting
 
 **Port 3000 already in use.** Set `DASHBOARD_PORT=3001` in `.env`.
-
-**Caddy won't get a certificate.** DNS must already resolve to the host and
-ports 80/443 must be free — `docker compose logs caddy` names the reason.
 
 **Nothing starts / `migrate` exited non-zero.** The api, the worker and the
 dashboard are gated on the migration succeeding, so they stay down by design. `docker compose logs

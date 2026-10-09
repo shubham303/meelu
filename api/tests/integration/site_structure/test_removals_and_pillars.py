@@ -87,6 +87,8 @@ async def test_link_removals(client, email):
     assert set(rows) == {(a, b), (home, b)}
     assert "Generic anchor" in rows[(a, b)]["suggestion"]
     assert rows[(a, b)]["fromChunkId"] is not None
+    assert rows[(a, b)]["fromChunkText"] == "Our terms of use are strict."
+    assert rows[(a, b)]["anchor"] == "terms of use"
     assert rows[(a, b)]["searchScore"] > 0.5
     assert rows[(home, b)].get("searchScore") is None
 
@@ -243,7 +245,10 @@ async def test_pillar_pages_pipeline(client, email, screener):
     site, user_id, pages, job = await prepare(
         client,
         email,
-        [{"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 9}]
+        [
+            {"url": f"{ORIGIN}/", "page_type": "money", "depth": 0, "inlinks": 9},
+            {"url": f"{ORIGIN}/ads", "page_type": "hub", "depth": 1, "inlinks": 3},
+        ]
         + [
             {
                 "url": u,
@@ -258,6 +263,7 @@ async def test_pillar_pages_pipeline(client, email, screener):
     seo = [pages[u] for u in urls[:5]]
     ads = [pages[u] for u in urls[5:]]
     home = pages[f"{ORIGIN}/"]
+    ads_hub = pages[f"{ORIGIN}/ads"]
     for i, p in enumerate(seo):
         await seed_embedded_chunk(site["id"], user_id, p, vector(0, 0.05 * i))
     for i, p in enumerate(ads):
@@ -265,15 +271,19 @@ async def test_pillar_pages_pipeline(client, email, screener):
     partial = [0.0] * DIMS
     partial[9] = 1.0
     partial[20] = 1.5
-    await seed_embedded_chunk(site["id"], user_id, home, partial)
+    await seed_embedded_chunk(site["id"], user_id, ads_hub, partial)
+    await seed_embedded_chunk(site["id"], user_id, home, vector(9, 0.0))
     for p in ads[:3]:
+        await seed_link(site["id"], user_id, ads_hub, p)
+    for p in ads:
         await seed_link(site["id"], user_id, home, p)
 
     await workspace_table(
         user_id,
         "folders",
         "group_key text, page_id text, topic text",
-        [("ads", p, "Paid ads") for p in ads] + [("tiny", seo[0], None), ("tiny", seo[1], None)],
+        [("ads", p, "Paid ads") for p in [*ads, home]]
+        + [("tiny", seo[0], None), ("tiny", seo[1], None)],
     )
     r = await client.post(
         f"{BASE}/pillar-suggestions/propose",
@@ -282,12 +292,14 @@ async def test_pillar_pages_pipeline(client, email, screener):
     assert r.status_code == 200, r.text
     data = r.json()["data"]
     assert (data["groups"], data["tooSmall"], data["inserted"]) == (2, 1, 1)
+    assert data["structuralPages"] == 1
     expand = (
         await client.get(
             f"{BASE}/pillar-suggestions", params={"state": "draft", "action": "expand"}
         )
     ).json()["data"][0]
-    assert expand["coveringPageId"] == home
+    assert expand["coveringPageId"] == ads_hub
+    assert home not in expand["memberPageIds"]
     assert expand["topic"] == "Paid ads"
     assert "Expand" in expand["suggestion"]
 

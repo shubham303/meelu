@@ -89,6 +89,9 @@ class SitePage(EntityMixin, SiteScopedMixin, Base):
     images: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
     )
+    external_links: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
+    )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

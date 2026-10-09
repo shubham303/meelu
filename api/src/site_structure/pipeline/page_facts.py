@@ -30,12 +30,15 @@ class PageFactsService:
         self, db: AsyncSession, site_id: str, page_ids: list[str]
     ) -> dict[str, PageFacts]:
         briefs = await site_pages.list_by_ids(db, site_id, page_ids)
+        outlinks = await site_page_links.out_link_counts_by_src_ids(
+            db, site_id, page_ids, region="body"
+        )
         types = await site_page_llm_extractions.page_types_by_page_ids(db, site_id, page_ids)
         return {
             b.id: PageFacts(
                 page_id=b.id,
                 inlinks=b.inlinks,
-                outlinks=0,
+                outlinks=outlinks.get(b.id, 0),
                 word_count=b.word_count,
                 page_type=types.get(b.id),
                 is_home=is_home(b.url),

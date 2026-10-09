@@ -1,15 +1,48 @@
+import asyncio
 from typing import Any
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import ProgrammingError
 
-from src.agent.sql import quote_ident
+from src.agent.security import ensure_user
+from src.agent.sql import quote_ident, run_single_statement, tenant_txn
+from src.settings import settings
 
 
 class WorkspaceTableRepository:
-    async def rows(self, db: AsyncSession, schema: str, table: str) -> list[dict[str, Any]]:
-        result = await db.execute(text(f"SELECT * FROM {quote_ident(schema)}.{quote_ident(table)}"))
-        return [dict(row) for row in result.mappings().all()]
+    async def rows(self, user_id: str, table: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._rows, user_id, table)
+
+    def _rows(self, user_id: str, table: str) -> list[dict[str, Any]]:
+        role, schema = ensure_user(user_id)
+        cap = settings.agent_max_workspace_rows
+        try:
+            with tenant_txn(role, schema) as conn:
+                result = conn.exec_driver_sql(
+                    f"SELECT * FROM {quote_ident(schema)}.{quote_ident(table)} LIMIT {cap + 1}"
+                )
+                rows = [dict(row) for row in result.mappings().all()]
+        except ProgrammingError as exc:
+            raise ValueError(f"Could not read {table} from your workspace schema.") from exc
+        if len(rows) > cap:
+            raise ValueError(f"{table} has more than {cap} rows; narrow it before handing it over.")
+        return rows
+
+    async def query(self, user_id: str, sql: str) -> tuple[list[str], list[tuple[Any, ...]]]:
+        return await asyncio.to_thread(self._query, user_id, sql)
+
+    def _query(self, user_id: str, sql: str) -> tuple[list[str], list[tuple[Any, ...]]]:
+        role, schema = ensure_user(user_id)
+        cap = settings.agent_max_workspace_rows
+        try:
+            with tenant_txn(role, schema) as conn:
+                columns, rows, _ = run_single_statement(conn, sql, cap + 1)
+        except Exception as exc:
+            raise ValueError(f"The query failed: {exc}") from exc
+        if columns is None:
+            raise ValueError("The query must be a SELECT that returns rows.")
+        if len(rows) > cap:
+            raise ValueError(f"The query returned more than {cap} rows; narrow it.")
+        return columns, [tuple(row) for row in rows]
 
 
 workspace_tables = WorkspaceTableRepository()

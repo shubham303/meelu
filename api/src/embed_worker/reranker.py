@@ -7,7 +7,7 @@ from tokenizers import Tokenizer
 
 
 class Reranker:
-    def __init__(self, model_id):
+    def __init__(self, model_id, threads):
         model_path = hf_hub_download(model_id, "onnx/model_quantized.onnx")
         tokenizer_path = hf_hub_download(model_id, "tokenizer.json")
         config_path = hf_hub_download(model_id, "tokenizer_config.json")
@@ -31,6 +31,8 @@ class Reranker:
 
         options = onnxruntime.SessionOptions()
         options.enable_cpu_mem_arena = False
+        options.intra_op_num_threads = threads
+        options.inter_op_num_threads = 1
         self.session = onnxruntime.InferenceSession(
             model_path, options, providers=["CPUExecutionProvider"]
         )

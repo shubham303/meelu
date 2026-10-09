@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { use, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogIn } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Reveal } from "@/components/animate";
 import { Button, Card, Field, Input } from "@/components/ui";
+import { GoogleButton, OrDivider } from "@/components/google-button";
+import { signInWithPassword } from "@/lib/auth";
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const { error: failed } = use(searchParams);
+  const [error, setError] = useState<string | null>(
+    failed ? "Sign in did not complete. Please try again." : null,
+  );
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
@@ -20,17 +29,10 @@ export default function LoginPage() {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setError(body?.error?.message ?? "Sign in failed. Check your email and password.");
-        return;
-      }
-      router.push("/dashboard");
+      const session = await signInWithPassword(email, password);
+      router.push(session.created ? "/onboarding" : "/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign in failed. Check your email and password.");
     } finally {
       setBusy(false);
     }
@@ -47,6 +49,8 @@ export default function LoginPage() {
           <p className="text-sm text-sub text-center mt-1.5 mb-6">
             Sign in — your coworker&apos;s latest work is waiting.
           </p>
+          <GoogleButton onError={setError} />
+          <OrDivider />
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Email">
               <Input

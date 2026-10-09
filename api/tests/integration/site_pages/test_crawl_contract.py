@@ -1,7 +1,7 @@
 from src.core.database import unit_of_work
+from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
-from src.site_pages.service import site_page_service
-from tests.integration.site_pages.conftest import save_pages
+from tests.integration.site_pages.conftest import save_links, save_page, save_pages
 
 
 async def test_crawl_known_pages_and_counts(client, site):
@@ -42,26 +42,75 @@ async def test_crawl_known_pages_and_counts(client, site):
     assert "lastCrawledAt" not in pending
 
 
-async def test_link_frontier_lists_unknown_targets(client, site):
+async def test_outlinks_resolve_to_pages_and_report_the_rest(client, site):
     await save_pages(
+        client,
+        [
+            {"url": "https://example.com/", "status": 200},
+            {"url": "https://example.com/known", "status": 200},
+        ],
+    )
+    result = await save_links(
         client,
         [
             {
                 "url": "https://example.com/",
-                "status": 200,
                 "links": [
                     {"url": "https://example.com/known/", "anchor": "known"},
                     {"url": "https://example.com/new", "anchor": "new"},
+                    {"url": "https://example.com", "anchor": "home"},
                 ],
             },
-            {"url": "https://example.com/known", "status": 200},
+            {
+                "url": "https://example.com/known",
+                "links": [{"url": "https://example.com/", "anchor": "home"}],
+            },
         ],
     )
 
+    assert result == {"pages": 2, "links": 2, "unresolved": ["https://example.com/new"]}
     async with unit_of_work() as db:
-        frontier = await site_page_service.link_frontier(db, site["id"])
+        home = await site_pages.id_by_url(db, site["id"], "https://example.com/")
+        known = await site_pages.id_by_url(db, site["id"], "https://example.com/known")
+        edges = await site_page_links.adjacency(db, site["id"])
+    assert edges == {home: {known}, known: {home}}
 
-    assert frontier == ["https://example.com/new"]
+
+async def test_external_links_live_on_the_page(client, site):
+    saved = await save_page(
+        client,
+        url="https://example.com/",
+        status=200,
+        externalLinks=[
+            {"url": "https://github.com/x", "anchor": "GitHub", "region": "footer"},
+            {"url": "https://github.com/x", "region": "footer", "rel": "nofollow"},
+            {"url": "https://x.com/y", "rel": "nofollow"},
+        ],
+    )
+
+    assert saved["externalLinks"] == [
+        {
+            "url": "https://github.com/x",
+            "region": "footer",
+            "rel": None,
+            "anchor": "GitHub",
+            "count": 2,
+            "followable": True,
+        },
+        {
+            "url": "https://x.com/y",
+            "region": "body",
+            "rel": "nofollow",
+            "anchor": None,
+            "count": 1,
+            "followable": False,
+        },
+    ]
+    r = await client.get(f"/api/v1/site/pages/{saved['id']}/links")
+    assert [link["url"] for link in r.json()["data"]["external"]] == [
+        "https://github.com/x",
+        "https://x.com/y",
+    ]
 
 
 async def test_stamp_sitemap_presence(client, site):

@@ -53,14 +53,14 @@ Every `/api/v1/*` endpoint behind the rewrite accepts either:
    agent server (`../api/src/agent`).
 
 ```bash
-curl -H "x-api-key: emcp_..." http://localhost:3000/api/v1/context
+curl -H "x-api-key: emcp_..." http://localhost:3000/api/v1/site
 ```
 
 ## Layout
 
 ```
 src/lib/        session forwarding, API hooks, app-mode detection, shared types and helpers
-src/features/   agent scopes (prompts the app's harness loads), prompt chips
+src/features/   prompt chips
 src/components/ ui kit, GSAP primitives, charts, sidebar, logo
 src/app/        landing, login/signup, onboarding, dashboard/*
 src/proxy.ts    redirects the desktop app's user agent straight to /dashboard

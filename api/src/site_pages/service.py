@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginationParams, PaginationService
 from src.embed_worker.search.service import page_search_service
+from src.seo.site_search.repositories.site_page_index_status import site_page_index_statuses
+from src.seo.site_traffic.repositories.site_traffic_landing_daily import (
+    site_traffic_landing_dailies,
+)
 from src.site_pages.llm_extraction.repository import site_page_llm_extractions
 from src.site_pages.pagerank import page_rank
 from src.site_pages.repositories.chunks import site_chunks
@@ -34,10 +38,15 @@ from src.site_pages.schemas import (
     SitePageVisitedResult,
     SitePageVisitSweepResult,
 )
+from src.site_pages.schemas.links import (
+    NewSitePageLink,
+    PageLink,
+    SitePageOutlinksRequest,
+    SitePageOutlinksResult,
+    merge_links,
+)
 from src.site_pages.schemas.search import SitePageSearchRequest, SitePageSearchResponse
 from src.site_pages.url import landing_path, normalise_url
-from src.site_search.repositories.site_page_index_status import site_page_index_statuses
-from src.site_traffic.repositories.site_traffic_landing_daily import site_traffic_landing_dailies
 from src.sites.repository import sites
 
 SEARCH_MATCH_POOL = 200
@@ -45,7 +54,6 @@ SEED_FLOOR = 0.1
 SEED_DAYS = 90
 MAX_DEPTH = 50
 LINK_CAP = 500
-FRONTIER_LIMIT = 20_000
 DEEP_FROM = 4
 DISCOVERY_CAP = 500
 
@@ -187,15 +195,49 @@ class SitePageService:
                 400, "Send `pages: [...]` — a crawl batch with no pages writes nothing."
             )
         written = await site_pages.upsert_many(db, user_id, site_id, body.pages)
-        links_by_url = {item.url: item.links for item in body.pages if item.links is not None}
-        if links_by_url:
-            await site_page_links.replace_for_pages(
-                db,
-                user_id,
-                site_id,
-                {ref.id: links_by_url[ref.url] for ref in written if ref.url in links_by_url},
-            )
         return SitePageBatchResult(pages=len(written))
+
+    async def save_outlinks(
+        self, db: AsyncSession, user_id: str, site_id: str, body: SitePageOutlinksRequest
+    ) -> SitePageOutlinksResult:
+        if not body.pages:
+            raise HTTPException(400, "Send `pages: [...]` — each page url with the links it holds.")
+        merged = {item.url: merge_links(item.links) for item in body.pages}
+        sources = await site_pages.ids_by_urls(db, site_id, list(merged))
+        targets = await site_pages.link_targets(
+            db, site_id, list({link.url for links in merged.values() for link in links})
+        )
+        unresolved: set[str] = set()
+        links_by_page: dict[str, list[NewSitePageLink]] = {}
+        for url, links in merged.items():
+            src_id = sources.get(url)
+            if src_id is None:
+                continue
+            rows = links_by_page.setdefault(src_id, [])
+            for link in links:
+                target = targets.get(link.url)
+                if target is None:
+                    unresolved.add(link.url)
+                    continue
+                dst_id, canonical = target
+                if dst_id == src_id:
+                    continue
+                rows.append(
+                    NewSitePageLink(
+                        dst_page_id=dst_id,
+                        dst_url=link.url,
+                        region=link.region,
+                        rel=link.rel,
+                        anchor=link.anchor,
+                        count=link.count,
+                        followable=link.followable,
+                        dst_canonical=canonical,
+                    )
+                )
+        stored = await site_page_links.replace_for_pages(db, user_id, site_id, links_by_page)
+        return SitePageOutlinksResult(
+            pages=len(links_by_page), links=stored, unresolved=sorted(unresolved)
+        )
 
     async def start_visit_sweep(self, db: AsyncSession, site_id: str) -> SitePageVisitSweepResult:
         return SitePageVisitSweepResult(reset=await site_pages.mark_all_unvisited(db, site_id))
@@ -216,23 +258,6 @@ class SitePageService:
 
     async def prune(self, db: AsyncSession, site_id: str) -> SitePagePruneResult:
         return SitePagePruneResult(deleted=await site_pages.delete_unvisited(db, site_id))
-
-    async def link_frontier(
-        self, db: AsyncSession, site_id: str, limit: int = FRONTIER_LIMIT
-    ) -> list[str]:
-        known = await site_pages.normalised_urls(db, site_id)
-        linked = await site_page_links.distinct_internal_dst_urls(db, site_id)
-        return [u for u in linked if u not in known][:limit]
-
-    async def resolve_links(self, db: AsyncSession, site_id: str) -> None:
-        targets = await site_pages.link_targets(db, site_id)
-        resolved: dict[str, tuple[str | None, bool]] = {}
-        for link_id, src_page_id, dst_url in await site_page_links.list_internal(db, site_id):
-            target = targets.get(dst_url)
-            if target is None or target[0] == src_page_id:
-                continue
-            resolved[link_id] = target
-        await site_page_links.set_targets(db, site_id, resolved)
 
     async def restamp_graph(self, db: AsyncSession, site_id: str) -> None:
         sources: dict[str, set[str]] = defaultdict(set)
@@ -280,7 +305,9 @@ class SitePageService:
         return len(ids)
 
     async def rebuild_graph(self, db: AsyncSession, site_id: str) -> None:
-        await self.resolve_links(db, site_id)
+        await site_page_links.set_dst_canonical(
+            db, site_id, await site_pages.canonical_target_ids(db, site_id)
+        )
         await self.restamp_graph(db, site_id)
         await self.compute_link_scores(db, site_id)
 
@@ -320,7 +347,7 @@ class SitePageService:
         )
 
     async def links(self, db: AsyncSession, site_id: str, page_id: str) -> SitePageLinksResult:
-        await self._require(db, site_id, page_id)
+        page = await self._require(db, site_id, page_id)
         inbound = await site_page_links.list_inbound(db, site_id, page_id)
         src_urls = await site_pages.urls_by_ids(
             db, site_id, list({link.src_page_id for link in inbound})
@@ -336,6 +363,7 @@ class SitePageService:
         return SitePageLinksResult(
             inbound=stitched[:LINK_CAP],
             outbound=await site_page_links.list_outbound(db, site_id, page_id, LINK_CAP),
+            external=[PageLink.model_validate(link) for link in page.external_links[:LINK_CAP]],
         )
 
     async def chunks(self, db: AsyncSession, site_id: str, page_id: str) -> list[SiteChunkRecord]:
@@ -398,11 +426,7 @@ class SitePageService:
         counts = await site_page_links.out_link_counts_by_src_ids(db, site_id, ids)
         return [
             row.model_copy(
-                update={
-                    "page_type": types.get(row.id),
-                    "out_link_count": counts.get(row.id, (0, 0))[0],
-                    "external_link_count": counts.get(row.id, (0, 0))[1],
-                }
+                update={"page_type": types.get(row.id), "out_link_count": counts.get(row.id, 0)}
             )
             for row in rows
         ]
@@ -422,10 +446,12 @@ class SitePageService:
     async def _with_link_counts(
         self, db: AsyncSession, site_id: str, page: SitePageRecord
     ) -> SitePageRecord:
-        internal, external = (
-            await site_page_links.out_link_counts_by_src_ids(db, site_id, [page.id])
-        ).get(page.id, (0, 0))
-        return page.model_copy(update={"out_link_count": internal, "external_link_count": external})
+        internal = (await site_page_links.out_link_counts_by_src_ids(db, site_id, [page.id])).get(
+            page.id, 0
+        )
+        return page.model_copy(
+            update={"out_link_count": internal, "external_link_count": len(page.external_links)}
+        )
 
     def _teleport(
         self, refs: list[SitePageRef], seed_by_path: dict[str, int]

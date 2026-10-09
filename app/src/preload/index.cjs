@@ -19,6 +19,12 @@ const bridge = {
   trafficSync: (payload) => ipcRenderer.invoke("site:trafficSync", payload),
   stopTrafficSync: (syncId) => ipcRenderer.invoke("site:trafficSyncStop", { syncId }),
   gaProperties: () => ipcRenderer.invoke("site:gaProperties"),
+  describeSite: (siteId) => ipcRenderer.invoke("site:describe", { siteId }),
+  onSiteSummaryEvent: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on("site-summary:event", listener);
+    return () => ipcRenderer.removeListener("site-summary:event", listener);
+  },
   crawlToken: (domain) => ipcRenderer.invoke("site:crawlToken", { domain }),
   onCrawlEvent: (callback) => {
     const listener = (_event, message) => callback(message);
@@ -46,19 +52,12 @@ const bridge = {
   connectGa4: () => ipcRenderer.invoke("connectors:connectGa4"),
   socialSignalsSearch: (payload) => ipcRenderer.invoke("social-signals:search", payload),
   socialSignalsStop: (jobId) => ipcRenderer.invoke("social-signals:stop", { jobId }),
+  socialSignalsActive: (siteId) => ipcRenderer.invoke("social-signals:active", { siteId }),
   socialSignalsPlatforms: () => ipcRenderer.invoke("social-signals:platforms"),
   onSocialSignalsEvent: (callback) => {
     const listener = (_event, message) => callback(message);
     ipcRenderer.on("social-signals:event", listener);
     return () => ipcRenderer.removeListener("social-signals:event", listener);
-  },
-  leadsRun: (payload) => ipcRenderer.invoke("leads:run", payload),
-  leadsStop: (jobId) => ipcRenderer.invoke("leads:stop", { jobId }),
-  prospectSources: () => ipcRenderer.invoke("leads:sources"),
-  onLeadsEvent: (callback) => {
-    const listener = (_event, message) => callback(message);
-    ipcRenderer.on("leads:event", listener);
-    return () => ipcRenderer.removeListener("leads:event", listener);
   },
   analyticsSaveSource: (params) => ipcRenderer.invoke("analytics:saveSource", params),
   analyticsCheckSession: (params) => ipcRenderer.invoke("analytics:checkSession", params),

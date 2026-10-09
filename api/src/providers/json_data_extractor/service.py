@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.providers.json_data_extractor.adapter import DECIDE, Question
-from src.providers.json_data_extractor.openrouter_jev import OpenRouterJevAdapter
+from src.providers.json_data_extractor.openrouter_deepseek import OpenRouterDeepSeekAdapter
 from src.providers.registry import Caller, ProviderFacade
 
 TTL = timedelta(days=90)
@@ -26,10 +26,10 @@ class JsonDataExtractor(ProviderFacade):
             db,
             caller,
             DECIDE,
-            {"subject": subject, "questions": questions},
+            lambda _: {"subject": subject, "questions": questions},
             lambda a: a.decide(state, questions),
             TTL,
         )
 
 
-json_data_extractor = JsonDataExtractor([OpenRouterJevAdapter()])
+json_data_extractor = JsonDataExtractor([OpenRouterDeepSeekAdapter()])

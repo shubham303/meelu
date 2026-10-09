@@ -53,38 +53,38 @@ const BAR = [
   },
   {
     title: "It enforces its rule in the server, not the prompt",
-    body: "A lead is unique per project, so a second campaign can't cold-email someone the first one already found — checked on write, refused with the campaign that already owns it. One post per channel per hour. A suggestion is stored in your words and can't be rewritten. These hold whether or not the agent read the instructions.",
+    body: "The agent reads your data through SQL that is scoped to your account and read-only on the core tables. It changes anything only through a desk's own write tools, and a task gets only the writes it was scoped for. A conversation Social Listening already suggested is not suggested again. These hold whether or not the agent read the instructions.",
   },
   {
     title: "It remembers what the conversation would lose",
-    body: "That you emailed that newsletter in March. That you hate the word “solution”. That your pricing page says £29 and not “affordable”. It's read back before anything gets written, which is why week two beats week one.",
+    body: "That you rejected that pillar page last week. That you hate the word “solution”. That your pricing page says £29 and not “affordable”. Notes and past decisions are read back before anything gets written, which is why week two beats week one.",
   },
   {
     title: "It says where it put things",
-    body: "Every saved record comes back naming the business it landed under. An agent filing work in the wrong place is invisible until you open the dashboard, so it gets said in the sentence it happens.",
+    body: "Every saved record comes back naming the site it landed under. An agent filing work in the wrong place is invisible until you open the dashboard, so it gets said in the sentence it happens.",
   },
   {
-    title: "It holds no credential that isn't yours",
-    body: "The configs we publish carry obvious placeholders. You substitute your own, in your own file, on your own machine. Nothing here is a place worth breaking into.",
+    title: "It keeps your own credentials on your machine",
+    body: "Your Search Console and Analytics connections live in the desktop app, on your machine. Shared data vendors run on one account on our server, and each call is charged to your credit balance, so you never hand us a vendor key.",
   },
 ];
 
 const COSTS = [
   {
     title: "Nothing is awake",
-    body: "The server runs inside your conversation and stops when it closes. Installing a publishing server does not mean a post goes out at 9am — the alternative is us running the agent and holding everyone's tokens, which is exactly the custody this design refuses.",
+    body: "Crawls, Search Console and Analytics fetches and schedules run in the desktop app, so they run only while the app is running. The alternative is us running them on our servers and holding everyone's Google tokens, which is exactly the custody this design refuses.",
   },
   {
     title: "Determinism goes with the canvas",
-    body: "An n8n graph runs the same way every time; an agent doesn't. “The workflow is generated per task” and “I can't tell you exactly what will happen” are one sentence read two ways. The answer is rules enforced by a server, and your yes on anything that leaves the building.",
+    body: "An n8n graph runs the same way every time; an agent doesn't. “The workflow is generated per task” and “I can't tell you exactly what will happen” are one sentence read two ways. The answer is rules enforced by a server, and your yes on anything that would change your site.",
   },
   {
-    title: "Coverage isn't ours to decide",
-    body: "LinkedIn publishes no MCP server, and the community ones risk your account. So we draft and schedule, and you paste it in — and the docs page says exactly that instead of shipping a command we don't trust.",
+    title: "The last step is yours",
+    body: "Meelu does not publish. The Content desk writes and checks a page — title, H1, meta description, slug, target keyword and body — and you put it on your site by hand. A tool wired to your CMS would skip that step; we keep it on purpose.",
   },
   {
-    title: "It assumes you have a host",
-    body: "You need to already be in Claude, Cursor or Codex, and willing to edit a config once. A platform asks for a signup; this asks for an install. That's a narrower door, chosen deliberately.",
+    title: "It needs the desktop app",
+    body: "The web dashboard shows the same screens, but crawling and the agent run in the desktop app. A web tool asks for a signup; this also asks for an install. That's a narrower door, chosen deliberately.",
   },
 ];
 
@@ -123,9 +123,11 @@ export default function WhyPage() {
             Why Meelu is built this way
           </h1>
           <p className="mt-5 text-base leading-relaxed text-sub">
-            Meelu is one MCP server that holds a business&apos;s marketing memory, and nothing
-            else. It sends no email and publishes no post. That looks like a missing feature
-            until you notice what changed about software.
+            Meelu reads your website and your search data, and tells you what it found and why
+            it matters. It crawls and audits your pages, suggests internal links, tracks your
+            keywords and drafts pages for your site. It never publishes and never changes your
+            site on its own. That looks like a missing feature until you notice what changed
+            about software.
           </p>
         </header>
 
@@ -136,7 +138,7 @@ export default function WhyPage() {
           </p>
           <p className="mt-3 text-sm leading-relaxed text-sub">
             An agent writes the wiring at runtime. What it can&apos;t do is supply a component
-            that works, or remember your business between conversations. So that is what we
+            that works, or remember your site between conversations. So that is what we
             build — and deliberately nothing else.
           </p>
         </blockquote>
@@ -223,10 +225,10 @@ export default function WhyPage() {
             So we build one component, properly
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sub">
-            Email is your email provider&apos;s problem. Publishing is a CMS&apos;s problem. Repos are
-            GitHub&apos;s problem. Each is somebody&apos;s entire company, each already ships an
-            MCP server, and every one we reimplement would be a worse version of a thing that
-            exists — plus a credential we&apos;d then have to guard.
+            Publishing is your CMS&apos;s problem. Email is your email provider&apos;s problem.
+            Posting is the social network&apos;s problem. Each is somebody&apos;s entire company,
+            and every one we reimplement would be a worse version of a thing that exists — plus
+            a credential we&apos;d then have to guard.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -236,9 +238,9 @@ export default function WhyPage() {
               </div>
               <h3 className="mt-4 font-display text-lg text-ink">Meelu is the memory</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-sub">
-                Your business, your positioning, the briefs, the leads, the drafts, the
-                calendar, the corrections you&apos;ve already made once, and the record of what
-                actually happened. It performs no outward action at all — and never will.
+                Your pages and how they link, your keyword, rank and volume history, the page
+                drafts, your notes, and the suggestions you already approved or rejected. It
+                reads and suggests. It does not change your site.
               </p>
             </div>
             <div className="rounded-2xl border border-edge bg-panel p-6">
@@ -246,12 +248,12 @@ export default function WhyPage() {
                 <Hand size={16} className="text-sub" />
               </div>
               <h3 className="mt-4 font-display text-lg text-ink">
-                The servers you install are the hands
+                You are the hands
               </h3>
               <p className="mt-1.5 text-sm leading-relaxed text-sub">
-                Sending an email means you connected your own email provider and your
-                assistant used both in one conversation: draft here, get your yes on the exact
-                text, send there, record the outcome here.
+                When a suggestion is right, you make the change: edit the page, add the link,
+                put the draft on your site. Meelu brings the evidence. The decision and the
+                edit are yours.
               </p>
             </div>
           </div>
@@ -261,16 +263,18 @@ export default function WhyPage() {
               <Boxes size={16} className="text-sub" />
             </div>
             <h3 className="mt-4 font-display text-lg text-ink">
-              Every server you add multiplies, rather than adds
+              Every desk you add multiplies, rather than adds
             </h3>
             <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-sub">
-              Install three and your assistant can pull data out of one, transform it, and write
-              it into another — a workflow nobody configured, for a case nobody anticipated.
+              The agent in the desktop app works across desks. It can export your pages from
+              the Site desk and question them in the Analytics desk in one conversation, and it
+              can use other MCP servers you install in the app — a workflow nobody configured,
+              for a case nobody anticipated.
               That composition is the entire return on this design, and it&apos;s the thing a
               platform structurally can&apos;t offer, because it only composes with itself.
               Capability becomes an install, not a roadmap item. And if the component you need
-              doesn&apos;t exist yet, the right move is to build that one — as its own server,
-              not as a feature buried in ours.
+              doesn&apos;t exist yet, the right move is to build that one on its own, not as a
+              feature buried in another desk.
             </p>
           </div>
         </section>
@@ -280,14 +284,14 @@ export default function WhyPage() {
           <div className="mt-3 max-w-2xl space-y-3 text-sm leading-relaxed text-sub">
             <p>
               Of everything one could build, why this? Because it&apos;s the piece nobody else
-              supplies. The agent brings the reasoning. The servers you install bring the reach.
+              supplies. The agent brings the reasoning. Search Console, Analytics and the data vendors bring the reach.
               What&apos;s missing from every bare chat session is durable, corrected,
-              business-specific context — and the enforcement of rules a model won&apos;t
+              site-specific context — and the enforcement of rules a model won&apos;t
               reliably remember on its own.
             </p>
             <p>
               A chat session forgets. Ask it again next week and it will confidently redo the
-              work and re-email the lead. That&apos;s the gap this fills, and it sets the bar
+              work and suggest the page you already rejected. That&apos;s the gap this fills, and it sets the bar
               for anything we add: there has to be one rule it enforces that a generic chat
               session cannot. If there isn&apos;t, it&apos;s a prompt, not a product.
             </p>
@@ -305,46 +309,44 @@ export default function WhyPage() {
 
         <section className="mt-20">
           <h2 className="font-display text-3xl text-ink">
-            Then what stops it sending the wrong thing?
+            Then what stops it changing the wrong thing?
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-sub">
-            Not the absence of a tool. That was the old answer, and it was really a missing
-            feature dressed up as a safety property. The real ones:
+            Meelu suggests and you decide. In practice that means:
           </p>
           <ul className="mt-6 space-y-4">
             <li className="border-l-2 border-accent/40 pl-4">
               <p className="font-display text-base text-ink">
-                Approval is on the text, not the transport
+                Every step ends in a suggestion
               </p>
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sub">
-                Nothing goes out without your yes on the exact subject and body. Being able to
-                send is precisely what makes that approval load-bearing rather than ceremonial.
-              </p>
-            </li>
-            <li className="border-l-2 border-accent/40 pl-4">
-              <p className="font-display text-base text-ink">The record follows the act</p>
-              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sub">
-                It sends, then marks it sent. Never the reverse. A draft recorded as sent that
-                never left is the one failure that would make the memory untrustworthy — and the
-                memory is the whole product.
+                Each automated step ends in something you can approve, edit or reject. It never
+                ends in a silent change to your site or your content.
               </p>
             </li>
             <li className="border-l-2 border-accent/40 pl-4">
-              <p className="font-display text-base text-ink">A status is evidence, not a guess</p>
+              <p className="font-display text-base text-ink">A suggestion carries its evidence</p>
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sub">
-                Sent means a send actually succeeded, or you said you sent it. Never that a draft
-                looked ready to go.
+                The data it came from, the pages involved and the reason come with it, so you
+                can judge it quickly instead of taking it on trust.
+              </p>
+            </li>
+            <li className="border-l-2 border-accent/40 pl-4">
+              <p className="font-display text-base text-ink">It points, it doesn&apos;t rewrite</p>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sub">
+                When several pages split one search query, Meelu suggests a pillar page, names
+                the query and says what each page adds. Whether to refocus, merge or leave them
+                alone is your call.
               </p>
             </li>
             <li className="border-l-2 border-accent/40 pl-4">
               <p className="font-display text-base text-ink">
-                Where the evidence is weak, you keep the pen
+                Nothing leaves without you
               </p>
               <p className="mt-1 max-w-2xl text-sm leading-relaxed text-sub">
-                A mail provider returns a result worth trusting, so your assistant can mark an
-                email sent. A social feed doesn&apos;t — it can hold a post for review, mangle
-                the formatting, drop the image — so only you can mark a post published, even
-                when the agent published it. Asymmetric on purpose.
+                The Content desk writes a page and stops; you put it on your site. Social
+                Listening finds conversations worth joining; it does not post. Meelu never
+                claims something went live, because it never puts anything live.
               </p>
             </li>
           </ul>
@@ -372,12 +374,12 @@ export default function WhyPage() {
 
         <section className="mt-20 rounded-2xl border border-edge bg-panel p-8 text-center">
           <h2 className="font-display text-2xl text-ink">
-            One server that works, then as many hands as you need
+            Grounded suggestions, and you decide
           </h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-sub">
-            Connect Meelu to the assistant you already use. Connect your email when you want it to
-            send, a CMS when you want it to publish. Each one is a five-minute setup, and a
-            checked config we keep up to date.
+            Install the desktop app, add your site, and connect Search Console and Analytics
+            when you want search data. Meelu crawls, reads and suggests. You approve, edit or
+            reject.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -399,7 +401,7 @@ export default function WhyPage() {
       <footer className="border-t border-edge">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-6 py-8">
           <Logo size={18} />
-          <p className="text-xs text-faint">Human-approved. Agent-applied.</p>
+          <p className="text-xs text-faint">Meelu suggests. You decide.</p>
           <Link href="/" className="text-xs text-sub transition-colors hover:text-ink">
             Back home →
           </Link>

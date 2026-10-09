@@ -77,8 +77,7 @@ Animation — `src/components/animate.tsx` (GSAP + @gsap/react):
 
 ## The agent guide catalog
 
-Every agent screen carries a `<GuideButton agent="…" />` in its `PageHeader` actions, leading
-to `/dashboard/guide/[key]`. The page is rendered entirely from a pure data module — no DB, no
+Each agent has a guide page at `/dashboard/guide/[key]`. The page is rendered entirely from a pure data module — no DB, no
 React, icons named as strings and resolved in the page directory:
 
 | Catalog | Describes | Page |
@@ -96,6 +95,6 @@ needs from these pages is what to *say*, not what the screen they are standing o
 
 ## Voice
 
-UI copy speaks of the AI as "your coworker": "Your coworker found 12 prospects",
+UI copy speaks of the AI as "your coworker": "Your coworker found 12 pages with missing meta descriptions",
 "Ask your coworker in Claude — results land here." Landing page: confident, craft-warm,
 no corporate fluff.

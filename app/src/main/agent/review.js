@@ -22,13 +22,6 @@ const PIPELINES = {
     verdicts: "/site/structure/pillar-suggestions/verdicts",
     fields: ["title", "suggestion"],
   },
-  review_page_suggestions: {
-    description:
-      "Read each draft page suggestion of a job one by one against your prompt with the live page, keyword and search facts, rewrite the suggestion and settle it reviewed or llm_rejected. Adds without a search snapshot come back in needsSerp. Run it after screening and before ranking. It returns counts, never the suggestions.",
-    inputs: "/seo/page-suggestions/review-inputs",
-    verdicts: "/seo/page-suggestions/verdicts",
-    fields: ["suggestion"],
-  },
 };
 
 export const reviewToolNames = Object.keys(PIPELINES);
@@ -75,24 +68,28 @@ async function judgeOne({ instructions, schema, item, judge }) {
   return parseVerdict(text ?? "");
 }
 
-async function mapLimited(items, limit, run) {
+async function mapLimited(items, limit, run, onSettled) {
   const out = new Array(items.length);
   let next = 0;
+  let settled = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const index = next++;
       out[index] = await run(items[index]);
+      settled += 1;
+      onSettled?.(settled);
     }
   });
   await Promise.all(workers);
   return out;
 }
 
-function summarise(name, batch, result, reasons) {
+function summarise(name, batch, result, reasons, error = null) {
   const lines = [
     `${name}: ${JSON.stringify(result)}`,
     `${batch.items.length} judged${batch.needsSerp?.length ? `, ${batch.needsSerp.length} skipped for a missing search snapshot` : ""}.`,
   ];
+  if (error) lines.push(`The model call failed at least once: ${error}`);
   if (reasons.length > 0) {
     lines.push("Sample reasons:");
     lines.push(...reasons.slice(0, 3).map((r) => `- ${r}`));
@@ -100,7 +97,7 @@ function summarise(name, batch, result, reasons) {
   return lines.join("\n");
 }
 
-async function runPipeline(name, pipeline, input, { cookieHeader, siteId, judge }) {
+async function runPipeline(name, pipeline, input, { cookieHeader, siteId, judge, progress }) {
   const batch = await meelu(pipeline.inputs, {
     cookieHeader,
     siteId,
@@ -114,11 +111,17 @@ async function runPipeline(name, pipeline, input, { cookieHeader, siteId, judge 
   if (batch.items.length === 0) {
     return summarise(name, batch, { reviewed: 0 }, []);
   }
-  const answers = await mapLimited(batch.items, CONCURRENCY, (item) =>
-    judgeOne({ instructions: batch.instructions, schema: batch.schema, item, judge }).then(
-      (answer) => ({ item, answer }),
-      () => ({ item, answer: null }),
-    ),
+  const total = batch.items.length;
+  progress?.({ tool: name, done: 0, total });
+  const answers = await mapLimited(
+    batch.items,
+    CONCURRENCY,
+    (item) =>
+      judgeOne({ instructions: batch.instructions, schema: batch.schema, item, judge }).then(
+        (answer) => ({ item, answer }),
+        (err) => ({ item, answer: null, error: err instanceof Error ? err.message : String(err) }),
+      ),
+    (done) => progress?.({ tool: name, done, total }),
   );
   const verdicts = [];
   const reasons = [];
@@ -134,7 +137,8 @@ async function runPipeline(name, pipeline, input, { cookieHeader, siteId, judge 
   const result = await meelu(pipeline.verdicts, { cookieHeader, siteId, body: { verdicts } });
   const unanswered = batch.items.length - verdicts.length;
   if (unanswered > 0) result.failed = (result.failed ?? 0) + unanswered;
-  return summarise(name, batch, result, reasons);
+  const error = answers.find((a) => a.error)?.error ?? null;
+  return summarise(name, batch, result, reasons, error);
 }
 
 export function reviewMcpServer(names, context) {

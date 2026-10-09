@@ -73,12 +73,14 @@ def test_profile_setup_sees_only_the_profile():
 
 def test_desk_writes_union_the_desks_actions():
     assert desk_writes("site") == {
+        "save_site_market",
         "create_site_issue",
         "reject_issue",
         "restore_issue",
         "start_structure_job",
         "propose_hierarchy_links",
         "propose_unlinked_mentions",
+        "propose_links_from_table",
         "propose_link_removals",
         "screen_link_suggestions",
         "rank_link_suggestions",
@@ -99,7 +101,6 @@ def test_scope_response_merges_added_desks():
     assert [d.name for d in base.desks] == [
         "analytics",
         "content",
-        "leads",
         "pages",
         "profile",
         "seo",
@@ -113,7 +114,6 @@ def test_scope_response_merges_added_desks():
     assert "analytics" in merged.mcp_servers
     assert "content_pieces" in merged.system_prompt
     assert [d.name for d in merged.desks] == [
-        "leads",
         "pages",
         "profile",
         "seo",

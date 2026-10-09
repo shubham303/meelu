@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { ChevronDown, ChevronRight, ExternalLink, Layers, RefreshCw, RotateCcw, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDelete, EmptyState, Spinner, Tabs, type BadgeTone } from "@/components/ui";
-import { api, useApi, usePagedApi } from "@/lib/use-api";
+import { api, usePagedApi } from "@/lib/use-api";
 import { cn, formatRelative } from "@/lib/utils";
 import type {
   PillarSuggestion,
@@ -51,13 +51,16 @@ const EMPTY_SUMMARY: SuggestionSummary = {
   userRejected: 0,
 };
 
-export function PillarSuggestions() {
+export function PillarSuggestions({
+  summary,
+  refreshSummary,
+}: {
+  summary: SuggestionSummary | null;
+  refreshSummary: () => void;
+}) {
   const [state, setState] = useState<TabState>("review_approved");
   const [page, setPage] = useState(1);
 
-  const { data: summary, refresh: refreshSummary } = useApi<SuggestionSummary>(
-    "/api/v1/site/structure/pillar-suggestions/summary",
-  );
   const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE), state });
   const { data: paged, loading, error, refresh } = usePagedApi<PillarSuggestion>(
     `/api/v1/site/structure/pillar-suggestions?${params}`,
@@ -86,10 +89,9 @@ export function PillarSuggestions() {
   const nothingAtAll = summary !== null && total === 0;
 
   return (
-    <div className="mt-10">
+    <div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="font-display text-lg text-ink">Pillar pages</h2>
           <Button
             variant="outline"
             size="sm"

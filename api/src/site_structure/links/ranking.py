@@ -13,6 +13,7 @@ from src.site_structure.pipeline.ranking import (
     SiteDistribution,
     clamp,
     link_capacity,
+    link_room,
     percentile,
 )
 
@@ -102,7 +103,7 @@ def select_additions(
     params: RankParams = DEFAULT_PARAMS,
 ) -> list[Ranked]:
     remaining = {
-        r.candidate.from_page_id: link_capacity(pages[r.candidate.from_page_id]) for r in scored
+        r.candidate.from_page_id: link_room(pages[r.candidate.from_page_id]) for r in scored
     }
     accepted_to: dict[str, int] = defaultdict(int)
 

@@ -60,6 +60,20 @@ class SiteCrawlJobRepository:
         ).scalar_one_or_none()
         return self._record(row)
 
+    async def last_frontier(self, db: AsyncSession, site_id: str) -> list[str]:
+        found = (
+            await db.execute(
+                select(SiteCrawlJob.frontier)
+                .where(
+                    SiteCrawlJob.site_id == site_id,
+                    SiteCrawlJob.status.in_(("completed", "cancelled")),
+                )
+                .order_by(SiteCrawlJob.seq.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return list(found or [])
+
     def _order(self, sort: str | None):
         if sort == "started":
             return SiteCrawlJob.started_at.desc().nulls_last()

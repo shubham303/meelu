@@ -8,19 +8,43 @@ export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 export interface PieceForm {
   title: string;
+  h1: string;
+  metaDescription: string;
+  slug: string;
+  targetKeyword: string;
   bodyMarkdown: string;
 }
 
 export function formFrom(piece: ContentPiece): PieceForm {
   return {
     title: piece.title ?? "",
+    h1: piece.h1 ?? "",
+    metaDescription: piece.metaDescription ?? "",
+    slug: piece.slug ?? "",
+    targetKeyword: piece.targetKeyword ?? "",
     bodyMarkdown: piece.bodyMarkdown ?? "",
   };
 }
 
+export function slugPath(value: string): string | null {
+  const path = value
+    .toLowerCase()
+    .replace(/[^a-z0-9/\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .split("/")
+    .map((part) => part.replace(/-+/g, "-").replace(/^-|-$/g, ""))
+    .filter(Boolean)
+    .join("/");
+  return path ? `/${path}` : null;
+}
+
 function payload(form: PieceForm) {
   return {
-    title: form.title.trim() || "Untitled piece",
+    title: form.title.trim() || form.h1.trim() || "Untitled piece",
+    h1: form.h1,
+    metaDescription: form.metaDescription,
+    slug: slugPath(form.slug),
+    targetKeyword: form.targetKeyword.trim() || null,
     bodyMarkdown: form.bodyMarkdown,
   };
 }

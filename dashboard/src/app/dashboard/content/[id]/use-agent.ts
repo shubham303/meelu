@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { refuseOnWeb, streamTurn, usePinnedSite, type RunningTurn } from "@/components/agent";
+import type { PieceForm } from "./use-autosave";
 
 export interface AgentReply {
   text: string;
@@ -45,7 +46,7 @@ function issuesFraming(issues: FlaggedIssue[]): string[] {
 
 export function useAgent(
   pieceId: string,
-  getDraft: () => { title: string; body: string; channel: string },
+  getDraft: () => PieceForm | null,
   getIssues: () => FlaggedIssue[] = () => [],
 ) {
   const siteId = usePinnedSite();
@@ -85,11 +86,16 @@ export function useAgent(
   );
 
   const draftFraming = useCallback(() => {
-    const { title, body, channel } = getDraft();
+    const draft = getDraft();
     return [
-      `We are working on ONE piece, id ${pieceId}, titled "${title}", written for the ${channel} channel.`,
-      "Current text of the piece:",
-      `"""${body}"""`,
+      `We are working on ONE web page, id ${pieceId}.`,
+      `Title: ${draft?.title || "(empty)"}`,
+      `H1: ${draft?.h1 || "(empty)"}`,
+      `Meta description: ${draft?.metaDescription || "(empty)"}`,
+      `Slug: ${draft?.slug || "(empty)"}`,
+      `Target keyword: ${draft?.targetKeyword || "(empty)"}`,
+      "Current body of the piece:",
+      `"""${draft?.bodyMarkdown ?? ""}"""`,
       ...issuesFraming(getIssues()),
     ].join("\n");
   }, [getDraft, getIssues, pieceId]);

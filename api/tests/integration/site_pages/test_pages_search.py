@@ -14,7 +14,7 @@ def loaded_embedder():
     try:
         from src.embed_worker.embedding import Embedder
 
-        return Embedder(models.embed_model())
+        return Embedder(models.embed_model(), 2)
     except Exception:
         return None
 

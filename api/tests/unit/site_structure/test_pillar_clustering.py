@@ -5,17 +5,19 @@ from src.site_structure.pillars.clustering import (
     cluster_pages,
     cohesion,
     coverage,
+    family,
+    is_structural,
+    mixed_families,
     overlap,
-    structural_share,
     topic_for,
 )
 
 
-def point(pid, axis, wobble=0.0, page_type="informational", title=None):
+def point(pid, axis, wobble=0.0, page_type="informational", title=None, broad=None):
     v = np.zeros(16)
     v[axis] = 1.0
     v[(axis + 1) % 16] = wobble
-    return PagePoint(pid, f"https://x/{pid}", title, page_type, 1, v)
+    return PagePoint(pid, f"https://x/{pid}", title, page_type, 1, v, broad)
 
 
 def test_cluster_pages_splits_by_direction_and_drops_singletons():
@@ -44,7 +46,7 @@ def test_cohesion_and_coverage():
     assert coverage(["a", "b"], vectors, {}).page_id is None
 
 
-def test_overlap_topic_and_structural_share():
+def test_overlap_and_topic():
     assert overlap(["a", "b", "c"], ["b", "c", "d"]) == 0.5
     assert overlap([], []) == 0.0
     points = [
@@ -58,4 +60,49 @@ def test_overlap_topic_and_structural_share():
         "guide",
         "seo",
     ]
-    assert structural_share(points, ("legal", "utility")) == 2 / 3
+
+
+def test_cluster_pages_keeps_offer_and_content_apart():
+    points = [
+        point("svc0", 0, 0.00, page_type="money", broad="service"),
+        point("svc1", 0, 0.05, page_type="money", broad="service"),
+        point("blog0", 0, 0.10, broad="article"),
+        point("blog1", 0, 0.15, broad="guide"),
+        point("hub", 0, 0.02, page_type="hub", broad="content_listing"),
+        point("about", 0, 0.03, page_type="company", broad="about"),
+    ]
+    groups = {frozenset(g) for g in cluster_pages(points, 0.5)}
+    assert groups == {frozenset({"svc0", "svc1"}), frozenset({"blog0", "blog1"})}
+
+
+def test_family_falls_back_to_page_type_then_unknown():
+    assert family(point("a", 0, broad="feature")) == "offer"
+    assert family(point("b", 0, page_type="money")) == "offer"
+    assert family(point("c", 0, page_type="support")) == "content"
+    assert family(point("d", 0, page_type="hub")) is None
+    assert family(point("e", 0, page_type=None)) == "unknown"
+    assert family(point("f", 0, page_type="money", broad="other")) == "offer"
+
+
+def test_mixed_families_ignores_unknown_and_unclustered_pages():
+    blog = point("b", 0, broad="article")
+    assert mixed_families([blog, point("s", 0, broad="service")])
+    assert not mixed_families([blog, point("u", 0, page_type=None)])
+    assert not mixed_families([blog, point("h", 0, broad="about")])
+
+
+def test_structural_pages_never_cluster():
+    home = PagePoint("home", "https://x/", "Home", "money", 9, np.eye(16)[0], None)
+    assert is_structural(home)
+    assert is_structural(point("c", 0, page_type="money", broad="contact"))
+    assert is_structural(point("l", 0, page_type="legal"))
+    assert is_structural(point("o", 0, page_type="company", broad="other"))
+    assert not is_structural(point("s", 0, page_type="money", broad="service"))
+    assert not is_structural(point("a", 0, page_type="company", broad="article"))
+    points = [
+        home,
+        point("s0", 0, 0.01, page_type="money", broad="service"),
+        point("s1", 0, 0.02, page_type="money", broad="service"),
+        point("careers", 0, 0.03, page_type="company", broad="careers"),
+    ]
+    assert cluster_pages(points, 0.5) == [["s0", "s1"]]

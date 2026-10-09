@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ids import uid
 from src.site_pages.models.site_chunk import SiteChunk
-from src.site_pages.schemas import ChunkCounts, ChunkHit, SiteChunkRecord
+from src.site_pages.schemas import ChunkCounts, ChunkHit, PhraseHit, SiteChunkRecord
 
 EMBEDDING_DIMENSIONS = 384
 MAX_ERROR_CHARS = 500
@@ -73,6 +73,43 @@ FIRST_IDS_CONTAINING_SQL = text(
     """
 ).bindparams(bindparam("page_ids", type_=ARRAY(TEXT)), bindparam("needles", type_=ARRAY(TEXT)))
 
+PHRASE_HITS_SQL = text(
+    """
+    with needles as (
+      select * from unnest(cast(:keys as text[]), cast(:phrases as text[]))
+        with ordinality as n(key, phrase, rank)
+    ),
+    excluded as (
+      select * from unnest(cast(:excluded_keys as text[]), cast(:excluded_pages as text[]))
+        as e(key, page_id)
+    ),
+    hits as (
+      select distinct on (n.key, c.page_id) n.key, c.page_id, c.id as chunk_id, n.phrase, n.rank
+        from needles n
+        join site_chunks c
+          on c.site_id = :site_id
+         and c.text ilike '%' || replace(replace(replace(n.phrase, '\\', '\\\\'),
+                                         '%', '\\%'), '_', '\\_') || '%'
+       where not exists (
+         select 1 from excluded e where e.key = n.key and e.page_id = c.page_id
+       )
+       order by n.key, c.page_id, n.rank, c.ordinal
+    ),
+    ranked as (
+      select *, row_number() over (partition by key order by rank, page_id) as slot
+        from hits
+    )
+    select key, page_id, chunk_id, phrase from ranked
+     where slot <= :limit_per_key
+     order by key, slot
+    """
+).bindparams(
+    bindparam("keys", type_=ARRAY(TEXT)),
+    bindparam("phrases", type_=ARRAY(TEXT)),
+    bindparam("excluded_keys", type_=ARRAY(TEXT)),
+    bindparam("excluded_pages", type_=ARRAY(TEXT)),
+)
+
 CHUNK_PAGE_SIMILARITY_SQL = text(
     """
     with pairs as (
@@ -111,6 +148,23 @@ PAGE_SIMILARITY_SQL = text(
     bindparam("dst_ids", type_=ARRAY(TEXT)),
     bindparam("ids", type_=ARRAY(TEXT)),
 )
+
+BEST_PASSAGE_SQL = text(
+    """
+    with pairs as (
+      select * from unnest(cast(:src_ids as text[]), cast(:dst_ids as text[])) as p(src, dst)
+    )
+    select distinct on (p.src, p.dst) p.src, p.dst, c.id as chunk_id,
+           1 - (c.embedding <=> t.embedding) as similarity
+      from pairs p
+      join site_chunks t on t.site_id = :site_id and t.page_id = p.dst and t.ordinal = 0
+                        and t.embedding is not null
+      join site_chunks c on c.site_id = :site_id and c.page_id = p.src and c.ordinal > 0
+                        and c.embedding is not null
+                        and c.embed_model is not distinct from t.embed_model
+     order by p.src, p.dst, c.embedding <=> t.embedding, c.ordinal
+    """
+).bindparams(bindparam("src_ids", type_=ARRAY(TEXT)), bindparam("dst_ids", type_=ARRAY(TEXT)))
 
 
 class SiteChunkRepository:
@@ -183,24 +237,28 @@ class SiteChunkRepository:
         )
         return {(r.page_id, r.needle): r.id for r in rows}
 
-    async def search_text(
+    async def phrase_hits(
         self,
         db: AsyncSession,
         site_id: str,
-        phrase: str,
-        exclude_page_ids: set[str],
-        limit: int,
-    ) -> list[tuple[str, str]]:
-        conds: list[Any] = [SiteChunk.site_id == site_id, SiteChunk.text.ilike(f"%{phrase}%")]
-        if exclude_page_ids:
-            conds.append(SiteChunk.page_id.not_in(exclude_page_ids))
+        needles: list[tuple[str, str]],
+        excluded: list[tuple[str, str]],
+        limit_per_key: int,
+    ) -> list[PhraseHit]:
+        if not needles:
+            return []
         rows = await db.execute(
-            select(SiteChunk.id, SiteChunk.page_id)
-            .where(*conds)
-            .order_by(SiteChunk.page_id, SiteChunk.ordinal)
-            .limit(limit)
+            PHRASE_HITS_SQL,
+            {
+                "site_id": site_id,
+                "keys": [key for key, _ in needles],
+                "phrases": [phrase for _, phrase in needles],
+                "excluded_keys": [key for key, _ in excluded],
+                "excluded_pages": [page_id for _, page_id in excluded],
+                "limit_per_key": limit_per_key,
+            },
         )
-        return [(r.id, r.page_id) for r in rows]
+        return [PhraseHit.model_validate(dict(r)) for r in rows.mappings()]
 
     async def keyword_hits(
         self, db: AsyncSession, site_id: str, query: str, as_terms: bool, pool: int
@@ -263,6 +321,21 @@ class SiteChunkRepository:
             },
         )
         return {(r.src, r.dst): float(r.similarity) for r in rows}
+
+    async def best_passages(
+        self, db: AsyncSession, site_id: str, pairs: list[tuple[str, str]]
+    ) -> dict[tuple[str, str], tuple[str, float]]:
+        if not pairs:
+            return {}
+        rows = await db.execute(
+            BEST_PASSAGE_SQL,
+            {
+                "site_id": site_id,
+                "src_ids": [p[0] for p in pairs],
+                "dst_ids": [p[1] for p in pairs],
+            },
+        )
+        return {(r.src, r.dst): (r.chunk_id, float(r.similarity)) for r in rows}
 
     async def page_vectors(self, db: AsyncSession, site_id: str) -> dict[str, list[float]]:
         rows = await db.execute(

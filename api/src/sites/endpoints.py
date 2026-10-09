@@ -14,7 +14,6 @@ from src.auth import (
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.sites.service import site_service
 from src.sites.schemas import (
     SiteAgentUpdateRequest,
     SiteCreateRequest,
@@ -25,6 +24,7 @@ from src.sites.schemas import (
     SiteSort,
     SiteUpdateRequest,
 )
+from src.sites.service import site_service
 
 router = APIRouter()
 
@@ -33,7 +33,6 @@ router = APIRouter()
 async def list_sites(
     q: str | None = Query(None),
     domain: str | None = Query(None),
-    country: str | None = Query(None),
     has_repo: bool | None = Query(None, alias="hasRepo"),
     never_crawled: bool | None = Query(None, alias="neverCrawled"),
     crawled_before: datetime | None = Query(None, alias="crawledBefore"),
@@ -46,7 +45,6 @@ async def list_sites(
     filters = SiteFilters(
         q=q,
         domain=domain,
-        country=country,
         has_repo=has_repo,
         never_crawled=never_crawled,
         crawled_before=crawled_before,

@@ -10,7 +10,8 @@ from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
 from src.site_pages.repositories.chunks import site_chunks
 from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
-from src.site_pages.schemas import PageLinkInput, SitePageCrawlItem
+from src.site_pages.schemas import SitePageCrawlItem
+from src.site_pages.schemas.links import NewSitePageLink
 from src.sites.models.site import Site
 
 
@@ -23,7 +24,6 @@ async def seeded():
             User(
                 id=user_id,
                 email=f"{uuid.uuid4().hex[:12]}@example.com",
-                hashed_password="x",
             )
         )
         await db.flush()
@@ -40,6 +40,7 @@ async def seeded():
                     content_hash="h0",
                     body_text="home body",
                     title="Home",
+                    external_links=[{"url": "https://other.com/x"}],
                 ),
                 SitePageCrawlItem(
                     url="https://example.com/a",
@@ -52,18 +53,33 @@ async def seeded():
             ],
         )
         ids = {r.url: r.id for r in refs}
+        home, a = ids["https://example.com/"], ids["https://example.com/a"]
         await site_page_links.replace_for_pages(
             db,
             user_id,
             site_id,
             {
-                ids["https://example.com/"]: [
-                    PageLinkInput(url="https://example.com/a", anchor="to a"),
-                    PageLinkInput(url="https://example.com/missing"),
-                    PageLinkInput(url="https://other.com/x", external=True),
+                home: [
+                    NewSitePageLink(
+                        dst_page_id=a,
+                        dst_url="https://example.com/a",
+                        region="body",
+                        anchor="to a",
+                        count=1,
+                        followable=True,
+                        dst_canonical=True,
+                    )
                 ],
-                ids["https://example.com/a"]: [
-                    PageLinkInput(url="https://example.com/", anchor="home", region="nav"),
+                a: [
+                    NewSitePageLink(
+                        dst_page_id=home,
+                        dst_url="https://example.com/",
+                        region="nav",
+                        anchor="home",
+                        count=1,
+                        followable=True,
+                        dst_canonical=True,
+                    )
                 ],
             },
         )
@@ -99,7 +115,14 @@ async def test_page_lookups(seeded):
         assert briefs[0].body_text == "page"
         assert [h[0] for h in await site_pages.extractable_hashes(db, site_id)] == [home, a]
         assert (await site_pages.content_hashes_by_ids(db, site_id, [a]))[a] == "ha"
-        assert "https://example.com" in await site_pages.normalised_urls(db, site_id)
+        targets = await site_pages.link_targets(
+            db, site_id, ["https://example.com/", "https://example.com/gone", "https://x.com/"]
+        )
+        assert targets == {
+            "https://example.com/": (home, True),
+            "https://example.com/gone": (gone, False),
+        }
+        assert await site_pages.canonical_target_ids(db, site_id) == {home, a}
         eligible = await site_pages.list_render_eligible(db, site_id)
         assert {p.id for p in eligible} == {home, a}
 
@@ -108,41 +131,36 @@ async def test_link_queries_and_graph_writes(seeded):
     user_id, site_id, ids = seeded
     home, a = ids["https://example.com/"], ids["https://example.com/a"]
     async with unit_of_work() as db:
-        targets = await site_pages.link_targets(db, site_id)
-        resolved = {}
-        for link_id, src, dst_url in await site_page_links.list_internal(db, site_id):
-            hit = targets.get(dst_url)
-            if hit and hit[0] != src:
-                resolved[link_id] = hit
-        await site_page_links.set_targets(db, site_id, resolved)
         assert set(await site_page_links.existing_pairs(db, site_id, [(home, a), (a, a)])) == {
             (home, a)
         }
-        assert await site_page_links.pairs_among(db, site_id, [home, a]) == {(home, a)}
+        assert await site_page_links.pairs_among(db, site_id, [home, a]) == {(home, a), (a, home)}
         assert await site_page_links.pairs_into(db, site_id, [a]) == {(home, a)}
         assert await site_page_links.pairs_into(db, site_id, []) == set()
         assert await site_page_links.src_ids_linking_to(db, site_id, a) == {home}
         assert await site_page_links.inlink_counts(db, site_id, [a]) == {a: 1}
-        assert (await site_page_links.outlink_counts(db, site_id, "body"))[home] == 3
-        assert (await site_page_links.out_link_counts_by_src_ids(db, site_id, [home]))[home] == (
-            2,
-            1,
-        )
-        assert await site_page_links.inbound_anchors_by_page_ids(db, [a, home]) == {a: ["to a"]}
-        assert set(await site_page_links.distinct_internal_dst_urls(db, site_id)) == {
-            "https://example.com/a",
-            "https://example.com/missing",
-            "https://example.com/",
+        assert (await site_page_links.outlink_counts(db, site_id, "body"))[home] == 1
+        assert await site_page_links.out_link_counts_by_src_ids(db, site_id, [home]) == {home: 1}
+        assert await site_page_links.inbound_anchors_by_page_ids(db, [a, home]) == {
+            a: ["to a"],
+            home: ["home"],
         }
         edges = await site_page_links.resolved_edges(db, site_id)
-        assert {(e[0], e[1]) for e in edges} == {(home, a)}
+        assert {(e[0], e[1]) for e in edges} == {(home, a), (a, home)}
         assert {(e.src, e.dst) for e in await site_page_links.followable_edges(db, site_id)} == {
-            (home, a)
+            (home, a),
+            (a, home),
         }
         between = await site_page_links.list_between(db, site_id, [home], [a], region="body")
         assert [link.anchor for link in between] == ["to a"]
         assert len(await site_page_links.list_inbound(db, site_id, a)) == 1
-        assert len(await site_page_links.list_outbound(db, site_id, home)) == 3
+        assert len(await site_page_links.list_outbound(db, site_id, home)) == 1
+        await site_page_links.set_dst_canonical(db, site_id, {home})
+        between = await site_page_links.list_between(db, site_id, [home, a], [home, a])
+        assert {link.dst_page_id: link.dst_canonical for link in between} == {
+            a: False,
+            home: True,
+        }
         await site_pages.write_graph_stamps(db, site_id, {a: (1, 1), home: (1, 0)})
         page = await site_pages.get(db, site_id, a)
         assert (page.inlinks, page.depth) == (1, 1)
@@ -174,8 +192,14 @@ async def test_chunk_and_extraction_queries(seeded):
         assert await site_chunks.first_ids_containing(
             db, site_id, [(a, "gamma"), (a, "alpha"), (a, "zzz"), (home, "gamma"), (a, "")]
         ) == {(a, "gamma"): chunks[1].id, (a, "alpha"): first}
-        assert await site_chunks.search_text(db, site_id, "alpha", {home}, 5) == [(first, a)]
-        assert await site_chunks.search_text(db, site_id, "alpha", {a}, 5) == []
+        hits = await site_chunks.phrase_hits(
+            db, site_id, [("t1", "ALPHA"), ("t1", "beta"), ("t2", "alpha"), ("t2", "a%")], [], 5
+        )
+        assert [(h.key, h.page_id, h.chunk_id, h.phrase) for h in hits] == [
+            ("t1", a, first, "ALPHA"),
+            ("t2", a, first, "alpha"),
+        ]
+        assert await site_chunks.phrase_hits(db, site_id, [("t1", "alpha")], [("t1", a)], 5) == []
         assert await site_chunks.page_ids_with_unembedded(db, [a, home]) == {a}
         pending = await site_chunks.list_pending_embeddings(db, 3, 10_000)
         assert {c.id for c in pending} >= {c.id for c in chunks}

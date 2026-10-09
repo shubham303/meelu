@@ -111,9 +111,8 @@ export interface SitePageLink {
   id: ID;
   srcPageId: ID;
   srcUrl?: string;
-  dstPageId?: ID | null;
+  dstPageId: ID;
   dstUrl: string;
-  external: boolean;
   region: LinkRegion;
   rel?: string;
   anchor?: string;
@@ -122,9 +121,19 @@ export interface SitePageLink {
   dstCanonical: boolean;
 }
 
+export interface SiteExternalLink {
+  url: string;
+  region: LinkRegion;
+  rel?: string;
+  anchor?: string;
+  count: number;
+  followable: boolean;
+}
+
 export interface SitePageLinks {
   inbound: SitePageLink[];
   outbound: SitePageLink[];
+  external: SiteExternalLink[];
 }
 
 export interface SiteDiscoveryPage {
@@ -466,6 +475,8 @@ export interface LinkSuggestion extends BaseEntity, SiteScoped {
   toUrl?: string | null;
   fromChunkHeading?: string | null;
   fromChunkOrdinal?: number | null;
+  fromChunkText?: string | null;
+  anchor?: string | null;
 }
 
 export const PILLAR_SUGGESTION_ACTIONS = ["create", "expand"] as const;
@@ -666,7 +677,8 @@ export interface SiteProfile extends BaseEntity {
   domain: string;
   name: string;
   status: SiteStatus;
-  country?: string;
+  markets: string[];
+  language?: string | null;
   repoUrl?: string;
   summary?: string;
   socialLinks: SiteSocialLink[];
@@ -732,21 +744,6 @@ export interface HostVariants {
   variants: HostVariantProbe[];
 }
 
-export interface SiteChannel extends BaseEntity, SiteScoped {
-  channelKey: string;
-  enabled: boolean;
-  rules: string[];
-  label: string;
-  composeUrl: string;
-  characterLimit: number;
-  requiresMedia: boolean;
-  maxLinks: number | null;
-  maxHashtags: number | null;
-  maxMedia: number;
-}
-
-export type PieceStatus = "draft" | "blocked";
-
 export type MediaSource = "none" | "upload" | "unsplash";
 
 export interface PostMedia extends BaseEntity {
@@ -759,7 +756,7 @@ export interface PostMedia extends BaseEntity {
 
 export interface PieceCheck {
   code: string;
-  level: "block" | "warn";
+  level: "warn";
   message: string;
 }
 
@@ -776,16 +773,17 @@ export interface PieceMedia {
 
 export interface ContentPieceSlim extends BaseEntity, SiteScoped {
   title: string;
-  channelKey: string;
-  status: PieceStatus;
+  slug?: string | null;
+  targetKeyword?: string | null;
   wordCount: number;
   checks: PieceCheck[];
   mediaSource: MediaSource;
   mediaUrl?: string | null;
-  parentPieceId?: string | null;
 }
 
 export interface ContentPiece extends ContentPieceSlim, PieceMedia {
+  h1: string;
+  metaDescription: string;
   bodyMarkdown: string;
   createdBy: "agent" | "user";
   sourcePageId?: string | null;
@@ -822,17 +820,16 @@ export interface CreatedApiKey extends ApiKey {
   key: string;
 }
 
+export type SocialListeningStrictness = "loose" | "balanced" | "strict";
+
 export interface SocialListeningConfig extends BaseEntity, SiteScoped {
   platforms: string[];
   resultsPerKeyword: number;
-  minRelevance: number;
-  minSimilarity: number;
+  strictness: SocialListeningStrictness;
   maxAgeDays: number;
-  dropDeadPosts: boolean;
-  schedule: "daily" | "weekly" | null;
+  minSimilarity: number;
+  minRelevance: number;
 }
-
-export type SocialListeningSource = "user" | "profile" | "suggested";
 
 export interface SocialListeningQuery extends BaseEntity, SiteScoped {
   text: string;
@@ -841,13 +838,8 @@ export interface SocialListeningQuery extends BaseEntity, SiteScoped {
   keywords: string[];
   negativeKeywords: string[];
   embedded: boolean;
-}
-
-export interface SocialListeningTarget extends BaseEntity, SiteScoped {
-  kind: "brand" | "competitor";
-  name: string;
-  enabled: boolean;
-  source: SocialListeningSource;
+  found: number;
+  kept: number;
 }
 
 export type SocialListeningRunStatus = "running" | "done" | "stopped" | "error";
@@ -857,29 +849,28 @@ export interface SocialListeningRun extends BaseEntity, SiteScoped {
   startedAt: string;
   finishedAt: string | null;
   fetchedCount: number;
+  matchedCount: number;
   keptCount: number;
   platformStats: Record<string, { fetched?: number; kept?: number; error?: string }>;
   error: string | null;
 }
 
-export type SocialListeningPostKind = "topic" | "brand" | "competitor";
-export type SocialListeningInboxStatus = "needs_reply" | "drafted" | "replied" | "skipped";
-export type SocialListeningPostStatus =
-  | SocialListeningInboxStatus
-  | "fetched"
-  | "matched"
-  | "filtered";
-export type SocialListeningClass =
-  | "praise"
-  | "complaint"
-  | "feature_request"
-  | "question"
-  | "switch_opportunity";
+export type SocialListeningReviewStatus = "to_reply" | "drafted" | "replied" | "skipped" | "rejected";
+export type SocialListeningPostStatus = SocialListeningReviewStatus | "fetched" | "matched" | "dropped";
+export type SocialListeningDropReason =
+  | "too_old"
+  | "excluded_word"
+  | "far_in_meaning"
+  | "judged_off_topic"
+  | "dead"
+  | "duplicate"
+  | "unembeddable"
+  | "line_removed";
 
 export interface SocialListeningPost extends BaseEntity, SiteScoped {
   url: string;
   platform: string;
-  kind: SocialListeningPostKind;
+  externalId: string | null;
   title: string | null;
   text: string | null;
   authorHandle: string | null;
@@ -887,206 +878,26 @@ export interface SocialListeningPost extends BaseEntity, SiteScoped {
   postedAt: string | null;
   engagement: { score?: number | null; comments?: number | null; views?: number | null };
   context: { subreddit?: string | null; tags?: string[] | null };
-  matchedTargets: string[];
-  intent: string | null;
-  sentiment: "positive" | "neutral" | "negative" | null;
-  isQuestion: boolean | null;
-  classes: SocialListeningClass[];
+  status: SocialListeningPostStatus;
+  dropReason: SocialListeningDropReason | null;
+  similarity: number | null;
   relevance: number | null;
   compositeScore: number | null;
   keepReason: string | null;
   suggestedAngle: string | null;
-  status: SocialListeningPostStatus;
-  similarity: number | null;
-  queryId: string | null;
   replyText: string | null;
   repliedAt: string | null;
+  queryId: string | null;
   runId: string | null;
 }
 
 export interface SocialListeningSummary {
-  unprocessed: number;
-  needsReply: number;
+  toReply: number;
   drafted: number;
   replied: number;
   skipped: number;
-  brandMentions: number;
-  competitorMentions: number;
+  rejected: number;
+  done: number;
+  unprocessed: number;
   lastRun: SocialListeningRun | null;
-  keptByQuery: Array<{ id: string; text: string; kept: number }>;
-  mentionClasses: {
-    praise: number;
-    complaint: number;
-    featureRequest: number;
-    question: number;
-    switchOpportunity: number;
-  };
-  sentiment: { positive: number; neutral: number; negative: number };
-}
-
-export type LeadCampaignStatus = "active" | "paused" | "archived";
-
-export interface LeadCampaign extends BaseEntity, SiteScoped {
-  name: string;
-  status: LeadCampaignStatus;
-  audience: string;
-  sources: string[];
-  schedule: "daily" | "weekly" | null;
-}
-
-export type LeadRunStatus = "running" | "done" | "stopped" | "error";
-
-export interface LeadRun extends BaseEntity, SiteScoped {
-  campaignId: ID;
-  status: LeadRunStatus;
-  startedAt: string;
-  finishedAt: string | null;
-  found: number;
-  qualified: number;
-  skippedKnown: number;
-  sourceStats: Record<string, { found?: number; qualified?: number; error?: string }>;
-  error: string | null;
-}
-
-export type LeadStage = "found" | "qualified" | "shortlisted";
-
-export interface Lead extends BaseEntity, SiteScoped {
-  campaignId: ID | null;
-  runId: ID | null;
-  name: string;
-  company: string | null;
-  role: string | null;
-  email: string | null;
-  emailVerified: boolean;
-  website: string | null;
-  source: string | null;
-  sourceUrl: string | null;
-  channelHandles: Record<string, string>;
-  fitScore: number | null;
-  fitReason: string | null;
-  evidence: Array<{ quote: string; url: string }>;
-  stage: LeadStage;
-  stageChangedAt: string | null;
-  note: string | null;
-}
-
-export interface LeadSummary {
-  stages: Record<LeadStage, number>;
-  lastRun: LeadRun | null;
-  campaigns: Array<{
-    id: ID;
-    name: string;
-    status: LeadCampaignStatus;
-    qualified: number;
-    shortlisted: number;
-  }>;
-}
-
-export const PAGE_SUGGESTION_STATES = [
-  "draft",
-  "reviewed",
-  "ready",
-  "llm_rejected",
-  "user_rejected",
-  "done",
-  "stale",
-] as const;
-
-export type PageSuggestionState = (typeof PAGE_SUGGESTION_STATES)[number];
-
-export const PAGE_SUGGESTION_ACTIONS = ["add", "edit", "delete"] as const;
-
-export type PageSuggestionAction = (typeof PAGE_SUGGESTION_ACTIONS)[number];
-
-export interface PageSuggestion extends BaseEntity, SiteScoped {
-  jobId: string;
-  action: PageSuggestionAction;
-  pageId?: string | null;
-  topicKey: string;
-  clusterId?: string | null;
-  pairId?: string | null;
-  mergeIntoPageId?: string | null;
-  strategies: string[];
-  suggestion: string;
-  evidence: Record<string, unknown>;
-  coverageAtCreation?: number | null;
-  impressionsAtCreation?: number | null;
-  targetPosition?: number | null;
-  state: PageSuggestionState;
-  searchScore?: number | null;
-  confidence?: number | null;
-  score?: number | null;
-  verifiedAt?: string | null;
-}
-
-export type PageSuggestionSummary = Record<
-  PageSuggestionAction,
-  Partial<Record<PageSuggestionState, number>>
->;
-
-export interface SeoSiteState {
-  id: string;
-  siteId: string;
-  locationCode: number;
-  languageCode: string;
-  brandTerms: string[];
-  precomputeRequestedAt?: string | null;
-  rollupAt?: string | null;
-  embeddedAt?: string | null;
-  ctrCurve: Record<string, number>;
-}
-
-export interface SeoOverview {
-  keywords: number;
-  keywordsWithFacts: number;
-  clusters: number;
-  competitorsConfirmed: number;
-  suggestions: PageSuggestionSummary;
-  state: SeoSiteState;
-}
-
-export interface SeoKeyword {
-  id: string;
-  keyword: string;
-  volume?: number | null;
-  difficulty?: number | null;
-  cpc?: number | null;
-  intent?: string | null;
-  factsFetchedAt?: string | null;
-  firstSource: string;
-  seedKeywordId?: string | null;
-  clusterId?: string | null;
-  branded: boolean;
-  ourPosition?: number | null;
-  ourUrl?: string | null;
-  impressions28D: number;
-  clicks28D: number;
-  impressionsPrev28D: number;
-  clicksPrev28D: number;
-  impressionsLy28D?: number | null;
-  clicksLy28D?: number | null;
-  createdAt: string;
-}
-
-export interface SeoPageFacts {
-  id: string;
-  pageId: string;
-  url: string;
-  title?: string | null;
-  pageType?: string | null;
-  live: boolean;
-  indexable: boolean;
-  impressions28D: number;
-  clicks28D: number;
-}
-
-export interface SeoCompetitor {
-  id: string;
-  domain: string;
-  brandTerms: string[];
-  firstSource: string;
-  intersections?: number | null;
-  avgPosition?: number | null;
-  state: "candidate" | "confirmed" | "ignored";
-  fetchedAt?: string | null;
 }

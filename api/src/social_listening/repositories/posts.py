@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import REAL, case, cast, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ids import uid
@@ -33,27 +34,28 @@ class SocialListeningPostRepository:
         )
         return {row.id: row for row in result.scalars().all()}
 
-    async def find_by_urls(
-        self, db: AsyncSession, site_id: str, urls: list[str]
-    ) -> dict[str, SocialListeningPost]:
-        if not urls:
-            return {}
+    async def existing_keys(self, db: AsyncSession, site_id: str, keys: list[str]) -> set[str]:
+        if not keys:
+            return set()
         result = await db.execute(
-            select(SocialListeningPost).where(
-                SocialListeningPost.site_id == site_id, SocialListeningPost.url.in_(urls)
+            select(SocialListeningPost.post_key).where(
+                SocialListeningPost.site_id == site_id, SocialListeningPost.post_key.in_(keys)
             )
         )
-        return {row.url: row for row in result.scalars().all()}
+        return set(result.scalars().all())
 
-    async def known_urls(self, db: AsyncSession, site_id: str, urls: list[str]) -> list[str]:
-        if not urls:
-            return []
+    async def existing_hashes(
+        self, db: AsyncSession, site_id: str, hashes: list[str]
+    ) -> set[str]:
+        if not hashes:
+            return set()
         result = await db.execute(
-            select(SocialListeningPost.url).where(
-                SocialListeningPost.site_id == site_id, SocialListeningPost.url.in_(urls)
+            select(SocialListeningPost.content_hash).where(
+                SocialListeningPost.site_id == site_id,
+                SocialListeningPost.content_hash.in_(hashes),
             )
         )
-        return [u for (u,) in result.all()]
+        return set(result.scalars().all())
 
     async def create_many(
         self, db: AsyncSession, user_id: str, site_id: str, rows: list[dict[str, Any]]
@@ -61,21 +63,27 @@ class SocialListeningPostRepository:
         if not rows:
             return 0
         now = datetime.now(UTC)
-        db.add_all(
-            [
-                SocialListeningPost(
-                    id=uid(self.ID_PREFIX),
-                    user_id=user_id,
-                    site_id=site_id,
-                    created_at=now,
-                    updated_at=now,
-                    **values,
-                )
-                for values in rows
-            ]
+        stmt = (
+            pg_insert(SocialListeningPost)
+            .values(
+                [
+                    {
+                        "id": uid(self.ID_PREFIX),
+                        "user_id": user_id,
+                        "site_id": site_id,
+                        "created_at": now,
+                        "updated_at": now,
+                        **values,
+                    }
+                    for values in rows
+                ]
+            )
+            .on_conflict_do_nothing(constraint="social_listening_post_site_key_key")
+            .returning(SocialListeningPost.id)
         )
+        result = await db.execute(stmt)
         await db.flush()
-        return len(rows)
+        return len(result.all())
 
     async def update(
         self, db: AsyncSession, row: SocialListeningPost, values: dict[str, Any]
@@ -85,10 +93,6 @@ class SocialListeningPostRepository:
         row.updated_at = datetime.now(UTC)
         await db.flush()
         return PostResponse.model_validate(row)
-
-    async def delete(self, db: AsyncSession, row: SocialListeningPost) -> None:
-        await db.delete(row)
-        await db.flush()
 
     async def list_all(
         self, db: AsyncSession, site_id: str, filters: PostFilters
@@ -108,57 +112,18 @@ class SocialListeningPostRepository:
         )
         return dict(result.all())
 
-    async def kind_counts(self, db: AsyncSession, site_id: str) -> dict[str, int]:
-        result = await db.execute(
-            select(SocialListeningPost.kind, func.count())
-            .where(SocialListeningPost.site_id == site_id)
-            .group_by(SocialListeningPost.kind)
-        )
-        return dict(result.all())
-
-    async def class_counts(
-        self, db: AsyncSession, site_id: str, classes: tuple[str, ...]
-    ) -> dict[str, int]:
-        cols = [func.count().filter(SocialListeningPost.classes.contains([cls])) for cls in classes]
-        result = await db.execute(select(*cols).where(SocialListeningPost.site_id == site_id))
-        return dict(zip(classes, result.one()))
-
-    async def sentiment_counts(self, db: AsyncSession, site_id: str) -> dict[str, int]:
-        result = await db.execute(
-            select(SocialListeningPost.sentiment, func.count())
-            .where(
-                SocialListeningPost.site_id == site_id, SocialListeningPost.sentiment.is_not(None)
-            )
-            .group_by(SocialListeningPost.sentiment)
-        )
-        return dict(result.all())
-
     async def counts_by_query(
-        self, db: AsyncSession, site_id: str, statuses: tuple[str, ...]
+        self, db: AsyncSession, site_id: str, statuses: tuple[str, ...] | None = None
     ) -> dict[str, int]:
+        conds = [SocialListeningPost.site_id == site_id, SocialListeningPost.query_id.is_not(None)]
+        if statuses is not None:
+            conds.append(SocialListeningPost.status.in_(statuses))
         result = await db.execute(
             select(SocialListeningPost.query_id, func.count())
-            .where(
-                SocialListeningPost.site_id == site_id,
-                SocialListeningPost.query_id.is_not(None),
-                SocialListeningPost.status.in_(statuses),
-            )
+            .where(*conds)
             .group_by(SocialListeningPost.query_id)
         )
         return {qid: int(n) for qid, n in result.all()}
-
-    async def match_target_posts(self, db: AsyncSession, site_id: str) -> int:
-        result = await db.execute(
-            update(SocialListeningPost)
-            .where(
-                SocialListeningPost.site_id == site_id,
-                SocialListeningPost.status == "fetched",
-                SocialListeningPost.query_id.is_(None),
-            )
-            .values(status="matched", updated_at=func.now())
-        )
-        await db.flush()
-        return int(result.rowcount or 0)
 
     async def count_pending_gate(
         self,
@@ -204,8 +169,8 @@ class SocialListeningPostRepository:
                 )
                 .values(
                     similarity=similarity,
-                    status=case((kept, "matched"), else_="filtered"),
-                    keep_reason=case((kept, None), else_="Too far from the query"),
+                    status=case((kept, "matched"), else_="dropped"),
+                    drop_reason=case((kept, None), else_="far_in_meaning"),
                     updated_at=func.now(),
                 )
                 .returning(SocialListeningPost.status)
@@ -215,26 +180,38 @@ class SocialListeningPostRepository:
         await db.flush()
         return counts
 
-    async def filter_unembeddable(
-        self,
-        db: AsyncSession,
-        site_id: str,
-        live_query_ids: list[str],
-        failed_query_ids: list[str],
+    async def drop_orphaned(
+        self, db: AsyncSession, site_id: str, live_query_ids: list[str]
     ) -> int:
         result = await db.execute(
             update(SocialListeningPost)
             .where(
                 SocialListeningPost.site_id == site_id,
                 SocialListeningPost.status == "fetched",
-                SocialListeningPost.query_id.is_not(None),
                 or_(
-                    SocialListeningPost.embed_attempts >= 3,
-                    SocialListeningPost.query_id.in_(failed_query_ids),
+                    SocialListeningPost.query_id.is_(None),
                     SocialListeningPost.query_id.not_in(live_query_ids),
                 ),
             )
-            .values(status="filtered", keep_reason="Could not be embedded", updated_at=func.now())
+            .values(status="dropped", drop_reason="line_removed", updated_at=func.now())
+        )
+        await db.flush()
+        return int(result.rowcount or 0)
+
+    async def drop_unembeddable(
+        self, db: AsyncSession, site_id: str, failed_query_ids: list[str], max_attempts: int
+    ) -> int:
+        result = await db.execute(
+            update(SocialListeningPost)
+            .where(
+                SocialListeningPost.site_id == site_id,
+                SocialListeningPost.status == "fetched",
+                or_(
+                    SocialListeningPost.embed_attempts >= max_attempts,
+                    SocialListeningPost.query_id.in_(failed_query_ids),
+                ),
+            )
+            .values(status="dropped", drop_reason="unembeddable", updated_at=func.now())
         )
         await db.flush()
         return int(result.rowcount or 0)
@@ -246,6 +223,7 @@ class SocialListeningPostRepository:
             select(SocialListeningPost.id, SocialListeningPost.title, SocialListeningPost.text)
             .where(
                 SocialListeningPost.embedding.is_(None),
+                SocialListeningPost.status == "fetched",
                 SocialListeningPost.embed_attempts < max_attempts,
                 SocialListeningPost.query_id.is_not(None),
                 func.coalesce(SocialListeningPost.title, SocialListeningPost.text).is_not(None),
@@ -321,20 +299,10 @@ class SocialListeningPostRepository:
 
     def _conditions(self, site_id: str, f: PostFilters) -> Any:
         conds = [SocialListeningPost.site_id == site_id]
-        if f.kind:
-            conds.append(SocialListeningPost.kind == f.kind)
-        if f.status:
-            conds.append(SocialListeningPost.status == f.status)
+        if f.statuses:
+            conds.append(SocialListeningPost.status.in_(f.statuses))
         if f.platform:
             conds.append(SocialListeningPost.platform == f.platform)
-        if f.intent:
-            conds.append(SocialListeningPost.intent == f.intent)
-        if f.sentiment:
-            conds.append(SocialListeningPost.sentiment == f.sentiment)
-        if f.cls:
-            conds.append(SocialListeningPost.classes.contains([f.cls]))
-        if f.target:
-            conds.append(SocialListeningPost.matched_targets.contains([f.target]))
         if f.query_id:
             conds.append(SocialListeningPost.query_id == f.query_id)
         if f.run_id:

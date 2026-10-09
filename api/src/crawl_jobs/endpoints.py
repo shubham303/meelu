@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth import AuthContext, any_site, require_site
@@ -78,7 +79,11 @@ async def open_crawl_job(
     ctx: AuthContext = Depends(require_site),
 ) -> CrawlJobStartResponse:
     started = await crawl_job_service.start(db, ctx.user_id, ctx.site_id, body)
-    response.status_code = 202 if started.started else 409
+    if not started.started:
+        return JSONResponse(
+            {"data": started.model_dump(mode="json", by_alias=True)}, status_code=409
+        )
+    response.status_code = 202
     return started
 
 

@@ -22,9 +22,7 @@ from src.crawl_jobs.schemas import (
     CrawlStatusResponse,
     CrawlTargetResponse,
 )
-from src.seo.precompute.service import seo_precompute_service
 from src.site_pages.repositories.pages import site_pages
-from src.site_pages.service import site_page_service
 from src.sites.repository import sites
 from src.sites.schemas import SiteRecord
 from src.sites.service import site_service
@@ -34,6 +32,8 @@ from src.technical_seo.rules.host_variants import read_host_variants
 DEFAULT_FRESH_DAYS = float(os.environ.get("MEELU_CRAWL_FRESH_DAYS", "7"))
 
 STALE_JOB_MS = float(os.environ.get("MEELU_CRAWL_STALE_MS", str(10 * 60 * 1000)))
+
+FRONTIER_LIMIT = 20_000
 
 CRAWL_BATCH = int(os.environ.get("MEELU_CRAWL_BATCH", "25"))
 
@@ -85,7 +85,7 @@ class CrawlJobService:
             concurrency=CRAWL_CONCURRENCY,
             batch_size=CRAWL_BATCH,
             known=await site_pages.crawl_known_pages(db, target.id),
-            link_frontier=await site_page_service.link_frontier(db, target.id),
+            link_frontier=await site_crawl_jobs.last_frontier(db, target.id),
         )
 
     async def _find_job(self, db: AsyncSession, site_id: str, job_id: str) -> CrawlJobRecord:
@@ -218,6 +218,8 @@ class CrawlJobService:
             counters["notes"] = body.notes
         if body.error is not None:
             counters["error"] = body.error
+        if body.frontier is not None:
+            counters["frontier"] = sorted(set(body.frontier))[:FRONTIER_LIMIT]
 
         if body.sitemap_complete is True and body.sitemap_urls:
             stamped = await site_pages.stamp_sitemap_presence(db, target.id, body.sitemap_urls)
@@ -236,8 +238,6 @@ class CrawlJobService:
             raise HTTPException(404, f"No crawl {job_id} for this website.")
 
         await sites.merge(db, user_id, target.id, self._site_patch(body))
-        if status == "completed":
-            await seo_precompute_service.request_precompute(db, user_id, target.id)
         return settled
 
     async def stop(

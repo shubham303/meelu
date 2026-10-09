@@ -34,6 +34,9 @@ class SiteCrawlJob(EntityMixin, SiteScopedMixin, Base):
     sitemap_urls: Mapped[list[str]] = mapped_column(
         ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
     )
+    frontier: Mapped[list[str]] = mapped_column(
+        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

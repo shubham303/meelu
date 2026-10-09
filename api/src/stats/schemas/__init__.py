@@ -2,8 +2,7 @@ from src.core.schemas import EntityModel
 
 
 class ContentStats(EntityModel):
-    drafts: int = 0
-    blocked: int = 0
+    pieces: int = 0
 
 
 class SeoStats(EntityModel):

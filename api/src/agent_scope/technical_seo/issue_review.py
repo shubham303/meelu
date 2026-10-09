@@ -1,9 +1,9 @@
 from src.agent_scope.lib import AgentScope, SiteRef, desk_guides, desk_tables, fill
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
 from src.render_jobs.models.site_page_render import SitePageRender
+from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
-from src.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.sites.models.site import Site
 from src.technical_seo.models.site_audit_run import SiteAuditRun
 from src.technical_seo.models.site_issue import SiteIssue

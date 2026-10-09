@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
+import pycountry
 from pydantic import Field, field_validator, model_validator
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
@@ -12,7 +13,8 @@ SiteStatus = Literal["active", "disabled"]
 AGENT_WRITABLE = (
     "summary",
     "socialLinks",
-    "country",
+    "markets",
+    "language",
     "name",
     "domain",
     "repoUrl",
@@ -37,6 +39,26 @@ def _url_list(value: Any, field: str) -> list[str]:
     return [u for u in (str(v) for v in value) if u.strip() != ""]
 
 
+def country_codes(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("markets must be an array of two-letter country codes.")
+    codes = [str(v).strip().upper() for v in value if str(v or "").strip()]
+    codes = ["GB" if c == "UK" else c for c in codes]
+    unknown = [c for c in codes if pycountry.countries.get(alpha_2=c) is None]
+    if unknown:
+        raise ValueError(f"{', '.join(unknown)} is not a two-letter country code such as US or GB.")
+    return list(dict.fromkeys(codes))
+
+
+def language_code(value: Any) -> str | None:
+    code = str(value or "").strip().lower()
+    if not code:
+        return None
+    if len(code) != 2 or pycountry.languages.get(alpha_2=code) is None:
+        raise ValueError(f'"{value}" is not a two-letter language code such as en or de.')
+    return code
+
+
 def _social_links(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         raise ValueError("socialLinks must be an array.")
@@ -55,7 +77,6 @@ def _social_links(value: Any) -> list[dict[str, Any]]:
 class SiteFilters(RequestModel):
     q: str | None = None
     domain: str | None = None
-    country: str | None = None
     status: SiteStatus | None = None
     has_repo: bool | None = None
     never_crawled: bool | None = None
@@ -72,7 +93,8 @@ class SiteFilters(RequestModel):
 class SiteCreateRequest(RequestModel):
     domain: str
     name: str
-    country: str | None = None
+    markets: list[str] = Field(default_factory=list)
+    language: str | None = None
     repo_url: str | None = None
     summary: str | None = None
     social_links: list[dict[str, Any]] = Field(default_factory=list)
@@ -95,11 +117,22 @@ class SiteCreateRequest(RequestModel):
     def _validate_sitemap_urls(cls, v: Any) -> list[str]:
         return _url_list(v, "sitemapUrls")
 
+    @field_validator("markets", mode="before")
+    @classmethod
+    def _validate_markets(cls, v: Any) -> list[str]:
+        return country_codes(v)
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _validate_language(cls, v: Any) -> str | None:
+        return language_code(v)
+
 
 class SiteUpdateRequest(RequestModel):
     domain: str | None = None
     name: str | None = None
-    country: str | None = None
+    markets: list[str] | None = None
+    language: str | None = None
     repo_url: str | None = None
     summary: str | None = None
     social_links: list[dict[str, Any]] | None = None
@@ -133,6 +166,16 @@ class SiteUpdateRequest(RequestModel):
     def _validate_sitemap_urls(cls, v: Any) -> list[str] | None:
         return None if v is None else _url_list(v, "sitemapUrls")
 
+    @field_validator("markets", mode="before")
+    @classmethod
+    def _validate_markets(cls, v: Any) -> list[str] | None:
+        return None if v is None else country_codes(v)
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _validate_language(cls, v: Any) -> str | None:
+        return language_code(v)
+
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
 
@@ -165,7 +208,8 @@ class SiteRecord(EntityModel):
     domain: str
     name: str
     status: SiteStatus
-    country: str | None = None
+    markets: list[str]
+    language: str | None = None
     repo_url: str | None = None
     summary: str | None = None
     social_links: list[Any]
@@ -192,7 +236,8 @@ class SiteResponse(EntityModel):
     domain: str
     name: str
     status: SiteStatus
-    country: str | None = None
+    markets: list[str]
+    language: str | None = None
     repo_url: str | None = None
     summary: str | None = None
     social_links: list[Any]
@@ -219,7 +264,8 @@ class SiteListItemResponse(EntityModel):
     domain: str
     name: str
     status: SiteStatus
-    country: str | None = None
+    markets: list[str]
+    language: str | None = None
     repo_url: str | None = None
     summary: str | None = None
     last_crawled_at: JsDateTime | None = None

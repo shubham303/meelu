@@ -13,8 +13,10 @@ ASK = {
 def questions(action: PillarAction) -> dict[str, Question]:
     return {
         "apply": choice(
-            f"{ASK[action]} Judge from the page titles, descriptions and URLs. Say yes only "
-            "when a reader would expect one page to cover the whole set.",
+            f"{ASK[action]} Judge from the page titles, descriptions and URLs. Each page "
+            "carries details an earlier model extracted about it, such as its role and kind; "
+            "read those details too before deciding. Say yes only when a reader would expect "
+            "one page to cover the whole set.",
             {
                 "yes": "the pages share one clear topic and a hub page for them would help a reader",
                 "no": "the pages are a loose mix, the topic is too broad or too thin, or a hub already covers them",
@@ -27,9 +29,18 @@ def item_state(item: PillarReviewInput) -> dict[str, Any]:
     return {
         "action": item.action,
         "topic": item.topic,
-        "covering_page": {"url": item.covering_url or "", "title": item.covering_title or ""},
+        "covering_page": {
+            "url": item.covering_url or "",
+            "title": item.covering_title or "",
+            "details": item.covering_details or "",
+        },
         "pages": [
-            {"url": m["url"], "title": m["title"], "meta_description": m["meta_description"]}
+            {
+                "url": m["url"],
+                "title": m["title"],
+                "meta_description": m["meta_description"],
+                "details": m["details"],
+            }
             for m in item.members
         ],
     }

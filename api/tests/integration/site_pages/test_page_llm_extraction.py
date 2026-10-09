@@ -21,6 +21,7 @@ class FakeJev(JsonDataExtractorAdapter):
         if "boom" in state["url"]:
             raise ProviderRequestError(self.id, 502, "jev down")
         page_type = "company" if "about" in state["url"] else "money"
+        broad = "about" if "about" in state["url"] else "pricing"
         return VendorResponse(
             {
                 "model": "~typesafe/jev-latest",
@@ -30,7 +31,13 @@ class FakeJev(JsonDataExtractorAdapter):
                         "choice": page_type,
                         "probabilities": {page_type: 0.9},
                         "confidence": 0.9,
-                    }
+                    },
+                    "broad_page_type": {
+                        "type": "choice",
+                        "choice": broad,
+                        "probabilities": {broad: 0.8},
+                        "confidence": 0.8,
+                    },
                 },
             },
             42,
@@ -64,6 +71,7 @@ async def test_pass_classifies_pending_pages(client, site, jev):
         "https://extract.example.com/about",
         bodyText="About us",
         metaDescription="Who we are",
+        h1=["About Acme"],
         contentHash="h1",
     )
     b = await add_page(
@@ -81,15 +89,19 @@ async def test_pass_classifies_pending_pages(client, site, jev):
 
     assert len(jev.calls) == 3
     assert "Who we are" in [c["meta_description"] for c in jev.calls]
+    assert ["About Acme"] in [c["h1"] for c in jev.calls]
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{a['id']}")
     assert r.json()["data"]["pageType"] == "company"
     assert r.json()["data"]["confidence"] == 0.9
+    assert r.json()["data"]["broadPageType"] == "about"
+    assert r.json()["data"]["broadPageTypeConfidence"] == 0.8
     assert r.json()["data"]["model"] == "~typesafe/jev-latest"
     assert r.json()["data"]["extractedFromHash"] == "h1"
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{b['id']}")
     assert r.json()["data"]["pageType"] == "money"
+    assert r.json()["data"]["broadPageType"] == "pricing"
 
     r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{broken['id']}")
     assert r.json()["data"].get("pageType") is None
@@ -233,3 +245,113 @@ async def test_set_page_type_on_a_page_never_extracted(client, site):
         json={"pageType": "legal"},
     )
     assert r.status_code == 404
+
+
+class UnsureBroadJev(FakeJev):
+    async def decide(self, state, questions):
+        response = await super().decide(state, questions)
+        if "unsure" in state["url"]:
+            response.data["answers"]["broad_page_type"]["confidence"] = 0.4
+        return response
+
+
+@pytest.fixture
+def unsure_broad_jev(monkeypatch):
+    fake = UnsureBroadJev()
+    monkeypatch.setattr(json_data_extractor, "adapters", [fake])
+    return fake
+
+
+async def test_low_confidence_is_queued_for_large_llm_review(client, site, unsure_broad_jev):
+    sure = await add_page(
+        client, "https://extract.example.com/pricing", bodyText="Pricing", contentHash="h1"
+    )
+    unsure = await add_page(
+        client,
+        "https://extract.example.com/unsure",
+        bodyText="Hard to tell",
+        title="Unsure",
+        h1=["Unsure"],
+        contentHash="h2",
+    )
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 2
+
+    r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{sure['id']}")
+    assert r.json()["data"]["useLargeLlmReview"] is False
+    r = await client.get(f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}")
+    assert r.json()["data"]["useLargeLlmReview"] is True
+    assert r.json()["data"].get("broadPageType") is None
+
+    r = await client.get("/api/v1/site/page-llm-extractions/review-queue")
+    assert r.status_code == 200, r.text
+    queue = r.json()["data"]
+    assert queue["total"] == 1
+    assert [p["pageId"] for p in queue["pages"]] == [unsure["id"]]
+    assert queue["pages"][0]["contentHash"] == "h2"
+    assert queue["pages"][0]["bodyText"] == "Hard to tell"
+    assert set(queue["questions"]) == {"page_type", "broad_page_type"}
+    assert "guide" in queue["questions"]["broad_page_type"]["criteria"]
+
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}/review",
+        json={"contentHash": "h2", "model": "claude-haiku", "answers": {"page_type": "money"}},
+    )
+    assert r.status_code == 422, r.text
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}/review",
+        json={
+            "contentHash": "h2",
+            "model": "claude-haiku",
+            "answers": {"page_type": "informational", "broad_page_type": "nonsense"},
+        },
+    )
+    assert r.status_code == 422, r.text
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}/review",
+        json={
+            "contentHash": "stale",
+            "model": "claude-haiku",
+            "answers": {"page_type": "informational", "broad_page_type": "guide"},
+        },
+    )
+    assert r.status_code == 409, r.text
+
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}/review",
+        json={
+            "contentHash": "h2",
+            "model": "claude-haiku",
+            "answers": {"page_type": "informational", "broad_page_type": "guide"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    saved = r.json()["data"]
+    assert saved["pageType"] == "informational"
+    assert saved["broadPageType"] == "guide"
+    assert saved["confidence"] == 1.0
+    assert saved["broadPageTypeConfidence"] == 1.0
+    assert saved["model"] == "claude-haiku"
+    assert saved["useLargeLlmReview"] is False
+
+    r = await client.get("/api/v1/site/page-llm-extractions/review-queue")
+    assert r.json()["data"]["total"] == 0
+    r = await client.post(
+        f"/api/v1/site/page-llm-extractions/by-page/{unsure['id']}/review",
+        json={
+            "contentHash": "h2",
+            "model": "claude-haiku",
+            "answers": {"page_type": "informational", "broad_page_type": "guide"},
+        },
+    )
+    assert r.status_code == 409, r.text
+
+
+async def test_review_queue_skips_pages_that_changed(client, site, unsure_broad_jev):
+    unsure = await add_page(
+        client, "https://extract.example.com/unsure", bodyText="x", contentHash="h1"
+    )
+    assert await site_page_classifier.run_extraction_pass(site["id"]) == 1
+    r = await client.patch(f"/api/v1/site/pages/{unsure['id']}", json={"contentHash": "h1-new"})
+    assert r.status_code == 200, r.text
+    r = await client.get("/api/v1/site/page-llm-extractions/review-queue")
+    assert r.json()["data"]["total"] == 0

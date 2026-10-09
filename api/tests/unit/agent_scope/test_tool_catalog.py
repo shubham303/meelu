@@ -15,7 +15,18 @@ from src.agent_scope.service import agent_scope_service
 from src.core.orm import Base
 
 SITE = SiteRef(id="site_test_0001", name="Acme", domain="acme.example")
-SHARED_READS = {"run_sql", "find_plans", "get_plan"}
+SCRATCHPAD_TOOLS = {
+    "what_is_scratchpad",
+    "scratchpad_next",
+    "scratchpad_claim",
+    "scratchpad_update_status",
+    "scratchpad_metrics",
+    "scratchpad_get_failed",
+    "scratchpad_search",
+    "scratchpad_info",
+    "scratchpad_delete",
+}
+SHARED_READS = {"run_sql", "find_plans", "get_plan"} | SCRATCHPAD_TOOLS
 PENDING_TOOL_NAMES = {
     "analytics_update_session",
     "analytics_add_source",
@@ -83,8 +94,8 @@ def test_only_the_shared_reads_are_untagged():
 
 def test_provider_tools_hide_until_the_scope_lists_their_domain():
     body = agent_scope_service.scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
-    assert "seo_serp_snapshot" not in allowed_for({"pages"}, body.writes)
-    assert "seo_serp_snapshot" in allowed_for({"pages"}, body.writes, {"seo-data"})
+    assert "seo_ranked_keywords" not in allowed_for({"pages"}, body.writes)
+    assert "seo_ranked_keywords" in allowed_for({"pages"}, body.writes, {"seo-data"})
 
 
 def test_untagged_writes_are_only_the_note_tools():

@@ -104,7 +104,7 @@ class UserRecord(EntityModel):
     email: str
     name: str | None
     image: str | None
-    hashed_password: str
+    auth_id: str | None
     is_active: bool
     is_superuser: bool
     is_verified: bool

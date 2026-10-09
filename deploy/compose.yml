@@ -1,0 +1,107 @@
+x-backend-env: &backend-env
+  DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL to the Coolify Postgres internal URL}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
+  APIFY_API_KEY: ${APIFY_API_KEY:-}
+  CREDITS_SIGNUP_GRANT_USD: ${CREDITS_SIGNUP_GRANT_USD:-5}
+  CREDITS_MINIMUM_BALANCE_USD: ${CREDITS_MINIMUM_BALANCE_USD:-0.2}
+  MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
+  MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
+  MEELU_ONNX_THREADS: ${MEELU_ONNX_THREADS:-}
+
+services:
+  migrate:
+    build:
+      context: ../api
+      target: migrator
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+
+  api:
+    build:
+      context: ../api
+      target: api
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      CORS_ORIGINS: ${CORS_ORIGINS:?set CORS_ORIGINS}
+      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+      SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+      DODO_PAYMENTS_API_KEY: ${DODO_PAYMENTS_API_KEY:-}
+      DODO_PAYMENTS_WEBHOOK_SECRET: ${DODO_PAYMENTS_WEBHOOK_SECRET:-}
+      DODO_PAYMENTS_BASE_URL: ${DODO_PAYMENTS_BASE_URL:-https://test.dodopayments.com}
+      DODO_PAYMENTS_CREDITS_PRODUCT_ID: ${DODO_PAYMENTS_CREDITS_PRODUCT_ID:-}
+      DODO_PAYMENTS_RETURN_URL: ${DODO_PAYMENTS_RETURN_URL:?set DODO_PAYMENTS_RETURN_URL}
+      CREDITS_SITE_DAILY_USD: ${CREDITS_SITE_DAILY_USD:-0.4}
+      CREDITS_BILLING_PERIOD_HOURS: ${CREDITS_BILLING_PERIOD_HOURS:-24}
+      CREDITS_BILLING_SWEEP_SECONDS: ${CREDITS_BILLING_SWEEP_SECONDS:-900}
+      MEELU_RERANK_DISABLED: ${MEELU_RERANK_DISABLED:-}
+      MEELU_RERANK_MODEL: ${MEELU_RERANK_MODEL:-}
+      MEELU_SEARCH_MIN_SIMILARITY: ${MEELU_SEARCH_MIN_SIMILARITY:-}
+    volumes:
+      - embed-models:/app/.cache/models
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  agent:
+    build:
+      context: ../api
+      target: agent
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      AGENT_DATA_DIR: /app/agent-data
+    volumes:
+      - agentdata:/app/agent-data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8484/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  embed-worker:
+    build:
+      context: ../api
+      target: embed-worker
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      MEELU_EMBED_INTERVAL_MS: ${MEELU_EMBED_INTERVAL_MS:-}
+    volumes:
+      - embed-models:/app/.cache/models
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  dashboard:
+    build:
+      context: ../dashboard
+      args:
+        MEELU_API_URL: http://api:8000
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:-}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MEELU_API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  agentdata:
+  embed-models:

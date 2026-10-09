@@ -557,6 +557,7 @@ async def test_v2_measurement_rules(client, email):
         site["id"],
         user_id,
         [
+            page("/", depth=0),
             page("/clean"),
             page("/soft"),
             page("/health"),

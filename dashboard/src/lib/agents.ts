@@ -38,52 +38,50 @@ export const AGENT_GUIDES: AgentGuide[] = [
     name: "Content",
     href: "/dashboard/content",
     icon: "calendar",
-    tagline: "Writes each piece for the one place it goes.",
+    tagline: "Writes pages for your website, ready to publish.",
     summary:
-      "A piece is one thing written for one channel — a page for the website, a LinkedIn post, " +
-      "an Instagram caption. You pick the channel when you start it, and your coworker drafts " +
-      "against that channel's own rules and hard limits. The same idea for another channel is " +
-      "a clone, rewritten.",
+      "A piece is one web page for your site: SEO title, H1, meta description, slug, target " +
+      "keyword and body. Before it writes, your coworker loads your Site and SEO data to pick " +
+      "the keyword the page should win and the internal links it should carry.",
     chain: [
-      { label: "Channel", sub: "the site's rules for it" },
-      { label: "Piece", sub: "one thing written, for that channel" },
-      { label: "Post it", sub: "you, wherever it goes" },
+      { label: "Research", sub: "keyword from search data, links from the crawl" },
+      { label: "Piece", sub: "one web page, every field filled" },
+      { label: "Publish it", sub: "you, on your site" },
     ],
     chainNote:
-      "Meelu keeps the text and checks it. The list says where each piece stands: draft, or " +
-      "blocked by the channel's limits. Posting is yours.",
+      "Meelu keeps the page and checks it on every save: title length, meta description, H1, " +
+      "keyword placement. Publishing is yours.",
     prompts: [
       {
-        say: "Write a LinkedIn post about the grinder launch.",
-        then: "One piece in draft, written to LinkedIn's rules and checked against its limits.",
+        say: "Write a page on how to pick an espresso grinder.",
+        then: "A keyword proposed from your search data, links to real pages, then a full draft to approve.",
       },
       {
-        say: "Now do the same idea for X.",
-        then: "A new piece cloned from the first, rewritten inside X's character limit.",
+        say: "Write the page the SEO desk suggested adding.",
+        then: "The page, built from that suggestion's brief and keywords.",
       },
       {
-        say: "For LinkedIn specifically, stop opening posts with a question.",
-        then: "The site's rules for that channel are edited — yours, not the shipped default.",
+        say: "Add better internal links to this piece.",
+        then: "Links to crawled pages that fit, proposed as marked changes you keep or discard.",
       },
     ],
     rules: [
       {
-        title: "Each site owns its copy of the channel rules",
+        title: "Grounded in your own data",
         detail:
-          "Craft guidance ships with the product, is seeded onto the site once, and is yours from " +
-          "that moment. A better default in a later release never rewrites what you have edited.",
+          "The target keyword comes from your keywords and Search Console queries, and every " +
+          "internal link points at a page the crawl found. Nothing is invented.",
       },
       {
-        title: "Hard limits are checked, not suggested",
+        title: "One query, one page",
         detail:
-          "Character counts, links, images — Meelu checks them on every save and blocks a piece " +
-          "that breaks one. The rules the agent follows are prose; the limits are code.",
+          "If a page on your site already ranks for the keyword, Meelu says so and suggests " +
+          "editing that page instead of writing a second one.",
       },
     ],
     limits: [
-      "Meelu never posts. Copy the piece out and publish it yourself, on the platform or " +
-        "through whatever scheduler you already use. It sees what you wrote, not what went up.",
-      "Instagram won't take a caption with no picture, so a piece without one stays blocked.",
+      "Meelu never publishes. Copy the markdown out and put it on your site yourself.",
+      "Meelu writes web pages only. It does not write or schedule social posts.",
     ],
     tools: "content_*",
   },

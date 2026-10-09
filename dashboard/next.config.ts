@@ -9,13 +9,15 @@ import type { NextConfig } from "next";
  * what Next itself needs (dev refresh, inline bootstrap); they don't weaken
  * the exfiltration story, which is about where requests may GO.
  */
+const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://images.unsplash.com",
+  "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  `connect-src 'self' ${SUPABASE}`.trim(),
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

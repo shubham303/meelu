@@ -22,12 +22,24 @@ class Settings(EnvSettings):
 
     unsplash_access_key: str = ""
 
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+
+    dodo_payments_api_key: str = ""
+    dodo_payments_webhook_secret: str = ""
+    dodo_payments_base_url: str = "https://test.dodopayments.com"
+    dodo_payments_credits_product_id: str = ""
+    dodo_payments_return_url: str = "http://localhost:3000/dashboard"
+    payments_min_topup_usd: float = 5.0
+    payments_max_topup_usd: float = 500.0
+
     dataforseo_auth: str = ""
     dataforseo_base_url: str = "https://api.dataforseo.com"
-    apify_token: str = ""
+    apify_api_key: str = ""
+    apify_max_charge_usd_per_run: float = 0.5
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
-    openrouter_jev_model: str = "~typesafe/jev-latest"
+    openrouter_model: str = "deepseek/deepseek-v4.1-flash"
     credits_signup_grant_usd: float = 5.0
     credits_site_daily_usd: float = 0.4
     credits_minimum_balance_usd: float = 0.2
@@ -43,6 +55,8 @@ class Settings(EnvSettings):
     agent_work_mem: str = "64MB"
     agent_max_frame_rows: int = 200000
     agent_max_sql_rows: int = 500
+    agent_max_workspace_rows: int = 50000
+    agent_tenant_connections: int = 3
 
 
 settings = Settings()

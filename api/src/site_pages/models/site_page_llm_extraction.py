@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, func, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.orm import Base, EntityMixin, SiteScopedMixin
@@ -11,6 +11,11 @@ class SitePageLlmExtraction(EntityMixin, SiteScopedMixin, Base):
     __table_args__ = (
         Index("site_page_llm_extraction_page_idx", "page_id", unique=True),
         Index("site_page_llm_extraction_site_idx", "site_id"),
+        Index(
+            "site_page_llm_extraction_review_idx",
+            "site_id",
+            postgresql_where=text("use_large_llm_review"),
+        ),
     )
 
     page_id: Mapped[str] = mapped_column(
@@ -18,9 +23,14 @@ class SitePageLlmExtraction(EntityMixin, SiteScopedMixin, Base):
     )
     page_type: Mapped[str | None]
     confidence: Mapped[float | None] = mapped_column(Float)
+    broad_page_type: Mapped[str | None]
+    broad_page_type_confidence: Mapped[float | None] = mapped_column(Float)
     extracted_from_hash: Mapped[str | None]
     model: Mapped[str | None]
     error: Mapped[str | None]
+    use_large_llm_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     extract_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     extracted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

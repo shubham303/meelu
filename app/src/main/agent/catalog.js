@@ -21,6 +21,15 @@ async function fetchCatalog(url, headers) {
           desk: typeof meta["meelu/desk"] === "string" ? meta["meelu/desk"] : null,
           provider: typeof meta["meelu/provider"] === "string" ? meta["meelu/provider"] : null,
           writes: meta["meelu/writes"] === true,
+          definition: {
+            name: t.name,
+            ...(t.title ? { title: t.title } : {}),
+            description: t.description,
+            inputSchema: t.inputSchema,
+            ...(t.outputSchema ? { outputSchema: t.outputSchema } : {}),
+            ...(t.annotations ? { annotations: t.annotations } : {}),
+            _meta: meta,
+          },
         });
       }
       cursor = page.nextCursor;

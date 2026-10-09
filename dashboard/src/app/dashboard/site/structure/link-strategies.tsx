@@ -3,21 +3,27 @@
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useIsApp } from "@/lib/use-app-mode";
 import { useAgentTasks } from "../../agent-tasks";
-import * as chips from "@/features/prompt-chips/site";
+import type { PromptChip } from "@/features/prompt-chips/lib";
 
-export function LinkStrategies({ onRan }: { onRan?: () => void }) {
+export function LinkStrategies({
+  title,
+  strategies,
+  onRan,
+}: {
+  title: string;
+  strategies: PromptChip[];
+  onRan?: () => void;
+}) {
   const isApp = useIsApp();
   const { launchTask } = useAgentTasks();
   if (!isApp) return null;
-  const strategies = chips.structure();
 
   return (
-    <div className="mb-8">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink">Find links and pillar pages</h2>
+    <div className="mb-6">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="text-xs uppercase tracking-wide text-sub">{title}</h2>
         <span className="text-xs text-faint">
-          Pick a strategy. The agent runs it through the link pipeline and the results land
-          below.
+          Pick a strategy. The agent runs it and the results land below.
         </span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -27,7 +33,7 @@ export function LinkStrategies({ onRan }: { onRan?: () => void }) {
             type="button"
             onClick={() =>
               launchTask({
-                title: `Find links — ${s.label}`,
+                title: `${title} — ${s.label}`,
                 endpoint: "/api/agent/ask-site",
                 emptyHint: s.blurb ?? s.label,
                 suggestions: strategies,

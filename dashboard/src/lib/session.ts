@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { signOutEverywhere } from "@/lib/auth";
 
 export interface SessionUser {
   id: string;
@@ -44,6 +45,6 @@ export function useSession(): { data: Session | null; isPending: boolean } {
 }
 
 export async function signOut(): Promise<void> {
-  await fetch("/api/auth/logout", { method: "POST" });
+  await signOutEverywhere();
   window.location.href = "/login";
 }

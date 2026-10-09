@@ -10,13 +10,10 @@ class StatsService:
         return StatsRecord()
 
     async def get(self, db: AsyncSession, site_id: str) -> StatsRecord:
-        piece_counts = await content_pieces.counts_by_status(db, site_id)
+        piece_count = await content_pieces.count(db, site_id)
         page_counts = await site_pages.page_counts(db, site_id)
         return StatsRecord(
-            content=ContentStats(
-                drafts=piece_counts.by_status.get("draft", 0),
-                blocked=piece_counts.by_status.get("blocked", 0),
-            ),
+            content=ContentStats(pieces=piece_count),
             seo=SeoStats(pages=page_counts.pages),
         )
 
