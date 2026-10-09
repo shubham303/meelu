@@ -1,34 +1,38 @@
 import type { NextConfig } from "next";
 
-/**
- * Defense-in-depth behind the analytics HTML validator: srcdoc iframes
- * INHERIT this policy, so even if a network-referencing report slipped past
- * validation, the browser would refuse the request. img-src lists the one
- * external origin the product legitimately renders (Unsplash post media —
- * their guidelines require hotlinking). 'unsafe-eval'/'unsafe-inline' are
- * what Next itself needs (dev refresh, inline bootstrap); they don't weaken
- * the exfiltration story, which is about where requests may GO.
- */
-const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+const isDev = process.env.NODE_ENV !== "production";
+
+const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin : "";
 
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://images.unsplash.com https://lh3.googleusercontent.com",
+  "img-src 'self' data: blob: https://www.google.com https://*.gstatic.com",
   "font-src 'self' data:",
   `connect-src 'self' ${SUPABASE}`.trim(),
   "worker-src 'self' blob:",
+  "frame-ancestors 'none'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  ...(isDev ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");
 
+const SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: CSP },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
-  // Emits .next/standalone — a self-contained server.js plus only the traced
-  // node_modules. The Dockerfile copies that instead of the full dependency
-  // tree. Harmless outside Docker; `next dev` and `next start` ignore it.
   output: "standalone",
+  poweredByHeader: false,
+  images: { unoptimized: true },
   async rewrites() {
     const api = process.env.MEELU_API_URL ?? "http://localhost:8100";
     return {
@@ -41,12 +45,7 @@ const nextConfig: NextConfig = {
     };
   },
   async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [{ key: "Content-Security-Policy", value: CSP }],
-      },
-    ];
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
 };
 

@@ -7,7 +7,6 @@ import { LogIn } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Reveal } from "@/components/animate";
 import { Button, Card, Field, Input } from "@/components/ui";
-import { GoogleButton, OrDivider } from "@/components/google-button";
 import { signInWithPassword } from "@/lib/auth";
 
 export default function LoginPage({
@@ -49,8 +48,6 @@ export default function LoginPage({
           <p className="text-sm text-sub text-center mt-1.5 mb-6">
             Sign in — your coworker&apos;s latest work is waiting.
           </p>
-          <GoogleButton onError={setError} />
-          <OrDivider />
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Email">
               <Input
@@ -78,9 +75,8 @@ export default function LoginPage({
             </Button>
           </form>
           <p className="text-sm text-sub text-center mt-6">
-            New to Meelu?{" "}
-            <Link href="/signup" className="text-accent hover:text-accent-hi transition-colors">
-              Create an account
+            <Link href="/forgot-password" className="text-accent hover:text-accent-hi transition-colors">
+              Forgot password?
             </Link>
           </p>
         </Card>

@@ -3,7 +3,7 @@ import { isAppUserAgent } from "@/lib/app-mode";
 
 export function proxy(request: NextRequest) {
   if (isAppUserAgent(request.headers.get("user-agent"))) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return new NextResponse(null, { status: 307, headers: { Location: "/dashboard" } });
   }
   return NextResponse.next();
 }

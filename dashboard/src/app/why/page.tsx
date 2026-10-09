@@ -107,7 +107,7 @@ export default function WhyPage() {
               Docs
             </Link>
             <Link
-              href="/signup"
+              href="/login"
               className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hi"
             >
               Get started
@@ -383,7 +383,7 @@ export default function WhyPage() {
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link
-              href="/signup"
+              href="/login"
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hi"
             >
               Get started <ArrowRight size={15} />

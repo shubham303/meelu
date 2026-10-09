@@ -22,7 +22,7 @@ const PLANS: Array<{
     cadence: "bring your own keys",
     blurb: "The full coworker for one site. You bring your own Search Console access — we never mark up your data.",
     cta: "Start free",
-    href: "/signup",
+    href: "/login",
     highlighted: false,
     features: [
       "One site workspace",
@@ -37,7 +37,7 @@ const PLANS: Array<{
     cadence: "per client / month",
     blurb: "One brain per client. Isolated workspaces with their own context, connectors, and approval queues — priced by the client, nothing else.",
     cta: "Start with a client",
-    href: "/signup",
+    href: "/login",
     highlighted: true,
     tag: "For agencies",
     features: [

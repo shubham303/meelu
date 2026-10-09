@@ -75,24 +75,6 @@ Animation — `src/components/animate.tsx` (GSAP + @gsap/react):
   `src/app/globals.css`, `src/app/layout.tsx`) — if you need a section-specific component,
   create it inside your own page directory.
 
-## The agent guide catalog
-
-Each agent has a guide page at `/dashboard/guide/[key]`. The page is rendered entirely from a pure data module — no DB, no
-React, icons named as strings and resolved in the page directory:
-
-| Catalog | Describes | Page |
-|---|---|---|
-| `src/lib/agents.ts` | agents that exist — prompts, rules, limits | `/dashboard/guide/[key]` |
-
-It is a file rather than a table because nothing in it is per-user, and it wants a diff and a
-git history. There is deliberately no coming-soon catalog: the app lists agents that work.
-
-**Changing an agent's behaviour means changing its guide entry in the same commit.** A guide
-that describes last quarter's behaviour is worse than no guide, and the prompts in it are meant
-to be copied verbatim into Claude — one that no longer works reads as the product being broken.
-The load-bearing field is `prompts`: the dashboard has no intelligence, so what a user most
-needs from these pages is what to *say*, not what the screen they are standing on looks like.
-
 ## Voice
 
 UI copy speaks of the AI as "your coworker": "Your coworker found 12 pages with missing meta descriptions",

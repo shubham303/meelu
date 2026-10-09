@@ -43,7 +43,7 @@ export default function LandingPage() {
               Sign in
             </Link>
             <Link
-              href="/signup"
+              href="/login"
               className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hi"
             >
               Get started
@@ -71,7 +71,7 @@ export default function LandingPage() {
             <Link href="/why" className="text-xs text-sub transition-colors hover:text-ink">
               Why we built it this way
             </Link>
-            <Link href="/signup" className="text-xs text-sub transition-colors hover:text-ink">
+            <Link href="/login" className="text-xs text-sub transition-colors hover:text-ink">
               Get started →
             </Link>
           </div>
