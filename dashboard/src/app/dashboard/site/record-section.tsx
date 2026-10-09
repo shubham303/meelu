@@ -239,10 +239,8 @@ function CrawlToken({ domain }: { domain: string }) {
         it as a bot. This token is made here and never leaves the machine. Every request carries
         it as{" "}
         <code className="font-mono text-accent">X-Meelu-Crawl</code> — allow that header and the
-        crawl gets through.{" "}
-        <a href="/docs/crawl-access" target="_blank" rel="noreferrer" className="text-accent hover:underline">
-          How to set the rule
-        </a>
+        crawl gets through. On Cloudflare, add a WAF custom rule that matches the header and
+        skips the remaining custom rules and Bot Fight Mode.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg border border-edge bg-panel2 px-3 py-2 font-mono text-xs text-sub">

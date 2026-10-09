@@ -92,12 +92,6 @@ body {
   color: #fff;
 }
 
-/* Subtle texture for landing panels (dark dots on light ground) */
-.grain {
-  background-image: radial-gradient(#1f2d3d0a 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-
 /* Thin scrollbars that match the theme */
 * {
   scrollbar-width: thin;

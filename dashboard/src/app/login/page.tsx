@@ -79,6 +79,12 @@ export default function LoginPage({
               Forgot password?
             </Link>
           </p>
+          <p className="text-xs text-faint text-center mt-3">
+            Accounts are invite-only during early access.{" "}
+            <a href="https://meelu.tech" className="text-accent hover:text-accent-hi transition-colors">
+              meelu.tech
+            </a>
+          </p>
         </Card>
       </Reveal>
     </main>

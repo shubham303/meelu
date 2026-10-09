@@ -1,7 +1,7 @@
 "use client";
 
 import type { AuthError } from "@supabase/supabase-js";
-import { supabaseBrowser } from "@/lib/supabase/client";
+import { supabaseBrowser, supabaseRecovery } from "@/lib/supabase/client";
 
 export interface MeeluSession {
   created: boolean;
@@ -36,26 +36,35 @@ export async function signInWithPassword(email: string, password: string): Promi
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  const { error } = await supabaseBrowser().auth.resetPasswordForEmail(email, {
+  const { error } = await supabaseRecovery().auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/reset-password`,
   });
   if (error?.status === 429) throw new Error("Too many attempts. Wait a minute and try again.");
 }
 
-export async function beginPasswordReset(code: string): Promise<void> {
-  const { error } = await supabaseBrowser().auth.exchangeCodeForSession(code);
-  if (error) {
-    throw new Error("This reset link has expired or was opened in another browser. Request a new one.");
-  }
+export async function beginPasswordReset(
+  tokens: { accessToken: string; refreshToken: string } | null,
+): Promise<void> {
+  if (!tokens) throw new Error("This reset link has expired. Request a new one.");
+  const { error } = await supabaseRecovery().auth.setSession({
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+  });
+  if (error) throw new Error("This reset link has expired. Request a new one.");
 }
 
 export async function setNewPassword(password: string): Promise<MeeluSession> {
-  const { data, error } = await supabaseBrowser().auth.updateUser({ password });
+  const recovery = supabaseRecovery();
+  const { data, error } = await recovery.auth.updateUser({ password });
   if (error) throw new Error(error.message);
-  const session = await supabaseBrowser().auth.getSession();
+  const session = await recovery.auth.getSession();
   const token = session.data.session?.access_token;
   if (!data.user || !token) throw new Error("This reset link has expired. Request a new one.");
-  return startMeeluSession(token);
+  try {
+    return await startMeeluSession(token);
+  } finally {
+    await recovery.auth.signOut({ scope: "local" });
+  }
 }
 
 export async function signOutEverywhere(): Promise<void> {

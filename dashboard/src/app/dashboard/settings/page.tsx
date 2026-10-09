@@ -449,12 +449,7 @@ function McpSection({
           </div>
           <p className="text-xs text-faint mt-2">
             The agent server runs alongside this dashboard — the URL above is its default, and
-            the Meelu app follows MEELU_AGENT_MCP_URL if you move it. To bundle the rest of
-            your tools alongside it, see the{" "}
-            <a href="/docs" className="text-accent hover:underline">
-              install docs
-            </a>
-            . Google Search Console and Google Analytics connect with OAuth from the
+            the Meelu app follows MEELU_AGENT_MCP_URL if you move it. Google Search Console and Google Analytics connect with OAuth from the
             Connections screen in the Meelu app — the tokens stay on that device.
           </p>
 
@@ -496,7 +491,7 @@ function AccountSection() {
             try {
               await signOut();
               setCurrentSite(null);
-              router.push("/");
+              router.push("/login");
             } finally {
               setSigningOut(false);
             }

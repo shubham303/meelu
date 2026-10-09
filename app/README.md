@@ -21,8 +21,10 @@ OpenRouter, or a local endpoint):
 2. **Local workers** that call the dashboard REST API like any client: the
    crawler (`src/main/crawler/`), Search Console and Analytics syncs
    (`src/main/integrations/`), and the env-gated auto-crawl schedule.
-3. **App-mode UI differences** — no marketing pages or docs chrome, plus the
-   app-only Connections screen (model choice, Google OAuth, connectors).
+3. **App-only dashboard** — the dashboard serves pages only to this app; any
+   other browser is sent to meelu.tech/download, except the password-reset
+   link. The app-only Connections screen holds model choice, Google OAuth and
+   connectors.
 
 Two channels, exactly as designed: normal UI operations call the dashboard
 REST API directly from the page; everything device-side goes over one preload

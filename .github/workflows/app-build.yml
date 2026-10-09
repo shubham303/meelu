@@ -95,3 +95,31 @@ jobs:
           name: windows
           path: app/dist/Meelu*.exe
           if-no-files-found: error
+
+  publish:
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload to downloads.meelu.tech
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          PREFIX: ${{ inputs.flavour == 'test' && 'test/' || '' }}
+        run: |
+          ls -la dist
+          sha256sum dist/* > dist/SHA256SUMS.txt
+          for f in dist/*; do
+            case "$f" in
+              *.dmg) type=application/x-apple-diskimage ;;
+              *.exe) type=application/vnd.microsoft.portable-executable ;;
+              *) type=text/plain ;;
+            esac
+            aws s3 cp "$f" "s3://meelu-downloads/${PREFIX}$(basename "$f")" --endpoint-url "$R2_ENDPOINT" --content-type "$type" --cache-control "no-cache" --only-show-errors
+          done

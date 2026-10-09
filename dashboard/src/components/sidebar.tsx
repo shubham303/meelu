@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Cable,
-  FileText,
   Globe,
   LogOut,
   PanelLeftClose,
@@ -162,7 +161,7 @@ export function Sidebar() {
       </nav>
 
       <div className={cn("border-t border-edge space-y-0.5", collapsed ? "p-2" : "p-3")}>
-        {isApp ? (
+        {isApp && (
           <Link
             href="/dashboard/connections"
             title={collapsed ? "Connections" : undefined}
@@ -171,16 +170,11 @@ export function Sidebar() {
             <Cable size={16} className="shrink-0" />
             {!collapsed && "Connections"}
           </Link>
-        ) : (
-          <Link href="/docs" title={collapsed ? "Docs" : undefined} className={linkClass(false)}>
-            <FileText size={16} className="shrink-0" />
-            {!collapsed && "Docs"}
-          </Link>
         )}
         <button
           onClick={async () => {
             await signOut();
-            router.push("/");
+            router.push("/login");
           }}
           title={collapsed ? "Sign out" : undefined}
           className={cn("w-full cursor-pointer", linkClass(false))}

@@ -14,8 +14,8 @@ if (!app.isPackaged) dotenv.config({ path: path.join(APP_ROOT, ".env"), quiet: t
 const env = app.isPackaged ? {} : process.env;
 
 const PACKAGED_ENDPOINTS = {
-  prod: { meeluBaseUrl: "https://app.meelu.tech", agentMcpUrl: "https://agent.meelu.tech/mcp/" },
-  test: { meeluBaseUrl: "https://test.meelu.tech", agentMcpUrl: "https://test-agent.meelu.tech/mcp/" },
+  prod: { meeluBaseUrl: "https://ui.meelu.tech", agentMcpUrl: "https://agent.meelu.tech/mcp/" },
+  test: { meeluBaseUrl: "https://test-ui.meelu.tech", agentMcpUrl: "https://test-agent.meelu.tech/mcp/" },
 };
 
 function buildFlavour() {

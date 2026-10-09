@@ -101,10 +101,6 @@ export const CATEGORY_LABEL: Record<CatalogCategory, string> = {
   social: "Social",
 };
 
-export function catalogEntry(id: string): CatalogEntry | undefined {
-  return MCP_CATALOG.find((e) => e.id === id);
-}
-
 export function isInstallable(entry: CatalogEntry): boolean {
   return entry.connect !== undefined || entry.transport.kind === "http" || entry.transport.command !== "";
 }
@@ -116,86 +112,7 @@ export interface MeeluOptions {
   apiKey: string;
 }
 
-export type ServerConfig =
-  | { type: "http"; url: string; headers?: Record<string, string> }
-  | { command: string; args: string[]; env?: Record<string, string> };
-
-const TOKEN = /\{\{(\w+)\}\}/g;
-
-function fill(text: string, entry: CatalogEntry): string {
-  return text.replace(TOKEN, (whole, key: string) => {
-    const field = entry.fields?.find((f) => f.key === key);
-    return field ? field.placeholder : whole;
-  });
-}
-
-function fillMap(
-  map: Record<string, string> | undefined,
-  entry: CatalogEntry,
-): Record<string, string> | undefined {
-  if (!map) return undefined;
-  return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, fill(v, entry)]));
-}
-
-function serverConfig(entry: CatalogEntry): ServerConfig {
-  if (entry.transport.kind === "http") {
-    const headers = fillMap(entry.transport.headers, entry);
-    return { type: "http", url: entry.transport.url, ...(headers ? { headers } : {}) };
-  }
-  const env = fillMap(entry.transport.env, entry);
-  return {
-    command: entry.transport.command,
-    args: entry.transport.args.map((a) => fill(a, entry)),
-    ...(env ? { env } : {}),
-  };
-}
-
-function meeluServer(opts: MeeluOptions): ServerConfig {
-  return {
-    type: "http",
-    url: opts.url ?? MEELU_AGENT_MCP_URL,
-    headers: { "x-api-key": opts.apiKey },
-  };
-}
-
-function q(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-export function serverConfigJson(entry: CatalogEntry): string {
-  return JSON.stringify({ mcpServers: { [entry.id]: serverConfig(entry) } }, null, 2);
-}
-
-export function serverCommand(entry: CatalogEntry): string {
-  const config = serverConfig(entry);
-
-  if ("type" in config) {
-    const headers = Object.entries(config.headers ?? {})
-      .map(([k, v]) => `--header ${q(`${k}: ${v}`)}`)
-      .join(" ");
-    return `claude mcp add ${entry.id} --scope user --transport http ${config.url}${
-      headers ? ` ${headers}` : ""
-    }`;
-  }
-
-  const env = Object.entries(config.env ?? {})
-    .map(([k, v]) => `-e ${k}=${q(v)}`)
-    .join(" ");
-  return `claude mcp add ${entry.id} --scope user${env ? ` ${env}` : ""} -- ${config.command} ${config.args.join(" ")}`;
-}
-
 export function meeluConfigJson(opts: MeeluOptions): string {
-  return JSON.stringify({ mcpServers: { meelu: meeluServer(opts) } }, null, 2);
-}
-
-export function meeluCommand(opts: MeeluOptions): string {
-  const config = meeluServer(opts) as {
-    type: "http";
-    url: string;
-    headers: Record<string, string>;
-  };
-  const headers = Object.entries(config.headers)
-    .map(([k, v]) => `--header ${q(`${k}: ${v}`)}`)
-    .join(" ");
-  return `claude mcp add --transport http meelu ${config.url}${headers ? ` ${headers}` : ""}`;
+  const meelu = { type: "http", url: opts.url ?? MEELU_AGENT_MCP_URL, headers: { "x-api-key": opts.apiKey } };
+  return JSON.stringify({ mcpServers: { meelu } }, null, 2);
 }
