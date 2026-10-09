@@ -4,13 +4,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import get_db
 from src.core.schemas import EntityModel, RequestModel
 from src.credits.service import credit_service
 from src.identity.service import identity_service
-from src.keys.repository import api_keys
+from src.keys.repository import api_keys, hash_key
 from src.profile.repository import access_tokens, users
 from src.profile.schemas import UserRecord
 from src.settings import settings
@@ -21,14 +22,27 @@ def _session_cutoff() -> datetime:
     return datetime.now(UTC) - timedelta(seconds=settings.session_lifetime_seconds)
 
 
-async def session_user(db: AsyncSession, token: str | None) -> UserRecord | None:
-    if not token:
-        return None
-    user_id = await access_tokens.find_user_id(db, token, _session_cutoff())
+async def _active_user(db: AsyncSession, user_id: str | None) -> UserRecord | None:
     if user_id is None:
         return None
     user = await users.get(db, user_id)
     return user if user is not None and user.is_active else None
+
+
+async def session_user(db: AsyncSession, token: str | None) -> UserRecord | None:
+    if not token:
+        return None
+    return await _active_user(
+        db, await access_tokens.find_user_id(db, hash_key(token), _session_cutoff())
+    )
+
+
+async def api_key_user(db: AsyncSession, api_key: str) -> UserRecord:
+    owner = await api_keys.find_owner(db, api_key)
+    user = await _active_user(db, owner.user_id if owner else None)
+    if user is None:
+        raise HTTPException(401, "Invalid API key.")
+    return user
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -39,12 +53,12 @@ def _set_session_cookie(response: Response, token: str) -> None:
         path="/",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.session_cookie_secure,
     )
 
 
 class SessionRequest(RequestModel):
-    access_token: str
+    access_token: str = Field(min_length=1, max_length=8192)
 
 
 class UserResponse(EntityModel):
@@ -80,7 +94,13 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> Respon
         await db.commit()
 
     response = Response(status_code=204)
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    response.delete_cookie(
+        settings.session_cookie_name,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+    )
     return response
 
 
@@ -95,10 +115,7 @@ async def me(request: Request, db: AsyncSession = Depends(get_db)) -> UserRespon
 async def current_user_id(request: Request, db: AsyncSession = Depends(get_db)) -> str:
     api_key = request.headers.get("x-api-key")
     if api_key:
-        owner = await api_keys.find_owner(db, api_key)
-        if owner:
-            return owner.user_id
-        raise HTTPException(401, "Invalid API key.")
+        return (await api_key_user(db, api_key)).id
 
     user = await session_user(db, request.cookies.get(settings.session_cookie_name))
     if user is not None:
@@ -187,10 +204,9 @@ async def optional_site(
 
 async def require_superuser(request: Request, db: AsyncSession = Depends(get_db)) -> str:
     api_key = request.headers.get("x-api-key")
-    owner = await api_keys.find_owner(db, api_key) if api_key else None
     user = (
-        await users.get(db, owner.user_id)
-        if owner
+        await api_key_user(db, api_key)
+        if api_key
         else await session_user(db, request.cookies.get(settings.session_cookie_name))
     )
     if user is None:

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 
 from src.core.env import EnvSettings
@@ -13,12 +14,16 @@ class Settings(EnvSettings):
 
     session_cookie_name: str = "meelu_session"
     session_lifetime_seconds: int = 60 * 60 * 24 * 30
+    session_cookie_secure: bool = True
+    session_purge_minutes: int = 60
 
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
     ]
+    app_origins: list[str] = []
+    api_docs_enabled: bool = False
 
     unsplash_access_key: str = ""
 
@@ -57,6 +62,22 @@ class Settings(EnvSettings):
     agent_max_sql_rows: int = 500
     agent_max_workspace_rows: int = 50000
     agent_tenant_connections: int = 3
+    agent_allowed_hosts: list[str] = ["127.0.0.1:*", "localhost:*", "agent:8484"]
+    agent_max_workspace_bytes: int = 2 * 1024**3
+    agent_max_result_bytes: int = 5 * 1024**2
+    agent_max_frame_bytes: int = 256 * 1024**2
+    agent_tool_concurrency: int = 4
+    agent_temp_file_limit: str = "1GB"
+    agent_max_models: int = 50
+    agent_max_export_rows: int = 100000
+    agent_export_ttl_hours: int = 24
+
+    @field_validator("cors_origins")
+    @classmethod
+    def _no_wildcard_origin(cls, origins: list[str]) -> list[str]:
+        if "*" in origins:
+            raise ValueError("CORS_ORIGINS cannot contain '*': the api sends credentialed cookies.")
+        return origins
 
 
 settings = Settings()

@@ -29,6 +29,12 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+The copied `.env` sets `SESSION_COOKIE_SECURE=false`. The api marks the session
+cookie Secure by default, and the local dashboard is plain `http://localhost`,
+so without it the browser drops the cookie and sign-in does not stick. Keep it
+`true` (the default) anywhere that serves HTTPS. The api's `/docs` and
+`/openapi.json` are off unless `API_DOCS_ENABLED=true`.
+
 Open <http://localhost:3000>, sign up with any email and password, walk through
 onboarding. The account is provisioned with a default workspace API key, and it
 is still there after a restart — sign up once.

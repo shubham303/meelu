@@ -21,7 +21,7 @@ FACADES = (seo_data, social_search, json_data_extractor)
 
 class SocialSearchRequest(RequestModel):
     platform: str
-    keywords: list[str]
+    keywords: list[str] = Field(max_length=50)
     since: str | None = None
     limit: int = Field(default=30, ge=1, le=100)
 

@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.agent.security import BLOCKED_TABLES
+from src.agent.security import READABLE_TABLES
 from src.agent_scope.guides import render_guides
 from src.agent_scope.lib import AgentScope, SiteRef
 from src.agent_scope.registry import (
@@ -46,7 +46,7 @@ class AgentScopeService:
 
     def render_tables(self, tables: tuple[type[Base], ...] | None) -> str:
         if tables is None:
-            listed = [t for t in Base.metadata.sorted_tables if t.name not in BLOCKED_TABLES]
+            listed = [t for t in Base.metadata.sorted_tables if t.name in READABLE_TABLES]
         else:
             listed = [t.__table__ for t in tables]
         lines = [

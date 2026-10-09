@@ -1,4 +1,5 @@
-import { Agent, fetch as pooledFetch } from "undici";
+import { Agent, buildConnector, fetch as pooledFetch } from "undici";
+import { isPrivateAddress, privateHostError, publicLookup } from "./public-address.js";
 
 function positive(value, fallback) {
   const n = Number(value);
@@ -8,11 +9,21 @@ function positive(value, fallback) {
 const MAX_OUTBOUND = positive(process.env.MEELU_CRAWL_MAX_OUTBOUND, 12);
 const PER_ORIGIN = positive(process.env.MEELU_CRAWL_PER_ORIGIN, 6);
 
+const connectAnyPublic = buildConnector({ timeout: 10_000, lookup: publicLookup });
+
+function connectPublic(opts, callback) {
+  if (isPrivateAddress(opts.hostname)) {
+    callback(privateHostError(opts.hostname));
+    return;
+  }
+  connectAnyPublic(opts, callback);
+}
+
 const crawlDispatcher = new Agent({
   connections: PER_ORIGIN,
   keepAliveTimeout: 10_000,
   keepAliveMaxTimeout: 60_000,
-  connectTimeout: 10_000,
+  connect: connectPublic,
 });
 
 const apiDispatcher = new Agent({

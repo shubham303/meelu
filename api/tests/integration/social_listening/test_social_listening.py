@@ -204,7 +204,9 @@ async def test_queries_upsert_patch_delete_and_counts(client, email):
     assert r.status_code == 200, r.text
     r = await client.get("/api/v1/social-listening/queries")
     assert len(r.json()["data"]) == 2
-    r = await client.patch(f"/api/v1/social-listening/queries/{first['id']}", json={"enabled": True})
+    r = await client.patch(
+        f"/api/v1/social-listening/queries/{first['id']}", json={"enabled": True}
+    )
     assert r.status_code == 404
 
     kept = await all_posts(client)
@@ -387,9 +389,7 @@ async def test_gate_and_judge_are_incremental(client, email):
     assert close["suggestedAngle"] == "Answer with two free options first."
     assert close.get("dropReason") is None
 
-    assert await judge(client, close_id, "dropped", dropReason="judged_off_topic") == {
-        "updated": 0
-    }
+    assert await judge(client, close_id, "dropped", dropReason="judged_off_topic") == {"updated": 0}
     r = await client.get(f"/api/v1/social-listening/posts/{close_id}")
     assert r.json()["data"]["status"] == "to_reply"
 
@@ -471,3 +471,23 @@ async def test_review_statuses_filters_and_summary(client, email):
 
     r = await client.delete(f"/api/v1/social-listening/posts/{ids[0]}")
     assert r.status_code == 405
+
+
+async def test_bulk_refuses_another_sites_query(client, email):
+    await prepare(client, email)
+    foreign = await add_query(client)
+
+    await prepare(client, f"other-{email}")
+    own = await add_query(client)
+    r = await client.post(
+        "/api/v1/social-listening/posts/bulk",
+        json={
+            "posts": [
+                post_payload("https://a.example/mine", queryId=own),
+                post_payload("https://a.example/theirs", queryId=foreign),
+            ]
+        },
+    )
+    assert r.status_code == 404
+    assert foreign in r.json()["error"]["message"]
+    assert "https://a.example/mine" not in await all_posts(client)

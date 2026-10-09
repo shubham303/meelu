@@ -17,9 +17,16 @@ class WorkspaceTableRepository:
         cap = settings.agent_max_workspace_rows
         try:
             with tenant_txn(role, schema) as conn:
-                result = conn.exec_driver_sql(
-                    f"SELECT * FROM {quote_ident(schema)}.{quote_ident(table)} LIMIT {cap + 1}"
-                )
+                source = f"SELECT * FROM {quote_ident(schema)}.{quote_ident(table)} LIMIT {cap + 1}"
+                size = conn.exec_driver_sql(
+                    f"SELECT COALESCE(SUM(pg_column_size(t.*)), 0) FROM ({source}) t"
+                ).scalar_one()
+                if size > settings.agent_max_frame_bytes:
+                    raise ValueError(
+                        f"{table} holds more than {settings.agent_max_frame_bytes // 1024**2} MB; "
+                        "narrow it before handing it over."
+                    )
+                result = conn.exec_driver_sql(source)
                 rows = [dict(row) for row in result.mappings().all()]
         except ProgrammingError as exc:
             raise ValueError(f"Could not read {table} from your workspace schema.") from exc
@@ -35,7 +42,9 @@ class WorkspaceTableRepository:
         cap = settings.agent_max_workspace_rows
         try:
             with tenant_txn(role, schema) as conn:
-                columns, rows, _ = run_single_statement(conn, sql, cap + 1)
+                columns, rows, _ = run_single_statement(
+                    conn, sql, cap + 1, max_bytes=settings.agent_max_frame_bytes
+                )
         except Exception as exc:
             raise ValueError(f"The query failed: {exc}") from exc
         if columns is None:

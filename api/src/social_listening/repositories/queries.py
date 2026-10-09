@@ -23,6 +23,17 @@ class SocialListeningQueryRepository:
         )
         return result.scalars().first()
 
+    async def existing_ids(self, db: AsyncSession, site_id: str, ids: list[str]) -> set[str]:
+        if not ids:
+            return set()
+        result = await db.execute(
+            select(SocialListeningQuery.id).where(
+                SocialListeningQuery.site_id == site_id,
+                SocialListeningQuery.id.in_(ids),
+            )
+        )
+        return set(result.scalars().all())
+
     async def existing_texts(self, db: AsyncSession, site_id: str, texts: list[str]) -> set[str]:
         if not texts:
             return set()

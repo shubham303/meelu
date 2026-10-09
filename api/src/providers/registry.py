@@ -133,60 +133,80 @@ class ProviderFacade:
         for adapter in candidates:
             query = request(adapter)
             key = cache_key(self.domain, capability, query)
-            if adapter.charges:
-                if caller.spend is not None:
-                    caller.spend.check()
+            if adapter.charges and caller.spend is not None:
+                caller.spend.check()
+            async with unit_of_work() as ledger:
+                if adapter.charges:
+                    try:
+                        await credit_service.hold_spend(ledger, caller.user_id)
+                    except InsufficientCreditsError as exc:
+                        await self._log_failure(
+                            caller, capability, adapter.id, key, str(exc), started
+                        )
+                        raise
                 try:
-                    await credit_service.require_balance(db, caller.user_id)
-                except InsufficientCreditsError as exc:
-                    await self._log_failure(caller, capability, adapter.id, key, str(exc), started)
-                    raise
-            try:
-                result = await call(adapter)
-            except ProviderRequestError as exc:
-                last = exc
-                continue
-            if ttl is not None:
-                await provider_caches.upsert(
-                    db,
-                    cache_key=key,
-                    domain=self.domain,
-                    capability=capability,
-                    provider=adapter.id,
-                    request=query,
-                    response=result.data,
-                    vendor_cost_micros=result.cost_micros,
-                    ttl=ttl,
+                    result = await call(adapter)
+                except ProviderRequestError as exc:
+                    last = exc
+                    continue
+                charged = await self._settle(
+                    ledger, caller, capability, adapter, key, query, result, ttl, started
                 )
-            row = await self._log(
-                db,
-                caller,
-                capability,
-                adapter.id,
-                key,
-                False,
-                result.cost_micros,
-                0,
-                "ok",
-                None,
-                started,
-            )
-            charged = (
-                await credit_service.charge_vendor_call(
-                    db, caller.user_id, self.domain, capability, result.cost_micros, row.id
-                )
-                if adapter.charges
-                else 0
-            )
-            await provider_calls.set_charged_micros(db, row, charged)
             if caller.spend is not None:
                 caller.spend.calls += 1
-                caller.spend.micros += int(charged or 0)
+                caller.spend.micros += charged
             return result.data
 
         assert last is not None
         await self._log_failure(caller, capability, last.provider_id, key, str(last), started)
         raise last
+
+    async def _settle(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        capability: str,
+        adapter: ProviderAdapter,
+        key: str,
+        query: dict[str, Any],
+        result: VendorResponse,
+        ttl: timedelta | None,
+        started: float,
+    ) -> int:
+        if ttl is not None:
+            await provider_caches.upsert(
+                db,
+                cache_key=key,
+                domain=self.domain,
+                capability=capability,
+                provider=adapter.id,
+                request=query,
+                response=result.data,
+                vendor_cost_micros=result.cost_micros,
+                ttl=ttl,
+            )
+        row = await self._log(
+            db,
+            caller,
+            capability,
+            adapter.id,
+            key,
+            False,
+            result.cost_micros,
+            0,
+            "ok",
+            None,
+            started,
+        )
+        charged = (
+            await credit_service.charge_vendor_call(
+                db, caller.user_id, self.domain, capability, result.cost_micros, row.id
+            )
+            if adapter.charges
+            else 0
+        )
+        await provider_calls.set_charged_micros(db, row, charged)
+        return int(charged or 0)
 
     async def _cached(
         self, db: AsyncSession, capability: str, request: Callable[[Any], dict[str, Any]]

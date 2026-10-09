@@ -10,12 +10,14 @@ from src.analytics.endpoints import router as analytics_router
 from src.auth import session_router
 from src.content.endpoints import router as content_router
 from src.core import scheduler
+from src.core.csrf import CsrfMiddleware
 from src.core.envelope import install_envelope
 from src.core.logging import RequestLoggingMiddleware, configure_logging
 from src.crawl_jobs.endpoints import router as crawl_jobs_router
 from src.credits import cron as credits_cron
 from src.credits.endpoints import router as credits_router
 from src.credits.service import InsufficientCreditsError, SiteDisabledError
+from src.identity import cron as identity_cron
 from src.keys.endpoints import router as keys_router
 from src.notes.endpoints import router as notes_router
 from src.payments.endpoints import router as payments_router
@@ -45,15 +47,23 @@ configure_logging()
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     credits_cron.register(scheduler.scheduler)
+    identity_cron.register(scheduler.scheduler)
     site_structure_cron.register(scheduler.scheduler)
     scratchpad_cron.register(scheduler.scheduler)
     async with scheduler.running():
         yield
 
 
-app = FastAPI(title="meelu-api", lifespan=lifespan)
+app = FastAPI(
+    title="meelu-api",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+)
 
 install_envelope(app)
+app.add_middleware(CsrfMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,

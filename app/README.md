@@ -67,7 +67,23 @@ npm run agent-smoke      # MCP handshake against the agent server (needs MEELU_A
 MEELU_SHOT=/tmp/meelu.png npm run dev   # screenshot after load, then quits
 ```
 
+## Package it
+
+```bash
+npm run dist:mac -- --arm64   # dist/Meelu-mac-arm64.dmg (unsigned)
+npm run dist:win              # dist/Meelu-windows-x64.exe (unsigned)
+npm run dist:mac:test         # Meelu-Test-*: built against test.meelu.tech
+```
+
+A packaged app ignores `.env` and the `MEELU_*` endpoint variables: it always
+talks to `https://app.meelu.tech` and `https://agent.meelu.tech/mcp/` (the test
+flavour to `test.meelu.tech` and `test-agent.meelu.tech`). Each architecture
+needs its own native packages (the Claude Code binary, sharp), so build x64 on
+an arm64 Mac after `npm ci --os=darwin --cpu=x64`. `oauth-client.json` is
+bundled when present. CI builds both platforms in
+`.github/workflows/app-build.yml`.
+
 ## Deliberately later
 
-Per-user onboarding (key entry UI instead of .env), keychain storage,
-packaging/signing/auto-update.
+Per-user onboarding (key entry UI instead of .env), code signing,
+auto-update.

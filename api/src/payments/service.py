@@ -27,6 +27,8 @@ FAILED = "failed"
 CANCELLED = "cancelled"
 
 UNSETTLED = (PENDING, FAILED, CANCELLED)
+SETTLEMENT_CURRENCY = "USD"
+MICROS_PER_CENT = 10_000
 FAILURE_EVENTS = {"payment.failed": FAILED, "payment.cancelled": CANCELLED}
 
 
@@ -45,7 +47,7 @@ class PaymentService:
             raise HTTPException(404, "Not found")
 
         amount_cents = round(body.amount_usd * 100)
-        payment = await payments.create(db, user_id, amount_cents * 10_000, PENDING)
+        payment = await payments.create(db, user_id, amount_cents * MICROS_PER_CENT, PENDING)
         try:
             checkout = await dodo.create_checkout(
                 amount_cents,
@@ -105,11 +107,29 @@ class PaymentService:
             "paid_currency": data.get("currency"),
         }
         if kind == "payment.succeeded":
+            if not self._paid_in_full(payment, settled):
+                log.error(
+                    "dodo_webhook_amount_mismatch",
+                    payment_id=payment.id,
+                    expected_cents=payment.credit_micros // MICROS_PER_CENT,
+                    paid_amount=settled["paid_amount"],
+                    paid_currency=settled["paid_currency"],
+                )
+                return
             await self._credit(db, payment, settled)
         else:
             await payments.transition(
                 db, payment.id, (PENDING, FAILED), {**settled, "status": FAILURE_EVENTS[kind]}
             )
+
+    def _paid_in_full(self, payment: PaymentRecord, settled: dict[str, Any]) -> bool:
+        amount = settled["paid_amount"]
+        return (
+            settled["paid_currency"] == SETTLEMENT_CURRENCY
+            and isinstance(amount, int)
+            and not isinstance(amount, bool)
+            and amount >= payment.credit_micros // MICROS_PER_CENT
+        )
 
     async def _match(self, db: AsyncSession, data: dict[str, Any]) -> PaymentRecord | None:
         payment_id = (data.get("metadata") or {}).get("meelu_payment_id")

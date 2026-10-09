@@ -11,5 +11,5 @@ async def client():
     if not any(getattr(r, "path", "") == "/api/v1/analytics/workspace" for r in app.routes):
         app.include_router(analytics_router, prefix="/api/v1")
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as c:
         yield c

@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 
 import psycopg
+import psycopg.sql
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -40,12 +41,18 @@ def test_database():
 
     if os.environ.get("MEELU_TEST_DB"):
         return
+    with psycopg.connect(TEST_URL.replace("postgresql+psycopg://", "postgresql://")) as conn:
+        tenant_roles = [row[0] for row in conn.execute("select role_name from agent_tenants")]
     with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
         conn.execute(
             "select pg_terminate_backend(pid) from pg_stat_activity where datname = %s",
             (TEST_DB_NAME,),
         )
         conn.execute(f'drop database if exists "{TEST_DB_NAME}"')
+        for role in tenant_roles:
+            conn.execute(
+                psycopg.sql.SQL("drop role if exists {}").format(psycopg.sql.Identifier(role))
+            )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -73,7 +80,7 @@ async def client():
 
     from src.app import app
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as c:
         yield c
 
 

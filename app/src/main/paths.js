@@ -23,3 +23,7 @@ export function screenshotDir() {
 export function saveDialogDir() {
   return app.getPath("downloads");
 }
+
+export function writeSecretFile(file, data) {
+  fs.writeFileSync(file, data, { mode: 0o600 });
+}

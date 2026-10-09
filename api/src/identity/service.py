@@ -1,5 +1,6 @@
 import secrets
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.logging import get_logger
 from src.credits.service import credit_service
 from src.identity import supabase
-from src.keys.repository import api_keys
+from src.keys.repository import api_keys, hash_key
 from src.profile.repository import access_tokens, profiles, users
 from src.profile.schemas import UserRecord
+from src.settings import settings
 
 log = get_logger("identity")
 
@@ -27,18 +29,22 @@ class IdentityService:
             identity = await supabase.fetch_user(access_token)
         except supabase.SupabaseAuthError as e:
             raise HTTPException(401, str(e)) from e
+        except supabase.SupabaseUnavailableError as e:
+            raise HTTPException(503, str(e)) from e
 
         user, created = await self._resolve_user(db, identity)
         if not user.is_active:
             raise HTTPException(403, "This account is disabled.")
 
         token = secrets.token_urlsafe(32)
-        await access_tokens.create(db, user.id, token)
+        await access_tokens.create(db, user.id, hash_key(token))
         return SignIn(user=user, token=token, created=created)
 
     async def _resolve_user(
         self, db: AsyncSession, identity: supabase.SupabaseUser
     ) -> tuple[UserRecord, bool]:
+        if not identity.email_confirmed:
+            raise HTTPException(403, "Confirm your email address before signing in.")
         user = await users.find_by_auth_id(db, identity.id)
         if user is not None:
             return await self._refresh(db, user, identity), False
@@ -47,8 +53,6 @@ class IdentityService:
         if user is not None:
             if user.auth_id is not None:
                 raise HTTPException(409, "This email is linked to a different sign-in.")
-            if not identity.email_confirmed:
-                raise HTTPException(403, "Confirm your email address before signing in.")
             return await self._refresh(db, user, identity, link=True), False
 
         user = await users.create(
@@ -89,7 +93,11 @@ class IdentityService:
             log.error("seed_profile_failed", user_id=user.id, error=str(e))
 
     async def sign_out(self, db: AsyncSession, token: str) -> None:
-        await access_tokens.delete(db, token)
+        await access_tokens.delete(db, hash_key(token))
+
+    async def purge_expired_sessions(self, db: AsyncSession) -> int:
+        cutoff = datetime.now(UTC) - timedelta(seconds=settings.session_lifetime_seconds)
+        return await access_tokens.delete_created_before(db, cutoff)
 
 
 identity_service = IdentityService()

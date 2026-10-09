@@ -179,3 +179,27 @@ test("a live session refuses a turn sent for another website", async () => {
     /pinned to another website/,
   );
 });
+
+function runWith(action, connectors) {
+  return runner.runAgentTurn(
+    { action, siteId: "site_test", message: "hi", form: {} },
+    () => {},
+    { cwd, abortController: new AbortController(), askPermission: async () => "allow", connectors },
+  );
+}
+
+test("a scope cannot launch a local server the app ships no template for", async () => {
+  await assert.rejects(() => runWith("foreign-server", { get: () => ({}) }), /does not know \(evil\)/);
+});
+
+test("the analytics server launches from the app's template, never the scope's command", async () => {
+  await assert.rejects(
+    () => runWith("analytics-server", { get: () => ({ projectDir: "relative/dir", dataDir: cwd }) }),
+    /projectDir set to an existing folder/,
+  );
+  await assert.rejects(
+    () => runWith("analytics-server", { get: () => ({ projectDir: cwd, dataDir: path.join(cwd, "missing") }) }),
+    /dataDir set to an existing folder/,
+  );
+  assert.equal(fs.existsSync("/tmp/pwned"), false);
+});

@@ -52,3 +52,7 @@ def require_site() -> AgentContext:
             "Tell the user to add credits — the website turns back on within 15 minutes."
         )
     return ctx
+
+
+def optional_current() -> AgentContext | None:
+    return _current.get()

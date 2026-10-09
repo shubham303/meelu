@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import robotsParserModule from "robots-parser";
 import { extract } from "../crawler/extract.js";
 import { normalise, sameSite } from "../crawler/url.js";
+import { isPublicHost } from "../public-address.js";
 
 const robotsParser = robotsParserModule.default ?? robotsParserModule;
 
@@ -372,10 +373,53 @@ const MOBILE_SCRIPT = `
 const sessions = new Map();
 const windows = new Map();
 
+const WEB_PROTOCOLS = new Set(["http:", "https:", "ws:", "wss:"]);
+const INLINE_PROTOCOLS = new Set(["data:", "blob:", "about:"]);
+const HOST_VERDICT_MS = 60_000;
+const HOST_VERDICT_LIMIT = 2_000;
+const hostVerdicts = new Map();
+
+async function publicHostCached(hostname) {
+  const hit = hostVerdicts.get(hostname);
+  if (hit && Date.now() - hit.at < HOST_VERDICT_MS) return hit.ok;
+  const ok = await isPublicHost(hostname);
+  if (hostVerdicts.size >= HOST_VERDICT_LIMIT) hostVerdicts.clear();
+  hostVerdicts.set(hostname, { ok, at: Date.now() });
+  return ok;
+}
+
+async function requestAllowed(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (INLINE_PROTOCOLS.has(parsed.protocol)) return true;
+  if (!WEB_PROTOCOLS.has(parsed.protocol)) return false;
+  return publicHostCached(parsed.hostname);
+}
+
+function lockDown(ses) {
+  ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  ses.setPermissionCheckHandler(() => false);
+  ses.on("will-download", (ev, item) => {
+    ev.preventDefault();
+    item.cancel();
+  });
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    requestAllowed(details.url).then(
+      (ok) => callback({ cancel: !ok }),
+      () => callback({ cancel: true }),
+    );
+  });
+}
+
 function partitionSession(device, profile) {
   let ses = sessions.get(device);
   if (!ses) {
     ses = session.fromPartition(`render-pages-${device}`, { cache: false });
+    lockDown(ses);
     sessions.set(device, ses);
   }
   const agents = USER_AGENTS[device] ?? USER_AGENTS.desktop;
@@ -422,6 +466,9 @@ async function windowFor(device, profile) {
   });
   win.webContents.setAudioMuted(true);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", (ev, url) => {
+    if (!/^https?:$/.test(schemeOf(url) ?? "")) ev.preventDefault();
+  });
   win.webContents.setFrameRate(1);
   windows.set(device, { win, reused: 0 });
   return win;

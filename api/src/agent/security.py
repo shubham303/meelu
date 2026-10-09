@@ -1,3 +1,4 @@
+import shutil
 import threading
 
 from src.agent.context import tenant_names
@@ -9,18 +10,61 @@ READ_ROLE = "meelu_agent_read"
 USER_ID_FUNCTION = "public.meelu_agent_user_id"
 POLICY = "meelu_agent_select"
 
-BLOCKED_TABLES = frozenset(
+READABLE_TABLES = frozenset(
     {
-        "user",
-        "access_token",
-        "api_keys",
-        "agent_plans",
-        "agent_tenants",
-        "provider_cache",
-        "scratchpad",
-        "scratchpad_row",
-        "alembic_version",
+        "analytics_reports",
+        "analytics_sessions",
+        "analytics_sources",
+        "content_piece_issues",
+        "content_pieces",
+        "link_suggestions",
+        "notes",
+        "pillar_page_suggestions",
+        "post_media",
+        "profile",
+        "seo_competitors",
+        "seo_keyword_cluster_competitors",
+        "seo_keyword_clusters",
+        "seo_rank_history",
+        "seo_volume_history",
+        "site",
+        "site_audit_runs",
+        "site_chunks",
+        "site_crawl_jobs",
+        "site_issues",
+        "site_page_index_status",
+        "site_page_issues",
+        "site_page_links",
+        "site_page_llm_extraction",
+        "site_page_renders",
+        "site_pages",
+        "site_search_daily",
+        "site_search_syncs",
+        "site_seo",
+        "site_traffic_channels_daily",
+        "site_traffic_events_daily",
+        "site_traffic_geo_daily",
+        "site_traffic_landing_daily",
+        "site_traffic_pages_daily",
+        "site_traffic_syncs",
+        "site_traffic_tech_daily",
+        "site_traffic_totals_daily",
+        "social_listening_config",
+        "social_listening_post",
+        "social_listening_query",
+        "social_listening_run",
+        "structure_jobs",
     }
+)
+
+LARGE_OBJECT_WRITERS = (
+    "lo_creat(integer)",
+    "lo_create(oid)",
+    "lo_from_bytea(oid, bytea)",
+    "lo_import(text)",
+    "lo_import(text, oid)",
+    "lo_put(oid, bigint, bytea)",
+    "lowrite(integer, bytea)",
 )
 
 CURRENT_TENANT = f"(SELECT {USER_ID_FUNCTION}())"
@@ -65,6 +109,9 @@ def bootstrap() -> BootstrapResult:
     with engine.begin() as conn:
         _ensure_read_role(conn)
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA public TO {read}")
+        conn.exec_driver_sql("REVOKE USAGE ON LANGUAGE plpgsql, sql FROM PUBLIC")
+        for function in LARGE_OBJECT_WRITERS:
+            conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION pg_catalog.{function} FROM PUBLIC")
         conn.exec_driver_sql(
             f"CREATE OR REPLACE FUNCTION {USER_ID_FUNCTION}() RETURNS text "
             "LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS "
@@ -94,7 +141,8 @@ def bootstrap() -> BootstrapResult:
             if child not in user_scoped and parent in user_scoped:
                 owned_through.setdefault(child, []).append(
                     f"EXISTS (SELECT 1 FROM public.{quote_ident(parent)} p "
-                    f"WHERE p.{quote_ident(parent_column)} = {quote_ident(column)})"
+                    f"WHERE p.{quote_ident(parent_column)} = "
+                    f"public.{quote_ident(child)}.{quote_ident(column)})"
                 )
 
         granted, secured = [], []
@@ -106,7 +154,7 @@ def bootstrap() -> BootstrapResult:
                 using = " AND ".join(owned_through[table])
             else:
                 using = None
-            if table in BLOCKED_TABLES or using is None:
+            if table not in READABLE_TABLES or using is None:
                 conn.exec_driver_sql(f"REVOKE ALL ON public.{qt} FROM {read}")
                 continue
             conn.exec_driver_sql(f"GRANT SELECT ON public.{qt} TO {read}")
@@ -134,6 +182,9 @@ def ensure_user(user_id: str) -> tuple[str, str]:
             _ensure_read_role(conn)
             verb = "ALTER" if _role_exists(conn, role) else "CREATE"
             conn.exec_driver_sql(f"{verb} ROLE {qr} WITH {attributes}")
+            conn.exec_driver_sql(
+                f"ALTER ROLE {qr} SET temp_file_limit = '{settings.agent_temp_file_limit}'"
+            )
             conn.exec_driver_sql(f"GRANT {quote_ident(READ_ROLE)} TO {qr}")
             conn.exec_driver_sql(f"GRANT {qr} TO CURRENT_USER")
             conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {qs} AUTHORIZATION {qr}")
@@ -145,3 +196,22 @@ def ensure_user(user_id: str) -> tuple[str, str]:
             )
         _ensured.add(user_id)
     return role, schema
+
+
+def drop_user(user_id: str) -> None:
+    role, schema = tenant_names(user_id)
+    qr = quote_ident(role)
+    with _lock:
+        with engine.begin() as conn:
+            if _role_exists(conn, role):
+                conn.exec_driver_sql(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = %s",
+                    (role,),
+                )
+                conn.exec_driver_sql(f"DROP SCHEMA IF EXISTS {quote_ident(schema)} CASCADE")
+                conn.exec_driver_sql(f"DROP OWNED BY {qr} CASCADE")
+                conn.exec_driver_sql(f"DROP ROLE {qr}")
+            conn.exec_driver_sql("DELETE FROM public.agent_tenants WHERE role_name = %s", (role,))
+        _ensured.discard(user_id)
+    for area in ("models", "social-listening"):
+        shutil.rmtree(settings.agent_data_dir / area / schema, ignore_errors=True)

@@ -149,3 +149,34 @@ async def test_payments_are_private(client, email, dodo_config):
     await signup(client, f"other-{email}")
     r = await client.get(f"/api/v1/payments/{payment_id}")
     assert r.status_code == 404
+
+
+async def test_webhook_skips_wrong_currency_or_short_amount(client, email, dodo_config):
+    await signup(client, email)
+    before = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+
+    for change in ({"currency": "EUR"}, {"total_amount": 1999}, {"total_amount": "2000"}):
+        payment_id = (
+            await client.post("/api/v1/payments/checkout", json={"amountUsd": 20})
+        ).json()["data"]["paymentId"]
+        event = succeeded(payment_id)
+        event["data"].update(change)
+        body, headers = signed(event)
+        r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
+        assert r.status_code == 200, r.text
+        payment = (await client.get(f"/api/v1/payments/{payment_id}")).json()["data"]
+        assert payment["status"] == "pending"
+
+    after = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+    assert after == before
+
+
+async def test_webhook_is_exempt_from_the_origin_check(client, email, dodo_config):
+    await signup(client, email)
+    payment_id = (await client.post("/api/v1/payments/checkout", json={"amountUsd": 20})).json()[
+        "data"
+    ]["paymentId"]
+    body, headers = signed(succeeded(payment_id))
+    headers = {**headers, "origin": "https://dodo.example", "sec-fetch-site": "cross-site"}
+    r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
+    assert r.status_code == 200, r.text

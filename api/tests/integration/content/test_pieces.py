@@ -167,3 +167,20 @@ async def test_piece_issues(client, workspace):
 
     r = await client.get("/api/v1/content/pieces/cpc_missing/issues")
     assert r.status_code == 404
+
+
+async def test_source_page_must_belong_to_the_site(client, workspace, email):
+    from tests.integration.technical_seo.conftest import seed_pages, user_id_of
+
+    user_id = await user_id_of(email)
+    made = await seed_pages(workspace["id"], user_id, [{"url": "https://coffee.example.com/"}])
+    page_id = next(iter(made.values()))
+
+    r = await client.post("/api/v1/content/pieces", json={"title": "X", "sourcePageId": "pg_x"})
+    assert r.status_code == 422
+    piece = await make_piece(client, title="Y", sourcePageId=page_id)
+    assert piece["sourcePageId"] == page_id
+    r = await client.patch(
+        f"/api/v1/content/pieces/{piece['id']}", json={"sourcePageId": "pg_elsewhere"}
+    )
+    assert r.status_code == 422

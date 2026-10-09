@@ -6,15 +6,17 @@ from src.agent.context import AgentContext, reset_context, set_context
 from src.agent.security import ensure_user
 from src.core.database import unit_of_work
 from src.keys.repository import api_keys
+from src.profile.repository import users
 from src.sites.repository import sites
 
 
 async def resolve(api_key: str, site_header: str | None) -> AgentContext:
     async with unit_of_work() as db:
         owner = await api_keys.find_owner(db, api_key)
-        if owner is None:
+        user = await users.get(db, owner.user_id) if owner else None
+        if user is None or not user.is_active:
             raise HTTPException(401, "Invalid API key.")
-        user_id = owner.user_id
+        user_id = user.id
 
         site_id = site_domain = site_status = None
         if site_header:

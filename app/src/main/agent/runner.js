@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { createSdkMcpServer, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
+import { app } from "electron";
 import { z } from "zod";
 import { messagesEndpoint, messagesJudge } from "./messages.js";
 import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
@@ -12,6 +14,7 @@ import { cachedWorkspaceKey, rememberWorkspaceKey } from "./workspace-key.js";
 import { apiFetch } from "../net.js";
 import { agentToolCatalog, allowedToolNames, forgetToolCatalog } from "./catalog.js";
 import { MEELU_SERVER, meeluMcpServer } from "./meelu-server.js";
+import { isPublicWebUrl } from "../public-address.js";
 
 const MODEL = process.env.MEELU_AGENT_MODEL ?? "claude-haiku-4-5-20251001";
 const MAX_TURNS = 24;
@@ -23,8 +26,6 @@ const LLM_MODEL = process.env.MEELU_LLM_MODEL;
 const LLM_API_KEY = process.env.MEELU_LLM_API_KEY ?? "ollama";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_MODEL = process.env.MEELU_OPENROUTER_MODEL ?? "";
-
-const TOKEN = /\{\{(\w+)\}\}/g;
 
 const ACTION_ALIASES = {
   "analytics-ask": "analyze-data",
@@ -190,29 +191,29 @@ function isReadOnly(scope) {
   return (scope.writes ?? []).length === 0 && !required;
 }
 
-function fillTemplate(tpl, values) {
-  const fill = (text) =>
-    text.replace(TOKEN, (whole, key) => {
-      const stored = values[key];
-      if (stored !== undefined && stored !== "") return stored;
-      const field = (tpl.fields ?? []).find((f) => f.key === key);
-      return field ? field.placeholder : whole;
-    });
-  const fillMap = (map) =>
-    map ? Object.fromEntries(Object.entries(map).map(([k, v]) => [k, fill(v)])) : undefined;
-
-  const cfg = tpl.config ?? {};
-  if (cfg.type === "http") {
-    const headers = fillMap(cfg.headers);
-    return { ...cfg, ...(headers ? { headers } : {}) };
+function localDirectory(values, key, serverName) {
+  const dir = values[key];
+  const isDir =
+    typeof dir === "string" &&
+    path.isAbsolute(dir) &&
+    fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory() === true;
+  if (!isDir) {
+    throw new Error(
+      `${serverName} needs ${key} set to an existing folder on this machine — set it on the Connections screen.`,
+    );
   }
-  const env = fillMap(cfg.env);
-  return {
-    ...cfg,
-    args: (cfg.args ?? []).map(fill),
-    ...(env ? { env } : {}),
-  };
+  return dir;
 }
+
+const LOCAL_SERVERS = {
+  analytics: (values, name) => ({
+    type: "stdio",
+    command: "uv",
+    args: ["run", "--project", localDirectory(values, "projectDir", name), "meelu-analytics-mcp"],
+    env: { TABULAR_BASE: localDirectory(values, "dataDir", name) },
+    alwaysLoad: true,
+  }),
+};
 
 async function resolveScopeServers(scope, connectors, siteId = null, { readOnly = false } = {}) {
   const servers = {};
@@ -221,13 +222,17 @@ async function resolveScopeServers(scope, connectors, siteId = null, { readOnly 
   let promptSuffix = "";
 
   const attach = (id, tpl, values) => {
-    servers[id] = fillTemplate(tpl, values);
+    servers[id] = LOCAL_SERVERS[id](values, tpl.name ?? id);
     if (Array.isArray(tpl.tools) && tpl.tools.length > 0) {
       toolAllow[id] = new Set(tpl.tools);
     }
   };
 
   for (const [id, tpl] of Object.entries(scope.mcpServers ?? {})) {
+    if (!Object.hasOwn(LOCAL_SERVERS, id)) {
+      if (tpl?.optional) continue;
+      throw new Error(`This task needs a local server this app does not know (${id}). Update the app.`);
+    }
     if (readOnly && tpl.readOnly !== true) {
       if (!tpl.optional) {
         throw new Error(
@@ -467,9 +472,57 @@ export async function resolveLlm(llm) {
   return { gateway, model, anthropicKey, limits };
 }
 
+const PASSTHROUGH_ENV = [
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "PATH",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "LANG",
+  "LC_ALL",
+  "TERM",
+  "USERPROFILE",
+  "USERNAME",
+  "APPDATA",
+  "LOCALAPPDATA",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "SystemRoot",
+  "SystemDrive",
+  "windir",
+  "ComSpec",
+  "PATHEXT",
+  "ProgramData",
+  "ProgramFiles",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "NODE_EXTRA_CA_CERTS",
+  "CLAUDE_CONFIG_DIR",
+  "ANTHROPIC_API_KEY",
+];
+
+function baseEnv() {
+  return Object.fromEntries(
+    PASSTHROUGH_ENV.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]),
+  );
+}
+
+function claudeExecutable() {
+  if (!app.isPackaged) return {};
+  const binary = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude${process.platform === "win32" ? ".exe" : ""}`;
+  const resolved = createRequire(import.meta.url).resolve(binary);
+  return {
+    pathToClaudeCodeExecutable: resolved.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`),
+  };
+}
+
 export function llmEnv(gateway, anthropicKey, limits) {
   return {
-    ...process.env,
+    ...baseEnv(),
     CLAUDE_AGENT_SDK_CLIENT_APP: "meelu-app/0.1.0",
     ENABLE_CLAUDEAI_MCP_SERVERS: "false",
     CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
@@ -517,6 +570,7 @@ function oneShotJudge({ model, gateway, anthropicKey, limits, cwd }) {
         strictMcpConfig: true,
         permissionMode: "default",
         maxTurns: 1,
+        ...claudeExecutable(),
         env: llmEnv(gateway, anthropicKey, limits),
       },
     });
@@ -698,6 +752,13 @@ async function buildConfig(session) {
       return { behavior: "deny", message: `${toolName} is not available in this task.` };
     }
 
+    if (toolName === "WebFetch" && !(await isPublicWebUrl(input?.url))) {
+      return {
+        behavior: "deny",
+        message: "WebFetch only reads public http(s) pages; that address is local or private. Do not try it again.",
+      };
+    }
+
     const short = toolName.replace(/^mcp__[\w-]+?__/, "");
 
     if (server && toolAllow[server] && !toolAllow[server].has(short)) {
@@ -853,6 +914,7 @@ class LiveSession {
         includePartialMessages: true,
         maxTurns: config.scope.limits?.maxTurns ?? MAX_TURNS,
         ...(config.gateway ? {} : { maxBudgetUsd: config.scope.limits?.maxBudgetUsd ?? MAX_BUDGET_USD }),
+        ...claudeExecutable(),
         env: llmEnv(config.gateway, config.anthropicKey, config.limits),
       },
     });

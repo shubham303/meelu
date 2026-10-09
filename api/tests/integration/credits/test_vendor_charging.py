@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -149,3 +150,39 @@ async def test_overdrawing_disables_the_websites_instead_of_billing_on_silently(
     assert await balance_usd(client) == pytest.approx(-1.7)
     r = await client.get("/api/v1/sites")
     assert [s["status"] for s in r.json()["data"]] == ["disabled"]
+
+
+class SlowPaidAdapter(PaidAdapter):
+    async def get(self, key):
+        await asyncio.sleep(0.2)
+        return await super().get(key)
+
+
+async def test_concurrent_paid_calls_cannot_both_pass_the_floor(client, email):
+    await signup(client, email)
+    user_id = await user_id_of(client)
+    await set_balance(user_id, 0.3)
+
+    adapter = SlowPaidAdapter(cost=250_000)
+    facade = ThingFacade([adapter])
+    results = await asyncio.gather(
+        fetch(facade, user_id, "race-a"), fetch(facade, user_id, "race-b"), return_exceptions=True
+    )
+
+    assert adapter.calls == 1
+    assert sum(isinstance(r, InsufficientCreditsError) for r in results) == 1
+    assert await balance_usd(client) == pytest.approx(0.05)
+
+
+async def test_a_paid_call_stays_charged_when_the_caller_rolls_back(client, email):
+    await signup(client, email)
+    user_id = await user_id_of(client)
+    before = await balance_usd(client)
+
+    facade = ThingFacade([PaidAdapter(cost=250_000)])
+    with pytest.raises(RuntimeError):
+        async with unit_of_work() as db:
+            await facade.get(db, Caller(user_id=user_id), "rolled-back")
+            raise RuntimeError("request failed after the vendor answered")
+
+    assert await balance_usd(client) == pytest.approx(before - 0.25)

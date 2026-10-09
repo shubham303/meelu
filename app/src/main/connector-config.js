@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import { safeStorage } from "electron";
-import { appFile } from "./paths.js";
+import { appFile, writeSecretFile } from "./paths.js";
+
+const CONNECTOR_FIELDS = {
+  gsc: { refreshToken: "secret" },
+  ga4: { refreshToken: "secret" },
+  analytics: { projectDir: "plain", dataDir: "plain" },
+};
+
+const MANUAL_CONNECTORS = new Set(["analytics"]);
 
 function storeFile() {
   return appFile("connectors.json");
@@ -15,22 +23,21 @@ function readStore() {
 }
 
 function writeStore(store) {
-  fs.writeFileSync(storeFile(), JSON.stringify(store, null, 2));
+  writeSecretFile(storeFile(), JSON.stringify(store, null, 2));
 }
 
 function mask(value) {
   return value.length > 8 ? `••••${value.slice(-4)}` : "••••••";
 }
 
-function encodeRecord(values = {}, secretKeys = []) {
+function encodeRecord(fields, values = {}) {
   const clean = {};
   for (const [k, v] of Object.entries(values ?? {})) {
-    if (typeof v === "string" && v.trim() !== "") clean[k] = v.trim();
+    if (Object.hasOwn(fields, k) && typeof v === "string" && v.trim() !== "") clean[k] = v.trim();
   }
-  const secret = new Set(Array.isArray(secretKeys) ? secretKeys : []);
   const record = { updatedAt: new Date().toISOString(), preview: {} };
   for (const [k, v] of Object.entries(clean)) {
-    record.preview[k] = secret.has(k) ? mask(v) : v;
+    record.preview[k] = fields[k] === "secret" ? mask(v) : v;
   }
   if (Object.keys(clean).length > 0) {
     if (!safeStorage.isEncryptionAvailable()) {
@@ -63,16 +70,26 @@ export function connectorValues(provider) {
   return decodeRecord(readStore()[provider]);
 }
 
-export function saveConnector(provider, values = {}, secretKeys = []) {
-  if (typeof provider !== "string" || !/^[\w-]+$/.test(provider)) {
-    throw new Error("Invalid provider.");
+function knownProvider(provider) {
+  if (typeof provider !== "string" || !Object.hasOwn(CONNECTOR_FIELDS, provider)) {
+    throw new Error("Unknown connector.");
   }
+  return provider;
+}
+
+export function saveConnector(provider, values = {}) {
   const store = readStore();
-  store[provider] = encodeRecord(values, secretKeys);
+  store[knownProvider(provider)] = encodeRecord(CONNECTOR_FIELDS[provider], values);
   writeStore(store);
 }
 
+export function saveManualConnector(provider, values = {}) {
+  if (!MANUAL_CONNECTORS.has(provider)) throw new Error("This connector cannot be set by hand.");
+  saveConnector(provider, values);
+}
+
 export function removeConnector(provider) {
+  knownProvider(provider);
   const store = readStore();
   delete store[provider];
   writeStore(store);

@@ -9,6 +9,10 @@ class SupabaseAuthError(Exception):
     pass
 
 
+class SupabaseUnavailableError(Exception):
+    pass
+
+
 @dataclass(frozen=True)
 class SupabaseUser:
     id: str
@@ -34,15 +38,30 @@ def _parse(body: dict) -> SupabaseUser:
 
 async def fetch_user(access_token: str) -> SupabaseUser:
     if not settings.supabase_url or not settings.supabase_publishable_key:
-        raise SupabaseAuthError("Supabase auth is not configured on the server.")
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.get(
-            f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
-            headers={
-                "apikey": settings.supabase_publishable_key,
-                "Authorization": f"Bearer {access_token}",
-            },
-        )
+        raise SupabaseUnavailableError("Supabase auth is not configured on the server.")
+    if not access_token.strip():
+        raise SupabaseAuthError("The sign-in token is invalid or expired.")
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+                headers={
+                    "apikey": settings.supabase_publishable_key,
+                    "Authorization": f"Bearer {access_token}",
+                },
+            )
+    except httpx.LocalProtocolError as e:
+        raise SupabaseAuthError("The sign-in token is invalid or expired.") from e
+    except httpx.HTTPError as e:
+        raise SupabaseUnavailableError("Sign-in is unavailable right now. Try again.") from e
+    if response.status_code >= 500:
+        raise SupabaseUnavailableError("Sign-in is unavailable right now. Try again.")
     if response.status_code != 200:
         raise SupabaseAuthError("The sign-in token is invalid or expired.")
-    return _parse(response.json())
+    try:
+        body = response.json()
+    except ValueError as e:
+        raise SupabaseUnavailableError("Sign-in is unavailable right now. Try again.") from e
+    if not isinstance(body, dict):
+        raise SupabaseUnavailableError("Sign-in is unavailable right now. Try again.")
+    return _parse(body)

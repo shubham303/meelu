@@ -215,6 +215,14 @@ class SocialListeningService:
             and await social_listening_runs.get(db, site_id, body.run_id) is None
         ):
             raise HTTPException(404, f"No listening run {body.run_id} for this website.")
+        query_ids = sorted({item.query_id for item in body.posts if item.query_id is not None})
+        unknown = set(query_ids) - await social_listening_queries.existing_ids(
+            db, site_id, query_ids
+        )
+        if unknown:
+            raise HTTPException(
+                404, f"No listening query {', '.join(sorted(unknown))} for this website."
+            )
         candidates: dict[str, dict] = {}
         received = 0
         for item in body.posts:

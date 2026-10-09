@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { safeStorage } from "electron";
-import { appFile } from "../paths.js";
+import { appFile, writeSecretFile } from "../paths.js";
 
 function tokenFile() {
   return appFile("crawl-tokens.enc");
@@ -15,23 +15,17 @@ function readTokens() {
     return {};
   }
   try {
-    const body = safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(raw)
-      : raw.toString("utf8");
-    return JSON.parse(body);
+    return JSON.parse(safeStorage.decryptString(raw));
   } catch {
     return {};
   }
 }
 
 function writeTokens(tokens) {
-  const body = JSON.stringify(tokens);
-  fs.writeFileSync(
-    tokenFile(),
-    safeStorage.isEncryptionAvailable()
-      ? safeStorage.encryptString(body)
-      : Buffer.from(body, "utf8"),
-  );
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Secure storage is unavailable on this machine, so the crawl token was not saved.");
+  }
+  writeSecretFile(tokenFile(), safeStorage.encryptString(JSON.stringify(tokens)));
 }
 
 export function crawlToken(domain) {

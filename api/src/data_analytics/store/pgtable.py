@@ -157,12 +157,21 @@ class PgTable:
     def get_frame(self) -> pd.DataFrame:
         with user_txn(self.ctx) as conn:
             all_cols = self._all_columns(conn)
-            n = int(conn.exec_driver_sql(f"SELECT COUNT(*) FROM {self.qualified}").fetchone()[0])
+            n, size = conn.exec_driver_sql(
+                f"SELECT COUNT(*), COALESCE(SUM(pg_column_size(t.*)), 0) FROM {self.qualified} t"
+            ).fetchone()
             if n > settings.agent_max_frame_rows:
                 raise TableError(
                     f"{self.key} has {n} rows, above the {settings.agent_max_frame_rows}-row analysis "
                     f"limit. Materialize a filtered or aggregated table in your workspace "
                     f"schema with run_sql first, then analyze that."
+                )
+            if size > settings.agent_max_frame_bytes:
+                raise TableError(
+                    f"{self.key} holds {int(size) // 1024**2} MB, above the "
+                    f"{settings.agent_max_frame_bytes // 1024**2} MB analysis limit. Materialize "
+                    f"a table with only the columns you need in your workspace schema with "
+                    f"run_sql first, then analyze that."
                 )
             cols = [c for c in all_cols if c != _ROW_ID]
             select = ", ".join(quote_ident(c) for c in cols)

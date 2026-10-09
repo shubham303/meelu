@@ -41,7 +41,7 @@ async def seo_ranked_keywords(
 async def seo_trend(
     keywords: list[str], location_code: int | None = None, language_code: str | None = None
 ) -> dict:
-    """Daily interest over time for keywords. Five keywords per vendor call."""
+    """Daily interest over time for up to 50 keywords. Five keywords per vendor call."""
     async with unit_of_work() as db:
         return await seo_data.trend(db, caller(), keywords, location_code, language_code)
 
@@ -75,8 +75,8 @@ async def seo_llm_mentions(
     location_code: int | None = None,
     language_code: str | None = None,
 ) -> dict:
-    """Prompts on an AI platform whose answers mention a domain or keyword, with cited URLs
-    and co-mentioned brands."""
+    """Prompts on an AI platform whose answers mention a domain or keyword (up to ten
+    targets), with cited URLs and co-mentioned brands."""
     async with unit_of_work() as db:
         return await seo_data.llm_mentions(
             db,

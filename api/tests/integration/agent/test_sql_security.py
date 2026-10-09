@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.engine import make_url
 
 from src.agent.context import AgentContext, reset_context, set_context
-from src.agent.security import bootstrap, ensure_user
+from src.agent.security import bootstrap, drop_user, ensure_user
 from src.agent.sql import engine
 from src.agent.tools.core import run_sql
 from src.agent.workspace import workspace_tables
@@ -50,7 +50,15 @@ async def pair(client):
     a = await tenant(client, f"sql-a-{run}@example.com", f"a{run}.example.com")
     b = await tenant(client, f"sql-b-{run}@example.com", f"b{run}.example.com")
     await asyncio.to_thread(bootstrap)
-    return a, b
+    yield a, b
+    for ctx in (a, b):
+        await asyncio.to_thread(drop_user, ctx.user_id)
+
+
+def role_exists(role: str) -> bool:
+    with engine.begin() as conn:
+        found = conn.exec_driver_sql("SELECT 1 FROM pg_roles WHERE rolname = %s", (role,))
+        return found.fetchone() is not None
 
 
 async def test_agent_runs_as_its_own_login_role(pair):
@@ -103,17 +111,28 @@ def drop_child_table() -> None:
         conn.exec_driver_sql(f"DROP TABLE IF EXISTS {CHILD_TABLE}")
 
 
-async def test_child_tables_without_user_id_are_scoped_through_their_parent(pair):
+async def test_only_listed_tables_are_readable(pair):
     a, _ = pair
     await asyncio.to_thread(create_child_table)
     try:
         granted = (await asyncio.to_thread(bootstrap)).granted
-        assert CHILD_TABLE in granted
-        assert "alembic_version" not in granted
-        assert (await sql(a, f"select count(*) from {CHILD_TABLE}")).rows == [[0]]
+        assert CHILD_TABLE not in granted
+        for table in ("payment", "credit_ledger", "provider_call", "api_keys", "user"):
+            assert table not in granted
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                await sql(a, f'select count(*) from "{table}"')
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            await sql(a, f"select count(*) from {CHILD_TABLE}")
     finally:
         await asyncio.to_thread(drop_child_table)
         await asyncio.to_thread(bootstrap)
+
+
+async def test_child_tables_without_user_id_are_scoped_through_their_parent(pair):
+    a, _ = pair
+    granted = (await asyncio.to_thread(bootstrap)).granted
+    assert "seo_keyword_cluster_competitors" in granted
+    assert (await sql(a, "select count(*) from seo_keyword_cluster_competitors")).rows == [[0]]
 
 
 async def test_agent_cannot_write_into_another_workspace(pair):
@@ -122,13 +141,54 @@ async def test_agent_cannot_write_into_another_workspace(pair):
         await sql(a, f'create table "{b.schema}".stolen (x int)')
 
 
-async def test_workspace_reads_run_as_the_tenant(pair):
+async def test_agent_cannot_create_functions_or_large_objects(pair):
+    a, _ = pair
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        await sql(a, "create function f() returns int language sql as $$ select 1 $$")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        await sql(a, "do $$ begin perform 1; end $$")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        await sql(a, "select lo_from_bytea(0, 'x'::bytea)")
+
+
+async def test_tenant_limits_cannot_be_raised(pair):
+    a, _ = pair
+    assert (await sql(a, "show temp_file_limit")).rows == [["1GB"]]
+    assert (await sql(a, "show hash_mem_multiplier")).rows == [["2"]]
+    assert (await sql(a, "show maintenance_work_mem")).rows == [["64MB"]]
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        await sql(a, "set temp_file_limit = -1")
+
+
+async def test_large_results_are_refused(pair):
+    a, _ = pair
+    with pytest.raises(ValueError, match="larger than"):
+        await sql(a, "select repeat('x', 1024 * 1024) from generate_series(1, 10)")
+    result = await sql(a, "select g from generate_series(1, 100000) g")
+    assert result.truncated and result.row_count == 200
+
+
+async def test_full_workspace_refuses_more_sql(pair, monkeypatch):
     a, _ = pair
     await sql(
-        a,
-        "create function whoami() returns text language sql as $$ select current_user::text $$",
+        a, "create table filler as select repeat('x', 1000) as v from generate_series(1, 100)"
     )
-    await sql(a, "create view probe as select whoami() as who")
+    monkeypatch.setattr(settings, "agent_max_workspace_bytes", 1024)
+    with pytest.raises(ValueError, match="quota"):
+        await sql(a, "select 1")
+
+
+async def test_dropping_a_user_removes_its_role_and_schema(client):
+    run = uuid.uuid4().hex[:8]
+    ctx = await tenant(client, f"sql-d-{run}@example.com", f"d{run}.example.com")
+    await sql(ctx, "create table kept as select 1 as n")
+    await asyncio.to_thread(drop_user, ctx.user_id)
+    assert not await asyncio.to_thread(role_exists, ctx.role)
+
+
+async def test_workspace_reads_run_as_the_tenant(pair):
+    a, _ = pair
+    await sql(a, "create view probe as select current_user::text as who")
     rows = await workspace_tables.rows(a.user_id, "probe")
     assert rows == [{"who": a.role}]
 

@@ -45,8 +45,7 @@ const bridge = {
   getLlmConfig: () => ipcRenderer.invoke("llm:get"),
   setLlmConfig: (cfg) => ipcRenderer.invoke("llm:set", cfg),
   getConnectors: () => ipcRenderer.invoke("connectors:list"),
-  setConnector: (provider, values, secretKeys) =>
-    ipcRenderer.invoke("connectors:set", provider, values, secretKeys),
+  setConnector: (provider, values) => ipcRenderer.invoke("connectors:set", provider, values),
   removeConnector: (provider) => ipcRenderer.invoke("connectors:remove", provider),
   connectGsc: () => ipcRenderer.invoke("connectors:connectGsc"),
   connectGa4: () => ipcRenderer.invoke("connectors:connectGa4"),

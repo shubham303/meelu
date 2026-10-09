@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { safeStorage } from "electron";
 import { LLAMACPP_BASE_URL, OPENROUTER_BASE_URL } from "../../config.js";
-import { appFile } from "../../paths.js";
+import { appFile, writeSecretFile } from "../../paths.js";
 
 const PROVIDERS = new Set(["anthropic", "openrouter", "llamacpp", "custom"]);
 
@@ -45,12 +45,17 @@ export function loadLlmConfig() {
 
 export function saveLlmConfig({ provider, model, baseUrl, apiKey }) {
   const prev = loadLlmConfig();
-  const key = apiKey === undefined ? (prev?.apiKey ?? "") : apiKey.trim();
   const record = {
     provider: named(provider),
     model: (model ?? "").trim(),
     baseUrl: (baseUrl ?? "").trim().replace(/\/+$/, ""),
   };
+  const sameEndpoint =
+    prev !== null &&
+    prev.provider === record.provider &&
+    prev.baseUrl === urlFor(record.provider, record.baseUrl);
+  const keptKey = sameEndpoint ? prev.apiKey : "";
+  const key = apiKey === undefined ? keptKey : apiKey.trim();
   if (record.provider === "custom" && !record.baseUrl) {
     throw new Error("A custom provider needs a base URL (e.g. http://localhost:11434).");
   }
@@ -71,7 +76,7 @@ export function saveLlmConfig({ provider, model, baseUrl, apiKey }) {
     }
     record.apiKeyEnc = safeStorage.encryptString(key).toString("base64");
   }
-  fs.writeFileSync(configFile(), JSON.stringify(record, null, 2));
+  writeSecretFile(configFile(), JSON.stringify(record, null, 2));
 }
 
 export function describeLlmConfig() {

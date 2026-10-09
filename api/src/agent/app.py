@@ -11,6 +11,7 @@ from src.agent.server import mcp
 from src.agent_plans.service import agent_plan_service
 from src.core.database import unit_of_work
 from src.core.logging import configure_logging
+from src.settings import settings
 
 configure_logging()
 
@@ -26,7 +27,13 @@ async def lifespan(app: FastAPI):
         yield
 
 
-app = FastAPI(title="meelu-agent", lifespan=lifespan)
+app = FastAPI(
+    title="meelu-agent",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
+    openapi_url="/openapi.json" if settings.api_docs_enabled else None,
+)
 
 
 @app.get("/health")

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Notification, shell } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, Notification, session, shell } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -40,11 +40,14 @@ import {
   listConnectors,
   removeConnector,
   saveConnector,
+  saveManualConnector,
 } from "./connector-config.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BASE_URL = ENV_DEFAULTS.meeluBaseUrl;
 const DASH_URL = `${BASE_URL}/dashboard`;
+const TRUSTED_ORIGIN = new URL(BASE_URL).origin;
+const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 let win = null;
 let connecting = false;
@@ -118,9 +121,30 @@ function agentCwd() {
   return appDir("agent-workspace");
 }
 
+function parsedUrl(url) {
+  try {
+    return new URL(url);
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedUrl(url) {
+  return parsedUrl(url)?.origin === TRUSTED_ORIGIN;
+}
+
+function opensInMainWindow(url) {
+  const parsed = parsedUrl(url);
+  return parsed?.origin === TRUSTED_ORIGIN && !parsed.pathname.startsWith("/docs");
+}
+
+function openOutside(url) {
+  const parsed = parsedUrl(url);
+  if (parsed && EXTERNAL_PROTOCOLS.has(parsed.protocol)) void shell.openExternal(parsed.toString());
+}
+
 function allowedSender(ev) {
-  const url = ev.senderFrame?.url ?? "";
-  return url === BASE_URL || url.startsWith(`${BASE_URL}/`);
+  return isTrustedUrl(ev.senderFrame?.url ?? "");
 }
 
 function emitCrawl(event, data) {
@@ -266,7 +290,11 @@ function registerAgentIpc() {
 
   ipcMain.handle("site:crawlToken", (ev, { domain } = {}) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return { token: crawlToken(domain) };
+    try {
+      return { token: crawlToken(domain) };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not create a crawl token." };
+    }
   });
 
   ipcMain.handle("site:searchSync", async (ev, payload) => {
@@ -399,10 +427,10 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     return listConnectors();
   });
-  ipcMain.handle("connectors:set", (ev, provider, values, secretKeys) => {
+  ipcMain.handle("connectors:set", (ev, provider, values) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     try {
-      saveConnector(provider, values ?? {}, secretKeys ?? []);
+      saveManualConnector(provider, values ?? {});
       return listConnectors();
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Could not save." };
@@ -410,8 +438,12 @@ function registerAgentIpc() {
   });
   ipcMain.handle("connectors:remove", (ev, provider) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    removeConnector(provider);
-    return listConnectors();
+    try {
+      removeConnector(provider);
+      return listConnectors();
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not remove." };
+    }
   });
 
   const providersFor = async () =>
@@ -445,7 +477,7 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     try {
       const { refreshToken } = await connectSearchConsole();
-      saveConnector("gsc", { refreshToken }, ["refreshToken"]);
+      saveConnector("gsc", { refreshToken });
       return listConnectors();
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Could not connect Search Console." };
@@ -456,7 +488,7 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     try {
       const { refreshToken } = await connectAnalytics();
-      saveConnector("ga4", { refreshToken }, ["refreshToken"]);
+      saveConnector("ga4", { refreshToken });
       return listConnectors();
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Could not connect Google Analytics." };
@@ -591,7 +623,40 @@ function registerScreenshotShortcut() {
   });
 }
 
+function lockDownDefaultSession() {
+  const ses = session.defaultSession;
+  const allowed = (permission, url) =>
+    permission === "clipboard-sanitized-write" && isTrustedUrl(url);
+  ses.setPermissionRequestHandler((_contents, permission, callback, details) => {
+    callback(allowed(permission, details?.requestingUrl ?? ""));
+  });
+  ses.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
+    allowed(permission, requestingOrigin),
+  );
+}
+
+function guardNavigation(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    if (opensInMainWindow(url)) {
+      void contents.loadURL(url);
+    } else {
+      openOutside(url);
+    }
+    return { action: "deny" };
+  });
+  const keepInside = (ev, url) => {
+    if (opensInMainWindow(url)) return;
+    ev.preventDefault();
+    openOutside(url);
+  };
+  contents.on("will-navigate", keepInside);
+  contents.on("will-redirect", (ev, url, _inPlace, isMainFrame) => {
+    if (isMainFrame) keepInside(ev, url);
+  });
+}
+
 function boot() {
+  lockDownDefaultSession();
   registerAgentIpc();
 
   win = new BrowserWindow({
@@ -606,23 +671,12 @@ function boot() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      devTools: !app.isPackaged,
       ...(app.isPackaged ? {} : { additionalArguments: ["--meelu-dev-annotator"] }),
     },
   });
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(BASE_URL) || url.startsWith(`${BASE_URL}/docs`)) {
-      shell.openExternal(url);
-      return { action: "deny" };
-    }
-    return { action: "allow" };
-  });
-  win.webContents.on("will-navigate", (ev, url) => {
-    if (!url.startsWith(BASE_URL) && !url.startsWith("file:")) {
-      ev.preventDefault();
-      shell.openExternal(url);
-    }
-  });
+  guardNavigation(win.webContents);
 
   registerScreenshotShortcut();
 
@@ -671,6 +725,15 @@ function boot() {
   }
 }
 
-app.whenReady().then(boot);
-app.on("before-quit", () => closeAgentSessions());
-app.on("window-all-closed", () => app.quit());
+if (app.requestSingleInstanceLock()) {
+  app.on("second-instance", () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+  app.whenReady().then(boot);
+  app.on("before-quit", () => closeAgentSessions());
+  app.on("window-all-closed", () => app.quit());
+} else {
+  app.quit();
+}

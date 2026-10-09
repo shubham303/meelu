@@ -1,0 +1,97 @@
+name: App build
+
+on:
+  workflow_dispatch:
+    inputs:
+      flavour:
+        description: Which endpoints the app is built against
+        type: choice
+        options:
+          - prod
+          - test
+        default: prod
+  push:
+    tags:
+      - "app-v*"
+
+permissions:
+  contents: read
+
+env:
+  DIST_SUFFIX: ${{ inputs.flavour == 'test' && ':test' || '' }}
+
+jobs:
+  mac:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Write the OAuth client
+        env:
+          MEELU_OAUTH_CLIENT_JSON: ${{ secrets.MEELU_OAUTH_CLIENT_JSON }}
+        run: |
+          if [ -n "$MEELU_OAUTH_CLIENT_JSON" ]; then
+            printf '%s' "$MEELU_OAUTH_CLIENT_JSON" > oauth-client.json
+          fi
+
+      - name: Install for arm64
+        run: npm ci --os=darwin --cpu=arm64
+
+      - name: Build arm64
+        run: npm run "dist:mac${DIST_SUFFIX}" -- --arm64
+
+      - name: Install for x64
+        run: npm ci --os=darwin --cpu=x64
+
+      - name: Build x64
+        run: npm run "dist:mac${DIST_SUFFIX}" -- --x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: app/dist/Meelu*.dmg
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Write the OAuth client
+        env:
+          MEELU_OAUTH_CLIENT_JSON: ${{ secrets.MEELU_OAUTH_CLIENT_JSON }}
+        run: |
+          if [ -n "$MEELU_OAUTH_CLIENT_JSON" ]; then
+            printf '%s' "$MEELU_OAUTH_CLIENT_JSON" > oauth-client.json
+          fi
+
+      - name: Install
+        run: npm ci
+
+      - name: Build x64
+        run: npm run "dist:win${DIST_SUFFIX}" -- --x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: app/dist/Meelu*.exe
+          if-no-files-found: error

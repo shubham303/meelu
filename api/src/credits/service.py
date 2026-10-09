@@ -51,6 +51,10 @@ class CreditService:
         micros = await credit_accounts.balance(db, user_id)
         return BalanceResponse(balance_micros=micros, balance_usd=micros / 1_000_000)
 
+    async def hold_spend(self, db: AsyncSession, user_id: str) -> int:
+        await credit_accounts.lock_spend(db, user_id)
+        return await self.require_balance(db, user_id)
+
     async def require_balance(self, db: AsyncSession, user_id: str) -> int:
         micros = await credit_accounts.balance(db, user_id)
         floor = pricing.minimum_balance_micros()

@@ -26,6 +26,8 @@ MAX_BRAND_EXCLUSIONS = 8
 OVERVIEW_KEYWORDS_PER_REQUEST = 700
 HISTORY_KEYWORDS_PER_REQUEST = 700
 TRENDS_PER_REQUEST = 5
+MAX_TREND_KEYWORDS = 50
+MAX_LLM_TARGETS = 10
 SERP_COMPETITOR_KEYWORDS = 100
 
 TTL = timedelta(days=7)
@@ -263,6 +265,11 @@ class SeoDataProvider(ProviderFacade):
     ) -> dict:
         locale = locale_of(location_code, language_code)
         wanted = normalize_keywords(keywords)
+        if len(wanted) > MAX_TREND_KEYWORDS:
+            raise ConflictError(
+                f"At most {MAX_TREND_KEYWORDS} keywords per trend pull and {len(wanted)} were "
+                f"given. Pick the keywords that matter and split the rest into later pulls."
+            )
         trends: dict[str, list] = {}
         for part in chunk(wanted, TRENDS_PER_REQUEST):
             items = bundle_items(
@@ -380,6 +387,10 @@ class SeoDataProvider(ProviderFacade):
         ]
         if not clean:
             raise ConflictError("Pass at least one target: a domain or a keyword.")
+        if len(clean) > MAX_LLM_TARGETS:
+            raise ConflictError(
+                f"At most {MAX_LLM_TARGETS} targets per mentions pull and {len(clean)} were given."
+            )
         items = bundle_items(
             await self._fetch(
                 db,

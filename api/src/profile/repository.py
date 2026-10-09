@@ -108,22 +108,26 @@ class UserRepository:
 
 
 class AccessTokenRepository:
-    async def create(self, db: AsyncSession, user_id: str, token: str) -> None:
-        db.add(AccessToken(token=token, user_id=user_id))
+    async def create(self, db: AsyncSession, user_id: str, token_hash: str) -> None:
+        db.add(AccessToken(token_hash=token_hash, user_id=user_id))
         await db.flush()
 
     async def find_user_id(
-        self, db: AsyncSession, token: str, created_after: datetime
+        self, db: AsyncSession, token_hash: str, created_after: datetime
     ) -> str | None:
         result = await db.execute(
             select(AccessToken.user_id).where(
-                AccessToken.token == token, AccessToken.created_at > created_after
+                AccessToken.token_hash == token_hash, AccessToken.created_at > created_after
             )
         )
         return result.scalar_one_or_none()
 
-    async def delete(self, db: AsyncSession, token: str) -> None:
-        await db.execute(delete(AccessToken).where(AccessToken.token == token))
+    async def delete(self, db: AsyncSession, token_hash: str) -> None:
+        await db.execute(delete(AccessToken).where(AccessToken.token_hash == token_hash))
+
+    async def delete_created_before(self, db: AsyncSession, cutoff: datetime) -> int:
+        result = await db.execute(delete(AccessToken).where(AccessToken.created_at <= cutoff))
+        return result.rowcount or 0
 
 
 profiles = ProfileRepository()

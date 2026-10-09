@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
 
 import src.core.tables  # noqa: F401
-from src.agent.security import BLOCKED_TABLES
+from src.agent.security import READABLE_TABLES
 from src.agent_scope.lib import SiteRef
 from src.agent_scope.registry import (
     AGENT_SCOPES,
@@ -18,14 +18,14 @@ from tests.conftest import signup
 SITE = SiteRef(id="site_scope_0001", name="Acme Coffee Gear", domain="acmecoffeegear.example")
 
 
-def test_every_scope_lists_real_unblocked_tables():
+def test_every_scope_lists_real_readable_tables():
     for action, scope in AGENT_SCOPES.items():
         assert scope.desk in DESK_NAMES, action
         if scope.tables is None:
             continue
         names = {t.__tablename__ for t in scope.tables}
         assert names <= set(Base.metadata.tables), action
-        assert not names & BLOCKED_TABLES, action
+        assert names <= READABLE_TABLES, action
 
 
 def test_render_tables_lists_the_scopes_columns():
@@ -34,8 +34,8 @@ def test_render_tables_lists_the_scopes_columns():
     assert "- notes: " in text
     full = agent_scope_service.render_tables(None)
     assert "- site_pages: " in full
-    for blocked in BLOCKED_TABLES:
-        assert f"- {blocked}: " not in full
+    for table in Base.metadata.tables:
+        assert (f"- {table}: " in full) == (table in READABLE_TABLES), table
 
 
 def test_every_action_writes_through_registered_tools():
@@ -137,7 +137,7 @@ def test_resolve_scope_rejects_unknown_action():
 async def scope_client():
     from src.app import app
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as c:
         yield c
 
 

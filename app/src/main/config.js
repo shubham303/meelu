@@ -2,13 +2,26 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
+import { app } from "electron";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const APP_ROOT = path.resolve(here, "../..");
 export const REPO_ROOT = path.resolve(APP_ROOT, "..");
 
-dotenv.config({ path: path.join(APP_ROOT, ".env"), quiet: true });
+if (!app.isPackaged) dotenv.config({ path: path.join(APP_ROOT, ".env"), quiet: true });
+
+const env = app.isPackaged ? {} : process.env;
+
+const PACKAGED_ENDPOINTS = {
+  prod: { meeluBaseUrl: "https://app.meelu.tech", agentMcpUrl: "https://agent.meelu.tech/mcp/" },
+  test: { meeluBaseUrl: "https://test.meelu.tech", agentMcpUrl: "https://test-agent.meelu.tech/mcp/" },
+};
+
+function buildFlavour() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(APP_ROOT, "package.json"), "utf8"));
+  return pkg.meeluFlavour === "test" ? "test" : "prod";
+}
 
 function bundledOauthClient() {
   try {
@@ -21,24 +34,26 @@ function bundledOauthClient() {
 const bundled = bundledOauthClient();
 
 export const GSC_OAUTH_CLIENT = {
-  clientId: process.env.MEELU_GSC_CLIENT_ID || bundled.clientId || "",
-  clientSecret: process.env.MEELU_GSC_CLIENT_SECRET || bundled.clientSecret || "",
+  clientId: env.MEELU_GSC_CLIENT_ID || bundled.clientId || "",
+  clientSecret: env.MEELU_GSC_CLIENT_SECRET || bundled.clientSecret || "",
 };
 
 export const GA_OAUTH_CLIENT = {
-  clientId: process.env.MEELU_GA_CLIENT_ID || bundled.clientId || "",
-  clientSecret: process.env.MEELU_GA_CLIENT_SECRET || bundled.clientSecret || "",
+  clientId: env.MEELU_GA_CLIENT_ID || bundled.clientId || "",
+  clientSecret: env.MEELU_GA_CLIENT_SECRET || bundled.clientSecret || "",
 };
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 
 export const LLAMACPP_BASE_URL = "http://127.0.0.1:8080";
 
-export const ENV_DEFAULTS = {
-  meeluApiKey: process.env.MEELU_API_KEY ?? "",
-  meeluBaseUrl: (process.env.MEELU_BASE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
-  agentMcpUrl: (process.env.MEELU_AGENT_MCP_URL ?? "http://127.0.0.1:8484/mcp/").replace(/\/?$/, "/"),
-};
+export const ENV_DEFAULTS = app.isPackaged
+  ? { meeluApiKey: "", ...PACKAGED_ENDPOINTS[buildFlavour()] }
+  : {
+      meeluApiKey: env.MEELU_API_KEY ?? "",
+      meeluBaseUrl: (env.MEELU_BASE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+      agentMcpUrl: (env.MEELU_AGENT_MCP_URL ?? "http://127.0.0.1:8484/mcp/").replace(/\/?$/, "/"),
+    };
 
 export function meeluAuthHeaders(cookieHeader) {
   if (cookieHeader) return { Cookie: cookieHeader };

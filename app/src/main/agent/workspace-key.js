@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { safeStorage } from "electron";
-import { appFile } from "../paths.js";
+import { appFile, writeSecretFile } from "../paths.js";
 
 function cacheFile() {
   return appFile("workspace-keys.json");
@@ -28,7 +28,7 @@ function write(map) {
         "be saved. Set MEELU_API_KEY (Dashboard → Settings → API keys) instead.",
     );
   }
-  fs.writeFileSync(
+  writeSecretFile(
     cacheFile(),
     JSON.stringify(
       { updatedAt: new Date().toISOString(), keysEnc: safeStorage.encryptString(JSON.stringify(map)).toString("base64") },

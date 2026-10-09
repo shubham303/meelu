@@ -195,6 +195,7 @@ async def serve_media(
             "content-type": media.content_type,
             "content-length": str(len(media.data)),
             "cache-control": "private, max-age=31536000, immutable",
+            "x-content-type-options": "nosniff",
         },
     )
 

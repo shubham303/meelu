@@ -22,7 +22,13 @@ def _dir(ctx: AgentContext) -> Path:
 
 
 def save_model(ctx: AgentContext, name: str, model) -> None:
-    with open(_dir(ctx) / f"{_safe(name)}.pkl", "wb") as fh:
+    path = _dir(ctx) / f"{_safe(name)}.pkl"
+    if not path.exists() and len(list_models(ctx)) >= settings.agent_max_models:
+        raise ValueError(
+            f"Your workspace already holds {settings.agent_max_models} saved models. Reuse an "
+            "existing model name to overwrite it."
+        )
+    with open(path, "wb") as fh:
         pickle.dump(model, fh)
 
 

@@ -32,6 +32,7 @@ async def test_media_round_trip(client, workspace):
     assert r.headers["content-type"] == "image/png"
     assert r.headers["content-length"] == str(len(PNG))
     assert r.headers["cache-control"] == "private, max-age=31536000, immutable"
+    assert r.headers["x-content-type-options"] == "nosniff"
 
     r = await client.get("/api/v1/content/media/pmd_missing00")
     assert r.status_code == 404

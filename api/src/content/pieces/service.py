@@ -15,6 +15,7 @@ from src.content.schemas.pieces import (
     PieceMediaResult,
 )
 from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.site_pages.repositories.pages import site_pages
 
 PAGE_FIELDS = ("title", "h1", "meta_description", "slug", "target_keyword", "body_markdown")
 
@@ -36,6 +37,11 @@ def _checks_values(values: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _yaml_value(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+async def _require_site_page(db: AsyncSession, site_id: str, page_id: str | None) -> None:
+    if page_id and not await site_pages.exists(db, site_id, page_id):
+        raise HTTPException(422, "source_page_id is not a page of this site")
 
 
 class ContentPieceService:
@@ -64,6 +70,7 @@ class ContentPieceService:
         *,
         actor: str,
     ) -> ContentPieceRecord:
+        await _require_site_page(db, site_id, body.source_page_id)
         media = await piece_media_service.resolve(db, user_id, body) or PieceMediaResult()
         page = {
             "title": body.title,
@@ -107,6 +114,7 @@ class ContentPieceService:
         for field in ("slug", "target_keyword", "source_page_id"):
             if body.has(field):
                 values[field] = getattr(body, field) or None
+        await _require_site_page(db, site_id, values.get("source_page_id"))
         if "body_markdown" in values:
             values["word_count"] = _word_count(values["body_markdown"])
         media = await piece_media_service.resolve(db, user_id, body)

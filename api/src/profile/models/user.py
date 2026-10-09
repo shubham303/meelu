@@ -31,7 +31,7 @@ class AccessToken(Base):
     user_id: Mapped[str] = mapped_column(
         String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False
     )
-    token: Mapped[str] = mapped_column(String(43), primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         index=True,

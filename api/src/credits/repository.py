@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,11 @@ from src.credits.schemas import LedgerEntryResponse, SiteBillingRecord
 
 
 class CreditAccountRepository:
+    async def lock_spend(self, db: AsyncSession, user_id: str) -> None:
+        await db.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"credit_spend:{user_id}")))
+        )
+
     async def ensure(self, db: AsyncSession, user_id: str) -> None:
         await db.execute(
             insert(CreditAccount)
