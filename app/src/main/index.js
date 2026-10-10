@@ -3,7 +3,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENV_DEFAULTS, REPO_ROOT } from "./config.js";
+import { ENV_DEFAULTS, REPO_ROOT, UPDATE_MANIFEST_URL } from "./config.js";
+import { startUpdateCheck } from "./update-check.js";
 import { connectSearchConsole } from "./integrations/gsc/oauth.js";
 import { connectAnalytics } from "./integrations/ga/oauth.js";
 import {
@@ -51,6 +52,7 @@ const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 let win = null;
 let connecting = false;
+let updates = { current: () => null };
 
 const permissionGrants = { full: false, always: new Set() };
 const pendingPermissions = new Map();
@@ -164,6 +166,10 @@ function emitRender(event, data) {
   if (win && !win.isDestroyed()) win.webContents.send("render:event", { event, data });
 }
 
+function emitUpdate(update) {
+  if (win && !win.isDestroyed()) win.webContents.send("app:update-event", update);
+}
+
 async function sessionCookieHeader() {
   const cookies = await win.webContents.session.cookies.get({ url: BASE_URL });
   return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
@@ -212,6 +218,19 @@ function registerAgentIpc() {
     if (decision === "always") permissionGrants.always.add(pending.tool);
     if (decision === "full") permissionGrants.full = true;
     pending.resolve(decision === "deny" ? "deny" : "allow");
+    return { ok: true };
+  });
+
+  ipcMain.handle("app:update", (ev) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return { update: updates.current() };
+  });
+
+  ipcMain.handle("app:downloadUpdate", (ev) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    const update = updates.current();
+    if (!update) return { ok: false };
+    void shell.openExternal(update.downloadUrl);
     return { ok: true };
   });
 
@@ -707,6 +726,13 @@ function boot() {
   });
 
   startPageReviewSchedule({ cookieHeader: sessionCookieHeader, llm: loadLlmConfig, log });
+
+  updates = startUpdateCheck({
+    manifestUrl: UPDATE_MANIFEST_URL,
+    currentVersion: app.getVersion(),
+    onUpdate: emitUpdate,
+    log,
+  });
 
 
   if (process.env.MEELU_SHOT && !app.isPackaged) {

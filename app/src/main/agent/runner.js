@@ -511,7 +511,7 @@ function baseEnv() {
   );
 }
 
-function claudeExecutable() {
+export function claudeExecutable() {
   if (!app.isPackaged) return {};
   const binary = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude${process.platform === "win32" ? ".exe" : ""}`;
   const resolved = createRequire(import.meta.url).resolve(binary);
@@ -523,7 +523,7 @@ function claudeExecutable() {
 export function llmEnv(gateway, anthropicKey, limits) {
   return {
     ...baseEnv(),
-    CLAUDE_AGENT_SDK_CLIENT_APP: "meelu-app/0.1.0",
+    CLAUDE_AGENT_SDK_CLIENT_APP: `meelu-app/${app.getVersion()}`,
     ENABLE_CLAUDEAI_MCP_SERVERS: "false",
     CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
     ...(gateway

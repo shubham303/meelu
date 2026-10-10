@@ -100,6 +100,21 @@ jobs:
     needs: [mac, windows]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read the app version
+        id: version
+        run: |
+          version=$(node -p 'require("./app/package.json").version')
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "app-v${version}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match app/package.json version ${version}" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -123,3 +138,24 @@ jobs:
             esac
             aws s3 cp "$f" "s3://meelu-downloads/${PREFIX}$(basename "$f")" --endpoint-url "$R2_ENDPOINT" --content-type "$type" --cache-control "no-cache" --only-show-errors
           done
+
+      - name: Announce the version to installed apps
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          PREFIX: ${{ inputs.flavour == 'test' && 'test/' || '' }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          base="https://downloads.meelu.tech/${PREFIX}"
+          installer() { basename "$(ls dist/$1)"; }
+          jq -n \
+            --arg version "$VERSION" \
+            --arg macArm "${base}$(installer '*-mac-arm64.dmg')" \
+            --arg macX64 "${base}$(installer '*-mac-x64.dmg')" \
+            --arg win "${base}$(installer '*-windows-x64.exe')" \
+            '{version: $version, installers: {"darwin-arm64": $macArm, "darwin-x64": $macX64, "win32-x64": $win}}' \
+            > version.json
+          cat version.json
+          aws s3 cp version.json "s3://meelu-downloads/${PREFIX}version.json" --endpoint-url "$R2_ENDPOINT" --content-type application/json --cache-control "no-cache" --only-show-errors

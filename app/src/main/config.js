@@ -23,6 +23,12 @@ function buildFlavour() {
   return pkg.meeluFlavour === "test" ? "test" : "prod";
 }
 
+export const BUILD_FLAVOUR = buildFlavour();
+
+export const UPDATE_MANIFEST_URL = app.isPackaged
+  ? `https://downloads.meelu.tech/${BUILD_FLAVOUR === "test" ? "test/" : ""}version.json`
+  : env.MEELU_UPDATE_MANIFEST_URL ?? "";
+
 function bundledOauthClient() {
   try {
     return JSON.parse(fs.readFileSync(path.join(APP_ROOT, "oauth-client.json"), "utf8"));
@@ -48,7 +54,7 @@ export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
 export const LLAMACPP_BASE_URL = "http://127.0.0.1:8080";
 
 export const ENV_DEFAULTS = app.isPackaged
-  ? { meeluApiKey: "", ...PACKAGED_ENDPOINTS[buildFlavour()] }
+  ? { meeluApiKey: "", ...PACKAGED_ENDPOINTS[BUILD_FLAVOUR] }
   : {
       meeluApiKey: env.MEELU_API_KEY ?? "",
       meeluBaseUrl: (env.MEELU_BASE_URL ?? "http://localhost:3000").replace(/\/$/, ""),

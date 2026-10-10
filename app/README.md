@@ -74,18 +74,29 @@ MEELU_SHOT=/tmp/meelu.png npm run dev   # screenshot after load, then quits
 ```bash
 npm run dist:mac -- --arm64   # dist/Meelu-mac-arm64.dmg (unsigned)
 npm run dist:win              # dist/Meelu-windows-x64.exe (unsigned)
-npm run dist:mac:test         # Meelu-Test-*: built against test.meelu.tech
+npm run dist:mac:test         # Meelu-Test-*: built against test-ui.meelu.tech
 ```
 
 A packaged app ignores `.env` and the `MEELU_*` endpoint variables: it always
-talks to `https://app.meelu.tech` and `https://agent.meelu.tech/mcp/` (the test
-flavour to `test.meelu.tech` and `test-agent.meelu.tech`). Each architecture
+talks to `https://ui.meelu.tech` and `https://agent.meelu.tech/mcp/` (the test
+flavour to `test-ui.meelu.tech` and `test-agent.meelu.tech`). Each architecture
 needs its own native packages (the Claude Code binary, sharp), so build x64 on
 an arm64 Mac after `npm ci --os=darwin --cpu=x64`. `oauth-client.json` is
 bundled when present. CI builds both platforms in
 `.github/workflows/app-build.yml`.
 
+## Release a new version
+
+Bump `version` in `package.json`, then run the `App build` workflow
+(`gh workflow run app-build.yml -f flavour=test`, or push an `app-v<version>`
+tag for prod). After the installers upload, CI writes `version.json` next to
+them on downloads.meelu.tech. Installed apps read it on launch and every six
+hours, and when it is ahead of their own version the dashboard shows a banner
+whose Download button opens the installer for their platform. The user
+installs it over the old app; nothing updates silently. In development, set
+`MEELU_UPDATE_MANIFEST_URL` to try the banner against a local manifest.
+
 ## Deliberately later
 
 Per-user onboarding (key entry UI instead of .env), code signing,
-auto-update.
+in-place auto-update.

@@ -40,6 +40,13 @@ const bridge = {
   },
   abort: (turnId) => ipcRenderer.invoke("agent:abort", turnId),
   sessionUsage: () => ipcRenderer.invoke("usage:session"),
+  appUpdate: () => ipcRenderer.invoke("app:update"),
+  downloadUpdate: () => ipcRenderer.invoke("app:downloadUpdate"),
+  onAppUpdate: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on("app:update-event", listener);
+    return () => ipcRenderer.removeListener("app:update-event", listener);
+  },
   respondPermission: (requestId, decision) =>
     ipcRenderer.invoke("agent:permission", { requestId, decision }),
   getLlmConfig: () => ipcRenderer.invoke("llm:get"),
