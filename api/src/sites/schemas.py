@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 import pycountry
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
+from src.settings import settings
 from src.sites.host import read_host
 
 SiteSort = Literal["created", "name", "domain", "crawled"]
@@ -208,6 +209,7 @@ class SiteRecord(EntityModel):
     domain: str
     name: str
     status: SiteStatus
+    paused_at: datetime | None = None
     markets: list[str]
     language: str | None = None
     repo_url: str | None = None
@@ -236,6 +238,15 @@ class SiteResponse(EntityModel):
     domain: str
     name: str
     status: SiteStatus
+    paused_at: JsDateTime | None = None
+
+    @computed_field
+    @property
+    def deletes_at(self) -> JsDateTime | None:
+        if self.paused_at is None:
+            return None
+        return self.paused_at + timedelta(days=settings.sites_paused_retention_days)
+
     markets: list[str]
     language: str | None = None
     repo_url: str | None = None
@@ -264,6 +275,15 @@ class SiteListItemResponse(EntityModel):
     domain: str
     name: str
     status: SiteStatus
+    paused_at: JsDateTime | None = None
+
+    @computed_field
+    @property
+    def deletes_at(self) -> JsDateTime | None:
+        if self.paused_at is None:
+            return None
+        return self.paused_at + timedelta(days=settings.sites_paused_retention_days)
+
     markets: list[str]
     language: str | None = None
     repo_url: str | None = None

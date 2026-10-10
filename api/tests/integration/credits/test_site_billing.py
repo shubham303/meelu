@@ -100,20 +100,25 @@ async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(clien
 
     r = await client.get("/api/v1/sites")
     assert r.status_code == 200
-    assert r.json()["data"][0]["status"] == "disabled"
+    paused = r.json()["data"][0]
+    assert paused["status"] == "disabled"
+    assert paused["pausedAt"] is not None
 
-    # the failed charge never advanced the clock, so the next sweep retries it
     await make_operator(user_id)
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 5})
     assert r.status_code == 200, r.text
-
-    result = await site_billing_service.sweep()
-    assert result.charged == 1
-    assert result.reactivated == 1
+    assert r.json()["data"]["balanceUsd"] == pytest.approx(5.1 - 0.4)
 
     r = await client.get(f"/api/v1/sites/{site['id']}")
     assert r.status_code == 200
     assert r.json()["data"]["status"] == "active"
+    assert r.json()["data"].get("pausedAt") is None
+
+    r = await client.get("/api/v1/site/pages")
+    assert r.status_code == 200, r.text
+
+    result = await site_billing_service.sweep()
+    assert result.charged == 0
 
 
 async def test_disabled_site_blocks_site_scoped_routes(client, email):
@@ -152,3 +157,133 @@ async def test_vendor_calls_need_the_minimum_balance(client, email):
     await set_balance(user_id, 0.2)
     async with unit_of_work() as db:
         assert await credit_service.require_balance(db, user_id) == 200_000
+
+
+async def test_pause_time_survives_later_sweeps(client, email):
+    await signup(client, email)
+    site = await add_site(client)
+    user_id = await user_id_of(client)
+
+    await set_balance(user_id, 0)
+    await age_billing(site["id"], 25)
+    await site_billing_service.sweep()
+    first = (await client.get(f"/api/v1/sites/{site['id']}")).json()["data"]["pausedAt"]
+
+    await site_billing_service.sweep()
+    again = (await client.get(f"/api/v1/sites/{site['id']}")).json()["data"]["pausedAt"]
+    assert first is not None
+    assert again == first
+
+
+async def test_overdrawn_sites_resume_without_a_second_charge(client, email):
+    from src.credits.service import credit_service
+
+    await signup(client, email)
+    site = await add_site(client)
+    user_id = await user_id_of(client)
+
+    await set_balance(user_id, 0.25)
+    async with unit_of_work() as db:
+        await credit_service.charge_vendor_call(db, user_id, "seo_data", "test", 500_000, None)
+    r = await client.get(f"/api/v1/sites/{site['id']}")
+    assert r.json()["data"]["status"] == "disabled"
+    assert r.json()["data"]["pausedAt"] is not None
+
+    await make_operator(user_id)
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 0.1})
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/api/v1/sites/{site['id']}")
+    assert r.json()["data"]["status"] == "disabled"
+
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 1})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["balanceUsd"] == pytest.approx(0.85)
+    r = await client.get(f"/api/v1/sites/{site['id']}")
+    assert r.json()["data"]["status"] == "active"
+    assert r.json()["data"].get("pausedAt") is None
+
+
+async def test_top_up_without_enough_for_a_day_keeps_the_site_paused(client, email):
+    await signup(client, email)
+    site = await add_site(client)
+    user_id = await user_id_of(client)
+
+    await set_balance(user_id, 0)
+    await age_billing(site["id"], 25)
+    await site_billing_service.sweep()
+
+    await make_operator(user_id)
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 0.1})
+    assert r.status_code == 200, r.text
+    r = await client.get(f"/api/v1/sites/{site['id']}")
+    assert r.json()["data"]["status"] == "disabled"
+    assert await balance_usd(client) == pytest.approx(0.1)
+
+
+async def test_top_up_resumes_sites_in_order_until_credits_run_out(client, email):
+    await signup(client, email)
+    first = await add_site(client, "one.example", "One")
+    user_id = await user_id_of(client)
+    await set_balance(user_id, 1)
+    second = await add_site(client, "two.example", "Two")
+
+    await set_balance(user_id, 0)
+    await age_billing(first["id"], 25)
+    await age_billing(second["id"], 25)
+    await site_billing_service.sweep()
+
+    await make_operator(user_id)
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 0.5})
+    assert r.status_code == 200, r.text
+    states = {s["id"]: s["status"] for s in (await client.get("/api/v1/sites")).json()["data"]}
+    assert states == {first["id"]: "active", second["id"]: "disabled"}
+
+
+async def test_purge_deletes_sites_paused_for_thirty_days(client, email):
+    from src.sites.cron import purge
+
+    await signup(client, email)
+    old = await add_site(client, "old.example", "Old")
+    user_id = await user_id_of(client)
+    await set_balance(user_id, 2)
+    recent = await add_site(client, "recent.example", "Recent")
+    active = await add_site(client, "active.example", "Active")
+
+    async with unit_of_work() as db:
+        await db.execute(
+            text("UPDATE site SET status = 'disabled', paused_at = :t WHERE id = :s"),
+            {"t": datetime.now(UTC) - timedelta(days=30, minutes=1), "s": old["id"]},
+        )
+        await db.execute(
+            text("UPDATE site SET status = 'disabled', paused_at = :t WHERE id = :s"),
+            {"t": datetime.now(UTC) - timedelta(days=29), "s": recent["id"]},
+        )
+
+    await purge()
+
+    ids = {s["id"] for s in (await client.get("/api/v1/sites")).json()["data"]}
+    assert ids == {recent["id"], active["id"]}
+    r = await client.get(f"/api/v1/sites/{old['id']}")
+    assert r.status_code == 404
+
+
+async def test_paid_sites_resume_even_when_an_unpaid_one_cannot_be_charged(client, email):
+    from src.credits.service import credit_service
+
+    await signup(client, email)
+    user_id = await user_id_of(client)
+    await set_balance(user_id, 2)
+    first = await add_site(client, "a.example", "A")
+    second = await add_site(client, "b.example", "B")
+
+    await set_balance(user_id, 0.05)
+    async with unit_of_work() as db:
+        await credit_service.charge_vendor_call(db, user_id, "seo_data", "test", 100_000, None)
+    await age_billing(first["id"], 25)
+
+    await make_operator(user_id)
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 0.3})
+    assert r.status_code == 200, r.text
+
+    states = {s["id"]: s["status"] for s in (await client.get("/api/v1/sites")).json()["data"]}
+    assert states == {first["id"]: "disabled", second["id"]: "active"}

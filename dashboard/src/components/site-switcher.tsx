@@ -13,10 +13,16 @@ import { cn } from "@/lib/utils";
 import { MCP_CATALOG } from "@/lib/mcp-catalog";
 import type { SiteProfile } from "@/lib/types";
 
-function PausedTag() {
+function pausedTitle(deletesAt: string | null | undefined): string {
+  if (!deletesAt) return "Paused: the workspace ran out of credits";
+  const day = new Date(deletesAt).toLocaleDateString(undefined, { dateStyle: "medium" });
+  return `Paused: the workspace ran out of credits. Add credits before ${day} or this website is deleted.`;
+}
+
+function PausedTag({ deletesAt }: { deletesAt?: string | null }) {
   return (
     <span
-      title="Paused — the workspace ran out of credits"
+      title={pausedTitle(deletesAt)}
       className="shrink-0 rounded border border-warn/40 bg-warn/10 px-1 text-[10px] leading-4 text-warn"
     >
       paused
@@ -89,7 +95,7 @@ export function SiteSwitcher() {
             <span className="block text-sm text-ink truncate">
               {global ? "Global" : current?.name}
             </span>
-            {current?.status === "disabled" && <PausedTag />}
+            {current?.status === "disabled" && <PausedTag deletesAt={current.deletesAt} />}
           </span>
           <span className="block text-[11px] text-faint truncate">
             {global ? "not about one website" : current?.domain}
@@ -139,7 +145,7 @@ export function SiteSwitcher() {
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5">
                         <span className="block text-sm text-ink truncate">{site.name}</span>
-                        {site.status === "disabled" && <PausedTag />}
+                        {site.status === "disabled" && <PausedTag deletesAt={site.deletesAt} />}
                       </span>
                       <span className="block text-[11px] text-faint truncate">{site.domain}</span>
                     </span>

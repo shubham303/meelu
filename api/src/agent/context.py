@@ -48,8 +48,9 @@ def require_site() -> AgentContext:
         )
     if ctx.site_status != "active":
         raise ValueError(
-            f"{ctx.site_domain} is disabled because the workspace ran out of credits. "
-            "Tell the user to add credits — the website turns back on within 15 minutes."
+            f"{ctx.site_domain} is paused because the workspace ran out of credits. "
+            "Tell the user to add credits: the website turns back on as soon as they cover "
+            "a day, and a website paused for 30 days is deleted."
         )
     return ctx
 

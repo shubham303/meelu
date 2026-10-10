@@ -27,7 +27,7 @@ async function fetchSites(cookieHeader) {
 
 function dueSite(sites, cutoff) {
   return sites.find((site) => {
-    if (!site?.id || inFlight.has(site.id)) return false;
+    if (!site?.id || site.status !== "active" || inFlight.has(site.id)) return false;
     const last = site.lastCrawledAt ? Date.parse(site.lastCrawledAt) : NaN;
     return Number.isFinite(last) && last < cutoff;
   });

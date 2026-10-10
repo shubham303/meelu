@@ -1,15 +1,20 @@
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
+from src.credits import billing
 from src.credits.service import credit_service
+from src.settings import settings
 from src.sites.repository import sites
 from src.sites.schemas import (
     SiteCreateRequest,
     SiteFilters,
     SiteRecord,
+    SiteRef,
     SiteUpdateRequest,
 )
 
@@ -57,6 +62,10 @@ class SiteService:
         if deleted is None:
             raise HTTPException(404, "Not found")
         return deleted
+
+    async def purge_paused(self, db: AsyncSession) -> Sequence[SiteRef]:
+        before = datetime.now(UTC) - timedelta(days=settings.sites_paused_retention_days)
+        return await sites.delete_paused_before(db, billing.DISABLED, before)
 
     async def _apply(
         self, db: AsyncSession, user_id: str, site_id: str, values: dict[str, Any]
