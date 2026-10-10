@@ -11,18 +11,73 @@ on:
           - test
         default: prod
   push:
-    tags:
-      - "app-v*"
+    branches:
+      - main
+      - test
+    paths:
+      - "app/**"
+      - ".github/workflows/app-build.yml"
 
 permissions:
   contents: read
 
-env:
-  DIST_SUFFIX: ${{ inputs.flavour == 'test' && ':test' || '' }}
+concurrency:
+  group: app-build-${{ inputs.flavour || (github.ref_name == 'test' && 'test') || 'prod' }}
+  cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      flavour: ${{ steps.decide.outputs.flavour }}
+      prefix: ${{ steps.decide.outputs.prefix }}
+      dist_suffix: ${{ steps.decide.outputs.dist_suffix }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Decide whether to build
+        id: decide
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          FLAVOUR: ${{ inputs.flavour || (github.ref_name == 'test' && 'test') || 'prod' }}
+        run: |
+          if [ "$FLAVOUR" = "test" ]; then prefix="test/"; suffix=":test"; else prefix=""; suffix=""; fi
+          version=$(node -p 'require("./app/package.json").version')
+          if aws s3 cp "s3://meelu-downloads/${prefix}version.json" published.json --endpoint-url "$R2_ENDPOINT" --only-show-errors 2>/dev/null; then
+            published=$(jq -r '.version // "0.0.0"' published.json)
+          else
+            published="0.0.0"
+          fi
+          newer=$(node -e '
+            const p = (v) => v.replace(/^v/, "").split(".").map(Number);
+            const [a, b] = [p(process.argv[1]), p(process.argv[2])];
+            for (let i = 0; i < 3; i++) if (a[i] !== b[i]) { console.log(a[i] > b[i]); process.exit(0); }
+            console.log(false);
+          ' "$version" "$published")
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] || [ "$newer" = "true" ]; then build=true; else build=false; fi
+          echo "flavour=${FLAVOUR} package=${version} published=${published} build=${build}"
+          {
+            echo "build=${build}"
+            echo "flavour=${FLAVOUR}"
+            echo "prefix=${prefix}"
+            echo "dist_suffix=${suffix}"
+            echo "version=${version}"
+          } >> "$GITHUB_OUTPUT"
+
   mac:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: macos-14
+    env:
+      DIST_SUFFIX: ${{ needs.check.outputs.dist_suffix }}
     defaults:
       run:
         working-directory: app
@@ -62,7 +117,11 @@ jobs:
           if-no-files-found: error
 
   windows:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: windows-latest
+    env:
+      DIST_SUFFIX: ${{ needs.check.outputs.dist_suffix }}
     defaults:
       run:
         working-directory: app
@@ -97,24 +156,9 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [mac, windows]
+    needs: [check, mac, windows]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: app/package.json
-          sparse-checkout-cone-mode: false
-
-      - name: Read the app version
-        id: version
-        run: |
-          version=$(node -p 'require("./app/package.json").version')
-          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "app-v${version}" ]; then
-            echo "tag ${GITHUB_REF_NAME} does not match app/package.json version ${version}" >&2
-            exit 1
-          fi
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -126,7 +170,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          PREFIX: ${{ inputs.flavour == 'test' && 'test/' || '' }}
+          PREFIX: ${{ needs.check.outputs.prefix }}
         run: |
           ls -la dist
           sha256sum dist/* > dist/SHA256SUMS.txt
@@ -145,8 +189,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          PREFIX: ${{ inputs.flavour == 'test' && 'test/' || '' }}
-          VERSION: ${{ steps.version.outputs.version }}
+          PREFIX: ${{ needs.check.outputs.prefix }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           base="https://downloads.meelu.tech/${PREFIX}"
           installer() { basename "$(ls dist/$1)"; }

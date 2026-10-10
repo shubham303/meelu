@@ -87,10 +87,13 @@ bundled when present. CI builds both platforms in
 
 ## Release a new version
 
-Bump `version` in `package.json`, then run the `App build` workflow
-(`gh workflow run app-build.yml -f flavour=test`, or push an `app-v<version>`
-tag for prod). After the installers upload, CI writes `version.json` next to
-them on downloads.meelu.tech. Installed apps read it on launch and every six
+Bump `version` in `package.json` and push to `test`, then to `main`. The
+`App build` workflow runs on every push that touches `app/`, builds against
+the test endpoints from `test` and the prod endpoints from `main`, and skips
+the macOS and Windows builds unless the version is ahead of the published
+`version.json` for that flavour. To rebuild without a bump, run it by hand
+(`gh workflow run app-build.yml -f flavour=test`). After the installers
+upload, CI writes `version.json` next to them on downloads.meelu.tech. Installed apps read it on launch and every six
 hours, and when it is ahead of their own version the dashboard shows a banner
 whose Download button opens the installer for their platform. The user
 installs it over the old app; nothing updates silently. In development, set
