@@ -3,6 +3,7 @@ export const app = {
   getPath: () => os.tmpdir(),
   isPackaged: false,
   getName: () => "meelu-test",
+  getVersion: () => "0.0.0-test",
 };
 export const safeStorage = {
   isEncryptionAvailable: () => false,

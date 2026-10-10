@@ -98,22 +98,44 @@ async function serverUp() {
   }
 }
 
+const RECONNECT_EVERY_MS = 2000;
+
+async function showWaiting() {
+  if (win.webContents.getURL().startsWith("file:")) return;
+  log(`cannot reach ${BASE_URL} — showing the offline screen`);
+  try {
+    await win.loadFile(path.join(here, "../renderer/waiting.html"), {
+      query: app.isPackaged ? {} : { dev: "1" },
+    });
+  } catch (err) {
+    log("offline screen failed to load:", err.message);
+  }
+}
+
+async function loadDashboard() {
+  try {
+    await win.loadURL(DASH_URL);
+    return true;
+  } catch (err) {
+    if (err.errno === -3) return true;
+    log("dashboard load failed:", err.message);
+    return false;
+  }
+}
+
 async function connect() {
   if (connecting) return;
   connecting = true;
   try {
-    if (!(await serverUp())) {
-      await win.loadFile(path.join(here, "../renderer/waiting.html"));
-      log(`waiting for the dashboard server at ${BASE_URL} …`);
-      while (!(await serverUp())) {
-        if (win.isDestroyed()) return;
-        await new Promise((r) => setTimeout(r, 900));
+    while (!win.isDestroyed()) {
+      if ((await serverUp()) && !win.isDestroyed() && (await loadDashboard())) {
+        log(`dashboard loaded from ${DASH_URL}`);
+        return;
       }
+      if (win.isDestroyed()) return;
+      await showWaiting();
+      await new Promise((r) => setTimeout(r, RECONNECT_EVERY_MS));
     }
-    log(`dashboard server is up — loading ${DASH_URL}`);
-    await win.loadURL(DASH_URL);
-  } catch (err) {
-    log("connect failed:", err.message);
   } finally {
     connecting = false;
   }

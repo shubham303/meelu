@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <title>Meelu</title>
   <style>
-    /* Meelu tokens (mirrors dashboard/src/app/globals.css) */
     :root {
       --bg: #f8f5eb; --panel: #fffdf7; --edge: #e6e1d1;
       --ink: #1f2d3d; --sub: #5b6b7f; --faint: #8fa0b3; --accent: #2563eb;
@@ -45,8 +44,20 @@
       <span class="wordmark">Meelu</span>
     </div>
     <div class="spin" aria-hidden="true"></div>
-    <p>Waiting for the dashboard server…</p>
-    <p class="hint">Start it with <code>npm run dev</code> in <code>dashboard/</code> — the app connects by itself.</p>
+    <div id="user">
+      <p>Can't reach Meelu right now.</p>
+      <p class="hint">Check your internet connection. Meelu reconnects by itself as soon as it's back.</p>
+    </div>
+    <div id="dev" hidden>
+      <p>Waiting for the dashboard server…</p>
+      <p class="hint">Start it with <code>npm run dev</code> in <code>dashboard/</code> — the app connects by itself.</p>
+    </div>
   </div>
+  <script>
+    if (new URLSearchParams(location.search).has("dev")) {
+      document.getElementById("user").hidden = true;
+      document.getElementById("dev").hidden = false;
+    }
+  </script>
 </body>
 </html>
