@@ -73,7 +73,7 @@ function buildOptions() {
     ],
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 12,
+      minPasswordLength: 1,
       requireEmailVerification: true,
       revokeSessionsOnPasswordReset: true,
     },
