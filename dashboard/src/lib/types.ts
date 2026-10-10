@@ -677,6 +677,8 @@ export interface SiteProfile extends BaseEntity {
   domain: string;
   name: string;
   status: SiteStatus;
+  pausedAt?: string | null;
+  deletesAt?: string | null;
   markets: string[];
   language?: string | null;
   repoUrl?: string;

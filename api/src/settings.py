@@ -52,6 +52,8 @@ class Settings(EnvSettings):
     credits_billing_period_hours: int = 24
     credits_billing_sweep_seconds: int = 300
     credits_billing_sweep_disabled: bool = False
+    sites_paused_retention_days: int = 30
+    sites_purge_minutes: int = 60
     seo_job_vendor_ceiling_micros: int = 2_000_000
 
     log_level: str = "INFO"

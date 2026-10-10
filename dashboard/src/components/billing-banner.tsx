@@ -4,16 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { CreditCard, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
-import { api } from "@/lib/use-api";
+import { api, useCurrentSite } from "@/lib/use-api";
 import { formatUsd } from "@/lib/utils";
 import {
   billingBlock,
   clearBillingBlock,
+  resolveBillingBlock,
   subscribeToBillingBlock,
   type BillingBlock,
 } from "@/lib/billing-block";
 
-const POLL_MS = 30_000;
+const POLL_MS = 10_000;
 
 interface Balance {
   balanceUsd: number;
@@ -45,13 +46,20 @@ export function BillingBanner() {
     if (!block) return;
     setChecking(true);
     try {
-      if (await resolved(block)) clearBillingBlock();
+      if (await resolved(block)) resolveBillingBlock();
     } catch {
       // leave the banner up; the next check decides
     } finally {
       setChecking(false);
     }
   }, [block]);
+
+  const siteId = useCurrentSite();
+  useEffect(() => {
+    if (block?.code === "site_disabled" && block.siteId && block.siteId !== siteId) {
+      clearBillingBlock("site_disabled");
+    }
+  }, [block, siteId]);
 
   useEffect(() => {
     if (!block) return;

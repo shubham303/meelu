@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.logging import get_logger
 from src.core.pagination import PaginatedApiResponse, PaginationParams
-from src.credits.ledger import credit_ledger_service
+from src.credits.service import credit_service
 from src.payments import dodo
 from src.payments.repository import payments
 from src.payments.schemas import (
@@ -149,7 +149,7 @@ class PaymentService:
         )
         if updated is None:
             return
-        await credit_ledger_service.apply(
+        await credit_service.add_credits(
             db,
             updated.user_id,
             updated.credit_micros,

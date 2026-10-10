@@ -180,3 +180,41 @@ async def test_webhook_is_exempt_from_the_origin_check(client, email, dodo_confi
     headers = {**headers, "origin": "https://dodo.example", "sec-fetch-site": "cross-site"}
     r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
     assert r.status_code == 200, r.text
+
+
+async def test_paid_top_up_resumes_a_paused_site(client, email, dodo_config):
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text
+
+    from src.core.database import unit_of_work
+    from src.credits.billing import site_billing_service
+
+    await signup(client, email)
+    site = (
+        await client.post("/api/v1/sites", json={"domain": "paid.example", "name": "Paid"})
+    ).json()["data"]
+    async with unit_of_work() as db:
+        await db.execute(
+            text("UPDATE credit_account SET balance_micros = 0 WHERE user_id = :u"),
+            {"u": (await client.get("/api/auth/me")).json()["data"]["id"]},
+        )
+        await db.execute(
+            text("UPDATE site_billing SET last_charged_at = :t WHERE site_id = :s"),
+            {"t": datetime.now(UTC) - timedelta(hours=25), "s": site["id"]},
+        )
+    await site_billing_service.sweep()
+    assert (await client.get(f"/api/v1/sites/{site['id']}")).json()["data"]["status"] == "disabled"
+
+    payment_id = (await client.post("/api/v1/payments/checkout", json={"amountUsd": 20})).json()[
+        "data"
+    ]["paymentId"]
+    body, headers = signed(succeeded(payment_id))
+    r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
+    assert r.status_code == 200, r.text
+
+    state = (await client.get(f"/api/v1/sites/{site['id']}")).json()["data"]
+    assert state["status"] == "active"
+    assert state.get("pausedAt") is None
+    r = await client.get("/api/v1/site/pages")
+    assert r.status_code == 200, r.text

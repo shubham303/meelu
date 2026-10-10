@@ -50,14 +50,42 @@ class SiteBillingService:
         price = pricing.site_day_price_micros()
         balance = await credit_accounts.balance(db, site.user_id)
         if balance < price:
-            await sites.set_status(db, site.site_id, DISABLED)
+            await sites.set_status(db, site.site_id, DISABLED, datetime.now(UTC))
             return False
         await credit_ledger_service.apply(
             db, site.user_id, -price, "site_day", f"{site.domain} · one day"
         )
         await site_billings.mark_charged(db, site.user_id, site.domain, price)
-        await sites.set_status(db, site.site_id, ACTIVE)
+        await sites.set_status(db, site.site_id, ACTIVE, None)
         return True
+
+    async def resume_user_sites(self, db: AsyncSession, user_id: str) -> int:
+        at = cutoff()
+        paused = await sites.list_refs(db, status=DISABLED, user_id=user_id)
+        paid: list[str] = []
+        unpaid = []
+        for ref in paused:
+            row = await site_billings.get(db, user_id, ref.domain)
+            if row is not None and row.last_charged_at is not None and row.last_charged_at > at:
+                paid.append(ref.id)
+            else:
+                unpaid.append(ref)
+
+        resumed = 0
+        if paid and await credit_accounts.balance(db, user_id) >= 0:
+            for site_id in paid:
+                await sites.set_status(db, site_id, ACTIVE, None)
+            resumed += len(paid)
+
+        for ref in unpaid:
+            await site_billings.ensure(db, user_id, ref.id, ref.domain)
+            if not await site_billings.lock_due(db, user_id, ref.domain, at):
+                continue
+            site = DueSite(site_id=ref.id, user_id=user_id, status=DISABLED, domain=ref.domain)
+            if not await self.charge_site(db, site):
+                break
+            resumed += 1
+        return resumed
 
     async def sweep(self, limit: int = BATCH) -> SweepResult:
         result = SweepResult()
