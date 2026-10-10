@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,8 +38,9 @@ class SiteDisabledError(Exception):
 
     def __init__(self, site_id: str):
         super().__init__(
-            "This website is disabled because the workspace ran out of credits. "
-            "Add credits and it turns back on within 15 minutes."
+            "This website is paused because the workspace ran out of credits. "
+            "Add enough credits for a day and it turns back on right away. "
+            f"A website paused for {settings.sites_paused_retention_days} days is deleted."
         )
         self.site_id = site_id
 
@@ -89,14 +92,23 @@ class CreditService:
     ) -> bool:
         return await site_billing_service.start_site(db, user_id, site_id, domain)
 
+    async def add_credits(
+        self, db: AsyncSession, user_id: str, micros: int, kind: str, note: str | None
+    ) -> LedgerEntryResponse:
+        entry = await credit_ledger_service.apply(db, user_id, micros, kind, note)
+        try:
+            async with db.begin_nested():
+                resumed = await site_billing_service.resume_user_sites(db, user_id)
+        except Exception as exc:
+            log.error("sites_resume_failed", user_id=user_id, error=str(exc))
+            return entry
+        if resumed:
+            log.info("sites_resumed", user_id=user_id, resumed=resumed)
+        return entry
+
     async def grant(self, db: AsyncSession, user_id: str, body: GrantRequest) -> BalanceResponse:
-        entry = await credit_ledger_service.apply(
-            db, user_id, to_micros(body.amount_usd), "grant", body.note
-        )
-        return BalanceResponse(
-            balance_micros=entry.balance_after_micros,
-            balance_usd=entry.balance_after_micros / 1_000_000,
-        )
+        await self.add_credits(db, user_id, to_micros(body.amount_usd), "grant", body.note)
+        return await self.balance(db, user_id)
 
     async def signup_grant(self, db: AsyncSession, user_id: str) -> None:
         micros = to_micros(settings.credits_signup_grant_usd)
@@ -121,7 +133,9 @@ class CreditService:
             db, user_id, -price, "usage", f"{domain}/{capability}", provider_call_id
         )
         if entry.balance_after_micros < 0:
-            disabled = await sites.set_status_for_user(db, user_id, billing.DISABLED)
+            disabled = await sites.set_status_for_user(
+                db, user_id, billing.DISABLED, datetime.now(UTC)
+            )
             log.warning(
                 "credits_overdrawn",
                 user_id=user_id,
