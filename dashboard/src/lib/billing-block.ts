@@ -11,6 +11,7 @@ export interface BillingBlock {
 }
 
 let current: BillingBlock | null = null;
+let resolvedCount = 0;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -32,6 +33,16 @@ export function clearBillingBlock(code?: BillingBlockCode): void {
   if (code && current.code !== code) return;
   current = null;
   emit();
+}
+
+export function resolveBillingBlock(): void {
+  current = null;
+  resolvedCount += 1;
+  emit();
+}
+
+export function billingResolvedCount(): number {
+  return resolvedCount;
 }
 
 export function subscribeToBillingBlock(listener: () => void): () => void {

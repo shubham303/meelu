@@ -18,6 +18,7 @@ class Site(EntityMixin, Base):
     domain: Mapped[str] = mapped_column(nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, server_default=text("'active'"))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     markets: Mapped[list[str]] = mapped_column(
         ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
     )
