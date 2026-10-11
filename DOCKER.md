@@ -78,7 +78,7 @@ authenticate with a workspace API key from **Dashboard → Settings** in the
 ## Production and test (Coolify)
 
 Meelu is used only through the desktop app. The servers run on one Hostinger
-VPS (`srv2048855`, `31.220.20.109`, Ubuntu 24.04) under Coolify, from
+VPS (Ubuntu 24.04) under Coolify, from
 `deploy/compose.yml`, behind Cloudflare.
 
 | What | Production | Test |

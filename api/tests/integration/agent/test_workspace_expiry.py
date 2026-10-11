@@ -69,6 +69,33 @@ async def test_unused_workspace_tables_expire_after_the_ttl(client, tmp_path, mo
         await asyncio.to_thread(drop_tenants, ctx.user_id)
 
 
+async def test_sweep_runs_tenant_rules_as_the_tenant(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "agent_data_dir", tmp_path)
+    run = uuid.uuid4().hex[:8]
+    ctx = await tenant(client, f"ws-r-{run}@example.com", f"r{run}.example.com")
+    await asyncio.to_thread(bootstrap)
+    try:
+        await sql(ctx, "create table _ti_column_types (table_key text)")
+        await sql(ctx, f"insert into _ti_column_types values ('{ctx.schema}.bait')")
+        await sql(ctx, "create table _ti_loot (who text)")
+        await sql(
+            ctx,
+            "create rule spy as on delete to _ti_column_types "
+            "do also insert into _ti_loot select current_user::text",
+        )
+        await sql(ctx, "create table bait as select 1 as n")
+
+        now = datetime.now(UTC)
+        await asyncio.to_thread(sweep, now)
+        later = now + timedelta(days=settings.agent_workspace_ttl_days, hours=1)
+        await asyncio.to_thread(sweep, later)
+
+        assert "bait" not in await asyncio.to_thread(relations, ctx.schema)
+        assert (await sql(ctx, "select who from _ti_loot")).rows == [[ctx.role]]
+    finally:
+        await asyncio.to_thread(drop_tenants, ctx.user_id)
+
+
 async def test_old_saved_models_expire(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "agent_data_dir", tmp_path)
     models = tmp_path / "models" / "ws_someone"
