@@ -158,6 +158,19 @@ async def test_agent_cannot_create_functions_or_large_objects(pair):
         await sql(a, "do $$ begin perform 1; end $$")
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         await sql(a, "select lo_from_bytea(0, 'x'::bytea)")
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        await sql(a, "select pg_advisory_xact_lock(hashtext('credit_spend:x'))")
+
+
+async def test_query_cannot_switch_off_its_timeout(pair, monkeypatch):
+    a, _ = pair
+    monkeypatch.setattr(settings, "agent_statement_timeout_ms", 1000)
+    with pytest.raises(psycopg.errors.QueryCanceled):
+        await sql(
+            a,
+            "select set_config('statement_timeout', '0', true), "
+            "pg_sleep(case when g > 60 then 2 else 0 end) from generate_series(1, 100) g",
+        )
 
 
 async def test_tenant_limits_cannot_be_raised(pair):

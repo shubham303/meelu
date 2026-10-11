@@ -66,6 +66,12 @@ LARGE_OBJECT_WRITERS = (
     "lowrite(integer, bytea)",
 )
 
+ADVISORY_LOCK_FUNCTIONS = (
+    "SELECT p.oid::regprocedure::text FROM pg_proc p "
+    "JOIN pg_namespace n ON n.oid = p.pronamespace "
+    "WHERE n.nspname = 'pg_catalog' AND p.proname LIKE %s"
+)
+
 CURRENT_TENANT = f"(SELECT {USER_ID_FUNCTION}())"
 CURRENT_SITE = f"(SELECT {SITE_ID_FUNCTION}())"
 
@@ -123,6 +129,10 @@ def bootstrap() -> BootstrapResult:
         conn.exec_driver_sql("REVOKE USAGE ON LANGUAGE plpgsql, sql FROM PUBLIC")
         for function in LARGE_OBJECT_WRITERS:
             conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION pg_catalog.{function} FROM PUBLIC")
+        for (signature,) in conn.exec_driver_sql(
+            ADVISORY_LOCK_FUNCTIONS, ("pg\\_%advisory\\_%",)
+        ).fetchall():
+            conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION {signature} FROM PUBLIC")
         for function, column in ((USER_ID_FUNCTION, "user_id"), (SITE_ID_FUNCTION, "site_id")):
             conn.exec_driver_sql(
                 f"CREATE OR REPLACE FUNCTION {function}() RETURNS text "
