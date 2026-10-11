@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactN
 import { isAppUserAgent } from "@/lib/app-mode";
 import { activeSiteId } from "@/lib/current-site";
 import { useApi } from "@/lib/use-api";
+import { taskModel } from "@/features/llm-models/models";
 import { cn } from "@/lib/utils";
 
 export interface AgentEvent {
@@ -32,6 +33,7 @@ export interface TurnPayload {
   form?: Record<string, string | undefined>;
   params?: Record<string, string>;
   history?: { role: "user" | "assistant"; text: string }[];
+  model?: string;
 }
 
 export interface SiteSummaryEvent {
@@ -193,6 +195,7 @@ export function streamTurn(opts: StreamOptions): RunningTurn {
     form: opts.form ?? {},
     params: opts.params,
     history: opts.history,
+    model: taskModel() ?? undefined,
   });
 
   void start

@@ -96,7 +96,12 @@ export async function describeSite(siteId, { cookieHeader, llm, emit = () => {},
       return { started: false, skipped: true };
     }
     const facts = await readHomepage(site.domain);
-    const answer = await jsonCall(SYSTEM, pageBrief(site, facts), llm);
+    const answer = await jsonCall(SYSTEM, pageBrief(site, facts), {
+      llm,
+      cookieHeader,
+      siteId,
+      purpose: "site_summary",
+    });
     const changes = recordChanges(site, answer);
     if (!site.summary && !changes.summary) {
       throw new Error(`The homepage of ${site.domain} says too little to describe the site.`);

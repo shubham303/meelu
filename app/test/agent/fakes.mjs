@@ -72,8 +72,15 @@ function scopeBody(action, desks) {
   };
 }
 
-export async function startScopeApi() {
+export const TEST_MODEL = "anthropic/claude-haiku-5.5";
+
+export async function startScopeApi(llmUrl) {
   const calls = [];
+  const llmHeaders = [];
+  const sendJson = (res, data) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ data }));
+  };
   const reviewCalls = [];
   const reviewItems = [
     { id: "sug_1", state: { action: "create", topic: "grinders" } },
@@ -99,6 +106,29 @@ export async function startScopeApi() {
       res.end(JSON.stringify({ data }));
       return;
     }
+    if (url.pathname === "/api/v1/llm/models") {
+      sendJson(res, [{ id: TEST_MODEL, contextLength: 200000 }]);
+      return;
+    }
+    if (url.pathname === "/api/v1/llm/preference") {
+      sendJson(res, { defaultModel: TEST_MODEL });
+      return;
+    }
+    if (url.pathname.startsWith("/api/v1/llm/v1/")) {
+      llmHeaders.push(req.headers);
+      let body = "";
+      for await (const c of req) body += c;
+      const upstream = await fetch(`${llmUrl}${url.pathname.slice("/api/v1/llm".length)}`, {
+        method: req.method,
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      res.writeHead(upstream.status, {
+        "content-type": upstream.headers.get("content-type") ?? "application/json",
+      });
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+      return;
+    }
     if (url.pathname === "/api/v1/agent/scope") {
       const action = url.searchParams.get("action");
       const desks = url.searchParams.get("desks");
@@ -115,6 +145,7 @@ export async function startScopeApi() {
     url: `http://127.0.0.1:${server.address().port}`,
     calls,
     reviewCalls,
+    llmHeaders,
     close: () => server.close(),
   };
 }

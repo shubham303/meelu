@@ -5,9 +5,7 @@ import { app } from "electron";
 import { z } from "zod";
 import { messagesEndpoint, messagesJudge } from "./messages.js";
 import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
-import { ENV_DEFAULTS, LLAMACPP_BASE_URL, OPENROUTER_BASE_URL, meeluAuthHeaders } from "../config.js";
-import { serverLimits } from "../integrations/llm/llamacpp.js";
-import { modelLimits } from "../integrations/llm/openrouter.js";
+import { ENV_DEFAULTS, meeluAuthHeaders } from "../config.js";
 import { cachedWorkspaceKey, rememberWorkspaceKey } from "./workspace-key.js";
 import { apiFetch } from "../net.js";
 import { agentToolCatalog, allowedToolNames, forgetToolCatalog } from "./catalog.js";
@@ -19,11 +17,9 @@ const MAX_TURNS = 24;
 const MAX_BUDGET_USD = 1.5;
 const SILENT_TOOLS = new Set(["run_sql"]);
 
-const LLM_BASE_URL = process.env.MEELU_LLM_BASE_URL?.replace(/\/+$/, "");
-const LLM_MODEL = process.env.MEELU_LLM_MODEL;
-const LLM_API_KEY = process.env.MEELU_LLM_API_KEY ?? "ollama";
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? "";
-const OPENROUTER_MODEL = process.env.MEELU_OPENROUTER_MODEL ?? "";
+const MODEL_LIST_MS = 6 * 60 * 60 * 1000;
+const OUTPUT_CEILING = 8192;
+const OUTPUT_SHARE = 0.2;
 
 const READER_MAX_TURNS = 40;
 
@@ -336,60 +332,49 @@ function writesPrompt(writes, readOnly) {
   return `\n\n## What this task may write\n\nYou can SEE every Meelu tool, because one server serves every task. This task may make exactly ${writes.length === 1 ? "one write" : `${writes.length} writes`}: ${writes.map((w) => `\`${w}\``).join(", ")}.\n\nCall no other tool that creates, updates or deletes anything, even if the user asks mid-run. If the work needs a write outside that list, load the desk that owns it if the list below offers one. Otherwise say which write you needed and why, and stop. Read whatever helps. Your workspace schema is scratch space, not a write in this sense, but nothing saved only there counts as delivered.`;
 }
 
-function savedGateway(llm) {
-  if (llm.provider === "openrouter") {
-    return {
-      provider: "openrouter",
-      baseUrl: llm.baseUrl || OPENROUTER_BASE_URL,
-      apiKey: llm.apiKey,
-      model: llm.model,
-    };
-  }
-  if (llm.provider === "llamacpp") {
-    return {
-      provider: "llamacpp",
-      baseUrl: llm.baseUrl || LLAMACPP_BASE_URL,
-      apiKey: llm.apiKey || "llamacpp",
-      model: llm.model,
-    };
-  }
-  if (llm.provider === "custom") {
-    return {
-      provider: "custom",
-      baseUrl: llm.baseUrl,
-      apiKey: llm.apiKey || "ollama",
-      model: llm.model,
-    };
-  }
-  return null;
+let modelList = { at: 0, models: [] };
+
+function outputCap(context) {
+  return Math.max(1024, Math.min(Math.floor(context * OUTPUT_SHARE), OUTPUT_CEILING));
 }
 
-function envGateway() {
-  if (LLM_BASE_URL) {
-    return { provider: "custom", baseUrl: LLM_BASE_URL, apiKey: LLM_API_KEY, model: LLM_MODEL };
-  }
-  if (OPENROUTER_KEY) {
-    return {
-      provider: "openrouter",
-      baseUrl: OPENROUTER_BASE_URL,
-      apiKey: OPENROUTER_KEY,
-      model: OPENROUTER_MODEL,
-    };
-  }
-  return null;
+async function meeluModels(cookieHeader) {
+  if (modelList.models.length && Date.now() - modelList.at < MODEL_LIST_MS) return modelList.models;
+  const models = await apiGet("/api/v1/llm/models", cookieHeader);
+  modelList = { at: Date.now(), models: Array.isArray(models) ? models : [] };
+  return modelList.models;
 }
 
-export async function resolveLlm(llm) {
-  const gateway = llm ? savedGateway(llm) : envGateway();
-  const model = gateway ? gateway.model || MODEL : (llm?.model ?? "").trim() || MODEL;
-  const anthropicKey = !gateway && llm?.apiKey ? llm.apiKey : null;
-  const limits =
-    gateway?.provider === "openrouter"
-      ? await modelLimits(model, gateway.apiKey)
-      : gateway?.provider === "llamacpp"
-        ? await serverLimits(gateway.baseUrl, gateway.apiKey)
-        : null;
-  return { gateway, model, anthropicKey, limits };
+async function meeluGateway({ cookieHeader, apiKey, model, purpose, siteId }) {
+  const [key, chosen, models] = await Promise.all([
+    apiKey ?? workspaceApiKey(cookieHeader),
+    model || apiGet("/api/v1/llm/preference", cookieHeader).then((p) => p.defaultModel),
+    meeluModels(cookieHeader),
+  ]);
+  const context = models.find((m) => m.id === chosen)?.contextLength ?? 0;
+  return {
+    gateway: {
+      baseUrl: `${ENV_DEFAULTS.meeluBaseUrl}/api/v1/llm`,
+      apiKey: key,
+      model: chosen,
+      headers: { "x-meelu-purpose": purpose, ...(siteId ? { "x-meelu-site": siteId } : {}) },
+    },
+    model: chosen,
+    anthropicKey: null,
+    limits: context > 0 ? { context, output: outputCap(context) } : null,
+  };
+}
+
+export async function resolveLlm({ llm, cookieHeader, apiKey, model, purpose, siteId }) {
+  if (llm?.provider === "anthropic") {
+    return {
+      gateway: null,
+      model: (llm.model ?? "").trim() || MODEL,
+      anthropicKey: llm.apiKey || null,
+      limits: null,
+    };
+  }
+  return meeluGateway({ cookieHeader, apiKey, model, purpose, siteId });
 }
 
 const PASSTHROUGH_ENV = [
@@ -451,9 +436,13 @@ export function llmEnv(gateway, anthropicKey, limits) {
           ANTHROPIC_BASE_URL: gateway.baseUrl,
           ANTHROPIC_AUTH_TOKEN: gateway.apiKey,
           ANTHROPIC_API_KEY: "",
-          ...(gateway.provider === "openrouter"
-            ? { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1" }
-            : {}),
+          ANTHROPIC_CUSTOM_HEADERS: Object.entries(gateway.headers)
+            .map(([name, value]) => `${name}: ${value}`)
+            .join("\n"),
+          ANTHROPIC_SMALL_FAST_MODEL: gateway.model,
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: gateway.model,
+          ANTHROPIC_DEFAULT_SONNET_MODEL: gateway.model,
+          ANTHROPIC_DEFAULT_OPUS_MODEL: gateway.model,
           ...(limits
             ? {
                 CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(limits.context),
@@ -541,26 +530,9 @@ class TurnInput {
   }
 }
 
-function resolveModel(llm) {
-  const gateway = llm ? savedGateway(llm) : envGateway();
-  if (gateway && !gateway.baseUrl) {
-    throw new Error("The custom provider has no base URL — set one on the Connections screen.");
-  }
-  if (gateway?.provider === "openrouter" && !gateway.model) {
-    throw new Error(
-      "OpenRouter needs a model id, written provider-first (e.g. anthropic/claude-sonnet-5) — " +
-        "set one on the Connections screen.",
-    );
-  }
-  const model = gateway ? gateway.model || MODEL : (llm?.model ?? "").trim() || MODEL;
-  const anthropicKey = !gateway && llm?.apiKey ? llm.apiKey : null;
-  return { gateway, model, anthropicKey };
-}
-
 async function buildConfig(session) {
   const { action, siteId, params, desks } = session;
   const { cookieHeader, llm } = session.options;
-  const { gateway, model, anthropicKey } = resolveModel(llm);
 
   const [scope, apiKey] = await Promise.all([
     fetchScope(action, siteId, cookieHeader, {
@@ -570,6 +542,15 @@ async function buildConfig(session) {
     workspaceApiKey(cookieHeader),
     assertAgentServerUp(),
   ]);
+
+  const { gateway, model, anthropicKey, limits } = await resolveLlm({
+    llm,
+    cookieHeader,
+    apiKey,
+    model: session.model,
+    purpose: "agent",
+    siteId,
+  });
 
   const meeluHeaders = { "x-api-key": apiKey, ...(siteId ? { "x-meelu-site": siteId } : {}) };
   const catalog = await agentToolCatalog(ENV_DEFAULTS.agentMcpUrl, meeluHeaders);
@@ -619,13 +600,6 @@ async function buildConfig(session) {
     await session.meeluServer.show(session.access.allowed);
     return offer?.brief ?? `The ${desk} desk is loaded.`;
   });
-
-  const limits =
-    gateway?.provider === "openrouter"
-      ? await modelLimits(model, gateway.apiKey)
-      : gateway?.provider === "llamacpp"
-        ? await serverLimits(gateway.baseUrl, gateway.apiKey)
-        : null;
 
   const reviewServer = reviewMcpServer(readOnly ? [] : (scope.localTools ?? []), {
     cookieHeader,
@@ -756,10 +730,11 @@ function userMessage(message, form, files, history) {
 }
 
 class LiveSession {
-  constructor({ action, siteId, params }, options) {
+  constructor({ action, siteId, params, model }, options) {
     this.action = action;
     this.siteId = siteId;
     this.params = params;
+    this.model = typeof model === "string" && model.trim() ? model.trim() : null;
     this.options = options;
     this.desks = new Set();
     this.access = { allowed: new Set(), writes: [], silentWrites: new Set() };
