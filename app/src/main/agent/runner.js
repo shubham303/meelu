@@ -1,8 +1,6 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { createSdkMcpServer, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
+import { createSdkMcpServer, getSessionInfo, query, tool as sdkTool } from "@anthropic-ai/claude-agent-sdk";
 import { app } from "electron";
 import { z } from "zod";
 import { messagesEndpoint, messagesJudge } from "./messages.js";
@@ -26,10 +24,6 @@ const LLM_MODEL = process.env.MEELU_LLM_MODEL;
 const LLM_API_KEY = process.env.MEELU_LLM_API_KEY ?? "ollama";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY ?? "";
 const OPENROUTER_MODEL = process.env.MEELU_OPENROUTER_MODEL ?? "";
-
-const ACTION_ALIASES = {
-  "analytics-ask": "analyze-data",
-};
 
 const READER_MAX_TURNS = 40;
 
@@ -187,76 +181,7 @@ the action that owns it and stop there.`;
 
 function isReadOnly(scope) {
   if (typeof scope.readOnly === "boolean") return scope.readOnly;
-  const required = Object.values(scope.mcpServers ?? {}).some((t) => !t?.optional);
-  return (scope.writes ?? []).length === 0 && !required;
-}
-
-function localDirectory(values, key, serverName) {
-  const dir = values[key];
-  const isDir =
-    typeof dir === "string" &&
-    path.isAbsolute(dir) &&
-    fs.statSync(dir, { throwIfNoEntry: false })?.isDirectory() === true;
-  if (!isDir) {
-    throw new Error(
-      `${serverName} needs ${key} set to an existing folder on this machine — set it on the Connections screen.`,
-    );
-  }
-  return dir;
-}
-
-const LOCAL_SERVERS = {
-  analytics: (values, name) => ({
-    type: "stdio",
-    command: "uv",
-    args: ["run", "--project", localDirectory(values, "projectDir", name), "meelu-analytics-mcp"],
-    env: { TABULAR_BASE: localDirectory(values, "dataDir", name) },
-    alwaysLoad: true,
-  }),
-};
-
-async function resolveScopeServers(scope, connectors, siteId = null, { readOnly = false } = {}) {
-  const servers = {};
-  const toolAllow = {};
-  const notices = [];
-  let promptSuffix = "";
-
-  const attach = (id, tpl, values) => {
-    servers[id] = LOCAL_SERVERS[id](values, tpl.name ?? id);
-    if (Array.isArray(tpl.tools) && tpl.tools.length > 0) {
-      toolAllow[id] = new Set(tpl.tools);
-    }
-  };
-
-  for (const [id, tpl] of Object.entries(scope.mcpServers ?? {})) {
-    if (!Object.hasOwn(LOCAL_SERVERS, id)) {
-      if (tpl?.optional) continue;
-      throw new Error(`This task needs a local server this app does not know (${id}). Update the app.`);
-    }
-    if (readOnly && tpl.readOnly !== true) {
-      if (!tpl.optional) {
-        throw new Error(
-          `${tpl.name ?? id} cannot be used in a read-only task — this scope holds no ` +
-            `write tools, and that is what makes it safe to read everything.`,
-        );
-      }
-      notices.push(`${tpl.name ?? id} was left out: this task writes nothing.`);
-      continue;
-    }
-    const values = await connectors.get(id, siteId);
-    if (values == null) {
-      if (tpl.optional) continue;
-      throw new Error(
-        `${tpl.name ?? id} isn't connected yet — connect it on the Connections screen first.`,
-      );
-    }
-    attach(id, tpl, values);
-    if (tpl.optional) {
-      promptSuffix += `\n\nThe ${tpl.name ?? id} tools are available in this task.`;
-      if (tpl.guidance) promptSuffix += `\n\n${tpl.guidance}`;
-    }
-  }
-  return { servers, toolAllow, promptSuffix, notices };
+  return (scope.writes ?? []).length === 0;
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -277,25 +202,26 @@ function fileBlocks(files) {
   });
 }
 
-function persistAttachments(files, cwd) {
-  const inline = [];
-  const savedLines = [];
-  for (const f of files ?? []) {
-    if (IMAGE_TYPES.has(f.type) || f.type === "application/pdf") {
-      inline.push(f);
-      continue;
-    }
-    const dir = path.join(cwd, "attachments", crypto.randomUUID().slice(0, 8));
-    fs.mkdirSync(dir, { recursive: true });
-    const safe = (f.name || "data.csv").replace(/[^\w.\-]+/g, "_");
-    const dest = path.join(dir, safe);
-    fs.writeFileSync(dest, Buffer.from(f.data, "base64"));
-    savedLines.push(`- ${f.name || safe} → ${dest}`);
-  }
-  return { inline, savedLines };
+function earlierTurns(history) {
+  const turns = (history ?? []).filter(
+    (h) => (h?.role === "user" || h?.role === "assistant") && typeof h.text === "string" && h.text.trim(),
+  );
+  if (turns.length === 0) return "";
+  return [
+    `<earlier_conversation>`,
+    `This conversation continues an earlier one whose working context is gone. Its turns, oldest first:`,
+    ...turns.map((h) => `[${h.role}]: ${h.text.trim()}`),
+    `</earlier_conversation>`,
+    ``,
+    ``,
+  ].join("\n");
 }
 
-function turnPrompt(message, form) {
+function turnPrompt(message, form, history) {
+  return earlierTurns(history) + formPrompt(message, form);
+}
+
+function formPrompt(message, form) {
   const entries = Object.entries(form ?? {}).filter(
     ([, v]) => typeof v === "string" && v.trim() !== "",
   );
@@ -353,13 +279,7 @@ async function fetchScope(action, siteId, cookieHeader, params) {
       siteId ? { "x-meelu-site": siteId } : {},
     );
   };
-  try {
-    return await ask(action);
-  } catch (err) {
-    const alias = ACTION_ALIASES[action];
-    if (!alias) throw err;
-    return ask(alias);
-  }
+  return ask(action);
 }
 
 async function workspaceApiKey(cookieHeader) {
@@ -639,7 +559,7 @@ function resolveModel(llm) {
 
 async function buildConfig(session) {
   const { action, siteId, params, desks } = session;
-  const { cookieHeader, llm, connectors = { get: () => null } } = session.options;
+  const { cookieHeader, llm } = session.options;
   const { gateway, model, anthropicKey } = resolveModel(llm);
 
   const [scope, apiKey] = await Promise.all([
@@ -679,13 +599,6 @@ async function buildConfig(session) {
       ? `\n\nVendor-backed tools in this task: ${vendorTools.join(", ")}. Each uncached call spends the workspace's credits; say what you are about to pull before calling one, and prefer one wide call over many narrow ones.`
       : "";
 
-  const {
-    servers: extraServers,
-    toolAllow,
-    promptSuffix,
-    notices: serverNotices,
-  } = await resolveScopeServers(scope, connectors, siteId, { readOnly });
-  const extraNames = Object.keys(extraServers);
 
   const deskOffers = scope.desks ?? [];
   const addDeskServer = desksServer(deskOffers, async (desk) => {
@@ -738,13 +651,11 @@ async function buildConfig(session) {
   };
 
   const canUseTool = async (toolName, input) => {
-    const server = extraNames.find((n) => toolName.startsWith(`mcp__${n}__`));
     const reviewTool = toolName.startsWith(`mcp__${REVIEW_SERVER}__`);
     const inScope =
       toolName.startsWith("mcp__meelu__") ||
       reviewTool ||
       (addDeskServer && toolName === "mcp__desks__add_desk") ||
-      server !== undefined ||
       (withWeb && (toolName === "WebSearch" || toolName === "WebFetch")) ||
       toolName === "Agent" ||
       toolName === "Task";
@@ -760,15 +671,6 @@ async function buildConfig(session) {
     }
 
     const short = toolName.replace(/^mcp__[\w-]+?__/, "");
-
-    if (server && toolAllow[server] && !toolAllow[server].has(short)) {
-      return {
-        behavior: "deny",
-        message:
-          `${short} is not one of the ${server} tools this task holds ` +
-          `(${[...toolAllow[server]].join(", ")}). Do not try it again.`,
-      };
-    }
 
     const liveWrites = session.access.writes;
 
@@ -814,7 +716,6 @@ async function buildConfig(session) {
       scope.systemPrompt +
       (withWeb ? WEB_TOOLS_PROMPT : NO_WEB_PROMPT + STRUCTURE_PROMPT) +
       readerPrompt(withWeb) +
-      promptSuffix +
       vendorPrompt +
       sitePrompt(siteId) +
       writesPrompt(writes, readOnly) +
@@ -822,7 +723,6 @@ async function buildConfig(session) {
       desksPrompt(deskOffers),
     mcpServers: {
       [MEELU_SERVER]: session.meeluServer.config,
-      ...extraServers,
       ...(reviewServer ? { [REVIEW_SERVER]: reviewServer.server } : {}),
       ...(addDeskServer ? { desks: addDeskServer } : {}),
     },
@@ -832,9 +732,7 @@ async function buildConfig(session) {
       action,
       readOnly,
       writes,
-      servers: extraNames,
     reviewTools: [...reviewTools],
-      notices: serverNotices,
     },
   };
 }
@@ -844,17 +742,9 @@ function deskAccess(catalog, desks, writes, providers = [], silentWrites = []) {
   return { allowed, writes, silentWrites: new Set(silentWrites ?? []) };
 }
 
-function userMessage(message, form, files, cwd, saveAttachments) {
-  let promptText = turnPrompt(message.trim(), form);
-  let inlineFiles = files;
-  if (saveAttachments && files?.length) {
-    const { inline, savedLines } = persistAttachments(files, cwd);
-    inlineFiles = inline;
-    if (savedLines.length > 0) {
-      promptText += `\n\nAttached data files, saved on this machine (ingest CSVs with create_session):\n${savedLines.join("\n")}`;
-    }
-  }
-  const attachments = fileBlocks(inlineFiles);
+function userMessage(message, form, files, history) {
+  const promptText = turnPrompt(message.trim(), form, history);
+  const attachments = fileBlocks(files);
   return {
     type: "user",
     message: {
@@ -876,6 +766,7 @@ class LiveSession {
     this.meeluServer = null;
     this.approvedJobs = new Set();
     this.sessionId = null;
+    this.history = null;
     this.q = null;
     this.input = null;
     this.config = null;
@@ -961,8 +852,12 @@ class LiveSession {
       if (m.type === "stream_event") {
         const ev = m.event;
         const inSubagent = m.parent_tool_use_id != null;
-        if (!inSubagent && ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-          turn.emit("text", { text: ev.delta.text ?? "" });
+        if (!inSubagent && ev?.type === "content_block_start" && ev.content_block?.type === "text") {
+          if (turn.textSent) turn.emit("text", { text: "\n\n" });
+        } else if (!inSubagent && ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+          const text = ev.delta.text ?? "";
+          if (text) turn.textSent = true;
+          turn.emit("text", { text });
         } else if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") {
           const name = (ev.content_block.name ?? "").replace(/^mcp__[\w-]+?__/, "");
           if (!SILENT_TOOLS.has(name)) turn.emit("tool", { name });
@@ -1011,6 +906,10 @@ class LiveSession {
     clearTimeout(this.idleTimer);
 
     if (!this.q) await this.start(this.sessionId);
+    if (files?.length && this.config.scope.allowAttachments === false) {
+      if (!this.sessionId) this.destroy();
+      throw new Error("This desk works only on the data in Meelu's database; it does not take attached files.");
+    }
 
     const onAbort = () => {
       this.q?.interrupt().catch(() => {});
@@ -1021,6 +920,7 @@ class LiveSession {
       emit,
       askPermission,
       toolNames: new Map(),
+      textSent: false,
       tokens: 0,
       inputTokens: 0,
       outputTokens: 0,
@@ -1029,7 +929,8 @@ class LiveSession {
     };
     emit("scope", this.config.scopeEvent);
 
-    const next = userMessage(message, form, files, this.options.cwd, this.config.scope.saveAttachments);
+    const next = userMessage(message, form, files, this.history);
+    this.history = null;
     let result;
     try {
       result = await this.runOne(next, turn);
@@ -1066,7 +967,11 @@ export async function runAgentTurn(payload, emit, options) {
   }
   if (!session) {
     session = new LiveSession(payload, options);
-    session.sessionId = sessionId ?? null;
+    if (sessionId && (await getSessionInfo(sessionId, { dir: options.cwd }))) {
+      session.sessionId = sessionId;
+    } else {
+      session.history = payload.history ?? null;
+    }
   }
   try {
     await session.send(payload, emit, options);

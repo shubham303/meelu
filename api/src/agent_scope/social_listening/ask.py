@@ -15,13 +15,13 @@ You can also **write a note for later tasks**. Use save_note when the user state
 
 Everything else here is a read. Posting a reply happens on the platform itself; the user copies their finished text from this desk.""",
     extra=[
-        "**Answer analytical questions with SQL** over social_listening_post: counts, drop reasons, per-platform and per-line splits. For anything heavier, social_listening_download_posts exports a CSV for the Analytics desk; never walk posts to compute a number.",
+        "**Answer analytical questions with SQL** over social_listening_post: counts, drop reasons, per-platform and per-line splits. For anything heavier, such as trends, clusters or models over the posts, load the Analytics desk; never walk posts to compute a number.",
         "**Runs happen only when the user presses Run now** on the desk, on their machine. There is no tool for it here and no schedule. If the posts look stale, check social_listening_run and point at that button.",
         "**A line that finds many posts but keeps none needs rewording.** Compare its found and kept counts and suggest a sharper sentence that says who is posting and what they want.",
     ],
     elsewhere=[
         "Writing a post or article from what you learn here → **Content**.",
-        "Charting or modelling the exported CSV → **Analytics**.",
+        "Charting or modelling the posts → **Analytics**.",
     ],
 )
 

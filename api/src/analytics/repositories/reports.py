@@ -13,7 +13,6 @@ SUMMARY_COLUMNS = (
     AnalyticsReport.id,
     AnalyticsReport.user_id,
     AnalyticsReport.site_id,
-    AnalyticsReport.session_id,
     AnalyticsReport.title,
     AnalyticsReport.created_by,
     AnalyticsReport.created_at,
@@ -23,25 +22,15 @@ SUMMARY_COLUMNS = (
 
 
 class AnalyticsReportRepository:
-    async def list_summaries(
-        self, db: AsyncSession, user_id: str, site_id: str, session_id: str | None = None
-    ) -> list[AnalyticsReportSummaryRecord]:
-        result = await db.execute(
-            select(*SUMMARY_COLUMNS)
-            .where(*self._conditions(user_id, site_id, session_id))
-            .order_by(AnalyticsReport.seq.desc())
-        )
-        return [AnalyticsReportSummaryRecord.model_validate(row) for row in result.mappings().all()]
-
     async def page_summaries(
         self,
         db: AsyncSession,
         user_id: str,
         site_id: str,
-        session_id: str | None,
+        search: str | None,
         paging: PaginationParams,
     ) -> PaginatedApiResponse[AnalyticsReportSummaryRecord]:
-        conds = self._conditions(user_id, site_id, session_id)
+        conds = self._conditions(user_id, site_id, search)
         total = (
             await db.execute(select(func.count()).select_from(AnalyticsReport).where(*conds))
         ).scalar_one()
@@ -80,7 +69,6 @@ class AnalyticsReportRepository:
         db: AsyncSession,
         user_id: str,
         site_id: str,
-        session_id: str | None,
         title: str,
         html: str,
         created_by: str,
@@ -90,7 +78,6 @@ class AnalyticsReportRepository:
             id=uid("rpt"),
             user_id=user_id,
             site_id=site_id,
-            session_id=session_id,
             title=title,
             html=html,
             created_by=created_by,
@@ -118,14 +105,10 @@ class AnalyticsReportRepository:
         await db.execute(delete(AnalyticsReport).where(AnalyticsReport.id == report_id))
         await db.flush()
 
-    async def delete_by_session(self, db: AsyncSession, session_id: str) -> None:
-        await db.execute(delete(AnalyticsReport).where(AnalyticsReport.session_id == session_id))
-        await db.flush()
-
-    def _conditions(self, user_id: str, site_id: str, session_id: str | None) -> list[Any]:
+    def _conditions(self, user_id: str, site_id: str, search: str | None) -> list[Any]:
         conds: list[Any] = [AnalyticsReport.user_id == user_id, AnalyticsReport.site_id == site_id]
-        if session_id:
-            conds.append(AnalyticsReport.session_id == session_id)
+        if search:
+            conds.append(AnalyticsReport.title.ilike(f"%{search}%"))
         return conds
 
 

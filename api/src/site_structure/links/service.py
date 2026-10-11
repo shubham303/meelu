@@ -321,7 +321,7 @@ class LinkSuggestionService:
         await structure_job_service.get(db, site_id, body.job_id)
         try:
             edges = self._workspace_edges(
-                await workspace_tables.rows(user_id, body.source_table), body.source_table
+                await workspace_tables.rows(user_id, site_id, body.source_table), body.source_table
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -382,7 +382,7 @@ class LinkSuggestionService:
         await structure_job_service.get(db, site_id, body.job_id)
         try:
             edges = self._workspace_edges(
-                await workspace_tables.rows(user_id, body.source_table), body.source_table
+                await workspace_tables.rows(user_id, site_id, body.source_table), body.source_table
             )
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc

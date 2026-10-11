@@ -61,6 +61,7 @@ async def test_link_removals(client, email):
 
     await workspace_table(
         user_id,
+        site["id"],
         "prune",
         "from_page_id text, to_page_id text, reason text",
         [
@@ -280,6 +281,7 @@ async def test_pillar_pages_pipeline(client, email, screener):
 
     await workspace_table(
         user_id,
+        site["id"],
         "folders",
         "group_key text, page_id text, topic text",
         [("ads", p, "Paid ads") for p in [*ads, home]]

@@ -111,7 +111,8 @@ def test_scope_response_merges_added_desks():
         "issue-review", AGENT_SCOPES["issue-review"], SITE, "content,analytics"
     )
     assert "content_create_piece" in merged.writes
-    assert "analytics" in merged.mcp_servers
+    assert "analytics_save_report" in merged.writes
+    assert merged.allow_attachments is True
     assert "content_pieces" in merged.system_prompt
     assert [d.name for d in merged.desks] == [
         "pages",

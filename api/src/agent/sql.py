@@ -49,6 +49,8 @@ def tenant_txn(role: str, schema: str):
 
 @contextmanager
 def user_txn(ctx: AgentContext):
+    if ctx.role is None or ctx.schema is None:
+        raise ValueError("No website selected. Pass the x-meelu-site header.")
     with tenant_txn(ctx.role, ctx.schema) as conn:
         yield conn
 

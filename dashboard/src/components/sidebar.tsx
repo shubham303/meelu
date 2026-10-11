@@ -19,6 +19,7 @@ import { signOut, useSession } from "@/lib/session";
 import { Logo } from "./logo";
 import { SessionUsage } from "./session-usage";
 import { SiteSwitcher } from "./site-switcher";
+import { AnalyticsTree } from "./analytics-tree";
 import { APP_DESKS, GLOBAL_HOME, WEBSITE_DESKS, type Desk } from "./desks";
 
 const COLLAPSED_KEY = "meelu.sidebar.collapsed";
@@ -76,11 +77,18 @@ export function Sidebar() {
 
   const navLink = (item: Desk) => {
     const Icon: LucideIcon = item.icon;
-    return (
+    const link = (
       <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} className={linkClass(isActive(item))}>
         <Icon size={16} className="shrink-0" />
         {!collapsed && item.label}
       </Link>
+    );
+    if (item.id !== "analytics" || collapsed || !isActive(item)) return link;
+    return (
+      <div key={item.href}>
+        {link}
+        <AnalyticsTree canChat={isApp} />
+      </div>
     );
   };
 
