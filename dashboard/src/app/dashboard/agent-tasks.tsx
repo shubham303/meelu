@@ -19,11 +19,10 @@ import {
   Minimize2,
   Paperclip,
   Sparkles,
-  Wrench,
   X,
 } from "lucide-react";
 import { gsap, useGSAP } from "@/components/animate";
-import { Button, IconButton } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { currentSiteId, GLOBAL } from "@/lib/current-site";
 import { useApi, useCurrentSite } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
@@ -31,6 +30,8 @@ import { formatRelative } from "@/lib/utils";
 import type { PromptChip } from "@/features/prompt-chips/lib";
 import { RunRail, useAgentRunsOptional } from "@/components/agent/run-rail";
 import { AgentChat, type AgentChatItem } from "@/components/agent/agent-chat";
+import { ChartFrame } from "@/components/agent/chart-frame";
+import { PermissionPrompt } from "@/components/agent/permission-prompt";
 
 declare global {
   interface Window {
@@ -68,58 +69,10 @@ declare global {
         apiKey?: string;
       }) => Promise<LlmConfigView | { error: string }>;
       getConnectors?: () => Promise<ConnectorsView | { error: string }>;
-      setConnector?: (
-        provider: string,
-        values: Record<string, string>,
-        secretKeys: string[],
-      ) => Promise<ConnectorsView | { error: string }>;
       removeConnector?: (provider: string) => Promise<ConnectorsView | { error: string }>;
       connectGsc?: () => Promise<ConnectorsView | { error: string }>;
       connectGa4?: () => Promise<ConnectorsView | { error: string }>;
-      analyticsSaveSource?: (params: {
-        sessionId: string;
-        sourceId: string;
-        content: string;
-      }) => Promise<
-        | { relativePath: string; bytes: number }
-        | { error: string }
-      >;
-      analyticsCheckSession?: (params: {
-        sessionKey?: string | null;
-        paths: string[];
-      }) => Promise<
-        | { engine: "none" | "present" | "missing"; missing: string[]; ok: boolean }
-        | { error: string }
-      >;
-      analyticsResolvePaths?: (params: {
-        paths: string[];
-      }) => Promise<
-        Array<{ relativePath: string; path: string | null; missing: boolean }> | { error: string }
-      >;
-      analyticsDeleteSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok: true; kept?: boolean } | { error: string }>;
-      analyticsReadSource?: (params: {
-        relativePath: string;
-        limit?: number;
-      }) => Promise<
-        | {
-            name: string;
-            path: string;
-            bytes: number;
-            columns: string[];
-            rows: string[][];
-            more: boolean;
-          }
-        | { error: string }
-      >;
-      analyticsRevealSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok: true } | { error: string }>;
-      analyticsExportSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok?: true; canceled?: true; path?: string } | { error: string }>;
-      analyticsExportText?: (params: {
+      saveTextFile?: (params: {
         name: string;
         content: string;
       }) => Promise<{ ok?: true; canceled?: true; path?: string } | { error: string }>;
@@ -1009,32 +962,6 @@ function AgentTaskChat({
   );
 }
 
-function ChartFrame({ html }: { html: string }) {
-  const ref = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(320);
-
-  const measure = () => {
-    const doc = ref.current?.contentDocument;
-    const h = doc?.documentElement?.scrollHeight ?? 0;
-    if (h > 0) setHeight(h);
-  };
-
-  return (
-    <iframe
-      ref={ref}
-      title="Chart"
-      sandbox="allow-same-origin"
-      srcDoc={html}
-      style={{ height }}
-      className="block w-full bg-white"
-      onLoad={() => {
-        measure();
-        setTimeout(measure, 150);
-      }}
-    />
-  );
-}
-
 export function AgentLaunchButton({
   title,
   hint,
@@ -1109,57 +1036,4 @@ export async function runInlineTurn({
   });
 
   return text.trim();
-}
-
-function PermissionPrompt({
-  item,
-  onAnswer,
-}: {
-  item: { tool: string; input: Record<string, unknown>; answered?: string };
-  onAnswer: (decision: "allow" | "always" | "full" | "deny") => void;
-}) {
-  const summary = Object.entries(item.input)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .slice(0, 4)
-    .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join(" · ");
-
-  if (item.answered) {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] text-faint font-mono">
-        <Wrench size={10} className="shrink-0" />
-        {item.tool} — {item.answered === "deny" ? "declined" : "allowed"}
-      </p>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2.5 space-y-2">
-      <div>
-        <p className="text-sm text-ink font-medium">
-          Meelu wants to run <span className="font-mono">{item.tool}</span>
-        </p>
-        {summary && (
-          <p className="text-xs text-sub mt-0.5 line-clamp-3 break-words">{summary}</p>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" onClick={() => onAnswer("allow")}>
-          Allow
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("always")}>
-          Always allow this action
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("full")}>
-          Full access
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("deny")}>
-          No
-        </Button>
-      </div>
-      <p className="text-[11px] text-faint">
-        “Always” and “full access” last until you quit the app.
-      </p>
-    </div>
-  );
 }

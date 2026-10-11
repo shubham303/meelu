@@ -38,7 +38,7 @@ ASK = AskDesk(
         "Changing the website's record or settings → **Site**; saving a note for later tasks → **Notes**.",
         "Judging audit findings and drafting fix briefs → **Technical SEO**.",
         "Writing a page for the site → **Content**.",
-        "Counts, averages, groupings and trends over the whole site → **Analytics**, fed by the site's CSV download.",
+        "Counts, averages, groupings and trends over the whole site → **Analytics**.",
     ],
 )
 

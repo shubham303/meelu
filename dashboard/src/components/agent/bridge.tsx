@@ -16,8 +16,6 @@ export interface AgentScopeInfo {
   action: string;
   readOnly: boolean;
   writes: string[];
-  servers: string[];
-  notices: string[];
 }
 
 export interface AskLink {
@@ -33,6 +31,7 @@ export interface TurnPayload {
   sessionId?: string;
   form?: Record<string, string | undefined>;
   params?: Record<string, string>;
+  history?: { role: "user" | "assistant"; text: string }[];
 }
 
 export interface SiteSummaryEvent {
@@ -193,6 +192,7 @@ export function streamTurn(opts: StreamOptions): RunningTurn {
     sessionId: opts.sessionId,
     form: opts.form ?? {},
     params: opts.params,
+    history: opts.history,
   });
 
   void start
@@ -258,8 +258,6 @@ function readScope(data: Record<string, unknown>): AgentScopeInfo | null {
     action: typeof data.action === "string" ? data.action : "",
     readOnly: data.readOnly === true || writes.length === 0,
     writes,
-    servers: strings(data.servers),
-    notices: strings(data.notices),
   };
 }
 
@@ -292,7 +290,6 @@ export function parseLinks(text: string): { text: string; links: AskLink[] } {
 interface ScopeResponse {
   action: string;
   writes: string[];
-  mcpServers?: Record<string, unknown>;
   global?: boolean;
 }
 
@@ -312,8 +309,6 @@ export function useScopeInfo(
       action: data.action ?? action ?? "",
       readOnly: writes.length === 0,
       writes,
-      servers: data.mcpServers ? Object.keys(data.mcpServers) : [],
-      notices: [],
     };
   }, [data, action]);
 }
@@ -340,13 +335,6 @@ export function ScopeSummary({
       ) : (
         <> · may write with {namesOrCount(scope.writes)}</>
       )}
-      {scope.servers.length > 0 && <> · using {scope.servers.join(", ")}</>}
-      {scope.notices.map((n) => (
-        <span key={n} className="text-warn">
-          {" "}
-          · {n}
-        </span>
-      ))}
     </span>
   );
 }

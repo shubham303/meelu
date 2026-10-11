@@ -370,9 +370,5 @@ class SocialListeningService:
             last_run=await social_listening_runs.latest(db, site_id),
         )
 
-    async def export_posts(self, db: AsyncSession, site_id: str, filters: PostFilters):
-        self._check_filters(filters)
-        return await social_listening_posts.list_all(db, site_id, filters)
-
 
 social_listening_service = SocialListeningService()

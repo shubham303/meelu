@@ -1,4 +1,5 @@
 import src.agent.tools.core
+import src.data_analytics.tools
 import src.providers.seo_data.tools
 import src.scratchpad.tools  # noqa: F401
 from src.agent import server
@@ -43,8 +44,8 @@ DESK_BLURBS: dict[str, str] = {
     "pages": "The crawled page corpus — search pages by text or crawl facts.",
     "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
     "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
-    "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines, export the posts as a CSV.",
-    "analytics": "The analytics engine — sessions over CSVs and workspace tables: profiling, clustering, forecasting, reports.",
+    "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines.",
+    "analytics": "Analysis over this website's Search Console, Analytics and page data in the database — profiling, clustering, forecasting, period comparison, metric drivers; save reports.",
 }
 LOADABLE_DESKS = frozenset(DESK_BLURBS)
 
@@ -59,7 +60,6 @@ def desk_addition(desk_name: str) -> AgentScope:
     writes = list(dict.fromkeys([w for s in scopes for w in s.writes] + tagged_writes))
     tables = list(dict.fromkeys(t for s in scopes if s.tables for t in s.tables))
     guides = tuple(dict.fromkeys(g for s in scopes for g in s.guides))
-    mcp_servers = {k: v for s in scopes for k, v in s.mcp_servers.items()}
     local_tools = list(dict.fromkeys(t for s in scopes for t in s.local_tools))
     silent = list(dict.fromkeys(w for s in scopes for w in s.silent_writes))
     return AgentScope(
@@ -68,7 +68,6 @@ def desk_addition(desk_name: str) -> AgentScope:
         tables=tuple(tables),
         guides=guides,
         writes=writes,
-        mcp_servers=mcp_servers,
         local_tools=local_tools,
         silent_writes=silent,
     )

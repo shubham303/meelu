@@ -99,7 +99,6 @@ class AgentScopeService:
             else tuple(dict.fromkeys([*scope.tables] + [t for a in extra for t in a.tables]))
         )
         guides = tuple(dict.fromkeys([*scope.guides] + [g for a in extra for g in a.guides]))
-        mcp_servers = {k: v for a in extra for k, v in a.mcp_servers.items()} | scope.mcp_servers
         local_tools = list(
             dict.fromkeys(scope.local_tools + [t for a in extra for t in a.local_tools])
         )
@@ -110,9 +109,8 @@ class AgentScopeService:
             desk=scope.desk,
             create_tool_name=scope.create_tool_names,
             is_global=scope.is_global,
-            mcp_servers=mcp_servers,
+            allow_attachments=scope.allow_attachments,
             limits=scope.limits,
-            save_attachments=scope.save_attachments,
             providers=scope.providers,
             local_tools=local_tools,
             silent_writes=silent,

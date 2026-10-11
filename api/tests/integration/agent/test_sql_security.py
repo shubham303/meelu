@@ -6,7 +6,13 @@ import pytest
 from sqlalchemy.engine import make_url
 
 from src.agent.context import AgentContext, reset_context, set_context
-from src.agent.security import bootstrap, drop_user, ensure_user
+from src.agent.security import (
+    READ_ROLE,
+    bootstrap,
+    drop_orphan_tenants,
+    drop_tenants,
+    ensure_tenant,
+)
 from src.agent.sql import engine
 from src.agent.tools.core import run_sql
 from src.agent.workspace import workspace_tables
@@ -19,12 +25,15 @@ CHILD_TABLE = "agent_scope_probe_child"
 
 async def tenant(client, email, domain):
     await signup(client, email)
-    user_id = await user_id_of(email)
+    return await site_tenant(client, await user_id_of(email), domain)
+
+
+async def site_tenant(client, user_id, domain):
     r = await client.post("/api/v1/sites", json={"domain": domain, "name": "Site"})
     assert r.status_code == 201, r.text
     site_id = r.json()["data"]["id"]
     await seed_pages(site_id, user_id, [{"url": f"https://{domain}/", "depth": 0}])
-    role, schema = await asyncio.to_thread(ensure_user, user_id)
+    role, schema = await asyncio.to_thread(ensure_tenant, user_id, site_id)
     return AgentContext(
         user_id=user_id,
         site_id=site_id,
@@ -52,7 +61,7 @@ async def pair(client):
     await asyncio.to_thread(bootstrap)
     yield a, b
     for ctx in (a, b):
-        await asyncio.to_thread(drop_user, ctx.user_id)
+        await asyncio.to_thread(drop_tenants, ctx.user_id)
 
 
 def role_exists(role: str) -> bool:
@@ -182,14 +191,63 @@ async def test_dropping_a_user_removes_its_role_and_schema(client):
     run = uuid.uuid4().hex[:8]
     ctx = await tenant(client, f"sql-d-{run}@example.com", f"d{run}.example.com")
     await sql(ctx, "create table kept as select 1 as n")
-    await asyncio.to_thread(drop_user, ctx.user_id)
+    await asyncio.to_thread(drop_tenants, ctx.user_id)
     assert not await asyncio.to_thread(role_exists, ctx.role)
+
+
+async def test_each_site_of_one_user_sees_only_its_own_rows_and_workspace(client):
+    run = uuid.uuid4().hex[:8]
+    first = await tenant(client, f"sql-s-{run}@example.com", f"s1{run}.example.com")
+    second = await site_tenant(client, first.user_id, f"s2{run}.example.com")
+    await asyncio.to_thread(bootstrap)
+    try:
+        assert first.role != second.role and first.schema != second.schema
+        assert (await sql(first, "select count(*) from site_pages")).rows == [[1]]
+        assert (await sql(first, "select id from site")).rows == [[first.site_id]]
+        assert (await sql(second, "select id from site")).rows == [[second.site_id]]
+        other = f"select count(*) from site_pages where site_id = '{second.site_id}'"
+        assert (await sql(first, other)).rows == [[0]]
+        await sql(second, "create table mine as select 1 as n")
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            await sql(first, f'select * from "{second.schema}".mine')
+    finally:
+        await asyncio.to_thread(drop_tenants, first.user_id)
+
+
+async def test_deleting_a_site_leaves_an_orphan_role_the_sweep_drops(client):
+    run = uuid.uuid4().hex[:8]
+    ctx = await tenant(client, f"sql-o-{run}@example.com", f"o{run}.example.com")
+    r = await client.delete(f"/api/v1/sites/{ctx.site_id}")
+    assert r.status_code in (200, 204), r.text
+    assert await asyncio.to_thread(role_exists, ctx.role)
+    assert ctx.role in await asyncio.to_thread(drop_orphan_tenants)
+    assert not await asyncio.to_thread(role_exists, ctx.role)
+
+
+def make_foreign_role(role: str) -> None:
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f'CREATE ROLE "{role}" NOLOGIN IN ROLE {READ_ROLE}')
+
+
+def drop_role(role: str) -> None:
+    with engine.begin() as conn:
+        conn.exec_driver_sql(f'DROP ROLE IF EXISTS "{role}"')
+
+
+async def test_the_sweep_leaves_tenants_of_other_databases_alone():
+    role = f"agent_elsewhere_{uuid.uuid4().hex[:12]}"
+    await asyncio.to_thread(make_foreign_role, role)
+    try:
+        assert role not in await asyncio.to_thread(drop_orphan_tenants)
+        assert await asyncio.to_thread(role_exists, role)
+    finally:
+        await asyncio.to_thread(drop_role, role)
 
 
 async def test_workspace_reads_run_as_the_tenant(pair):
     a, _ = pair
     await sql(a, "create view probe as select current_user::text as who")
-    rows = await workspace_tables.rows(a.user_id, "probe")
+    rows = await workspace_tables.rows(a.user_id, a.site_id, "probe")
     assert rows == [{"who": a.role}]
 
 
@@ -198,6 +256,6 @@ async def test_workspace_reads_are_capped(pair, monkeypatch):
     await sql(a, "create table big as select generate_series(1, 3) as n")
     monkeypatch.setattr(settings, "agent_max_workspace_rows", 2)
     with pytest.raises(ValueError, match="more than 2 rows"):
-        await workspace_tables.rows(a.user_id, "big")
+        await workspace_tables.rows(a.user_id, a.site_id, "big")
     with pytest.raises(ValueError, match="Could not read"):
-        await workspace_tables.rows(a.user_id, "missing")
+        await workspace_tables.rows(a.user_id, a.site_id, "missing")

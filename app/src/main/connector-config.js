@@ -5,10 +5,7 @@ import { appFile, writeSecretFile } from "./paths.js";
 const CONNECTOR_FIELDS = {
   gsc: { refreshToken: "secret" },
   ga4: { refreshToken: "secret" },
-  analytics: { projectDir: "plain", dataDir: "plain" },
 };
-
-const MANUAL_CONNECTORS = new Set(["analytics"]);
 
 function storeFile() {
   return appFile("connectors.json");
@@ -81,11 +78,6 @@ export function saveConnector(provider, values = {}) {
   const store = readStore();
   store[knownProvider(provider)] = encodeRecord(CONNECTOR_FIELDS[provider], values);
   writeStore(store);
-}
-
-export function saveManualConnector(provider, values = {}) {
-  if (!MANUAL_CONNECTORS.has(provider)) throw new Error("This connector cannot be set by hand.");
-  saveConnector(provider, values);
 }
 
 export function removeConnector(provider) {

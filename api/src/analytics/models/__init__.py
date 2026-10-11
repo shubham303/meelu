@@ -1,1 +1,1 @@
-from src.analytics.models import analytics_reports, analytics_sessions, analytics_sources
+from src.analytics.models import analytics_chat_messages, analytics_chats, analytics_reports

@@ -72,8 +72,8 @@ class Settings(EnvSettings):
     agent_tool_concurrency: int = 4
     agent_temp_file_limit: str = "1GB"
     agent_max_models: int = 50
-    agent_max_export_rows: int = 100000
-    agent_export_ttl_hours: int = 24
+    agent_workspace_ttl_days: int = 7
+    agent_workspace_sweep_minutes: int = 60
 
     @field_validator("cors_origins")
     @classmethod

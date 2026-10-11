@@ -2,6 +2,7 @@ import re
 
 import src.agent.tools.core
 import src.agent_plans.tools
+import src.analytics.tools
 import src.content.tools
 import src.data_analytics.tools as analytics_tools
 import src.notes.tools
@@ -27,15 +28,6 @@ SCRATCHPAD_TOOLS = {
     "scratchpad_delete",
 }
 SHARED_READS = {"run_sql", "find_plans", "get_plan"} | SCRATCHPAD_TOOLS
-PENDING_TOOL_NAMES = {
-    "analytics_update_session",
-    "analytics_add_source",
-    "analytics_save_report",
-    "analytics_update_report",
-    "draw_diagram",
-    "draw_dashboard",
-    "list_diagram_types",
-}
 
 
 def catalog() -> dict[str, dict]:
@@ -129,6 +121,14 @@ def test_loading_the_analytics_desk_adds_the_engine():
     assert "content_create_piece" not in allowed
 
 
+def test_the_analytics_chat_has_the_engine_and_report_writes():
+    body = agent_scope_service.scope_response("ask-analytics", AGENT_SCOPES["ask-analytics"], SITE)
+    allowed = allowed_for({"analytics"}, body.writes)
+    assert {"cluster", "forecast", "compare_periods", "run_sql"} <= allowed
+    assert {"analytics_save_report", "analytics_update_report"} <= allowed
+    assert body.allow_attachments is False
+
+
 def test_every_write_in_a_scope_is_a_registered_write():
     cat = catalog()
     for action, scope in AGENT_SCOPES.items():
@@ -154,10 +154,9 @@ def test_prompts_name_only_tools_the_desk_can_call():
     schema = schema_words()
     for action, scope in AGENT_SCOPES.items():
         body = agent_scope_service.scope_response(action, scope, None if scope.is_global else SITE)
-        external = {t for tpl in body.mcp_servers.values() for t in (tpl.get("tools") or [])}
-        allowed = allowed_for({scope.desk}, body.writes) | external | {"add_desk"}
+        allowed = allowed_for({scope.desk}, body.writes) | {"add_desk"}
         for token in set(TOKEN.findall(body.system_prompt)):
-            if token in schema or token in PENDING_TOOL_NAMES:
+            if token in schema:
                 continue
             if token in cat:
                 assert token in allowed, f"{action} names {token}, which this desk cannot call"

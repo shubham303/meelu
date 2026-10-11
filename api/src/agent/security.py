@@ -8,13 +8,12 @@ from src.settings import settings
 
 READ_ROLE = "meelu_agent_read"
 USER_ID_FUNCTION = "public.meelu_agent_user_id"
+SITE_ID_FUNCTION = "public.meelu_agent_site_id"
 POLICY = "meelu_agent_select"
 
 READABLE_TABLES = frozenset(
     {
         "analytics_reports",
-        "analytics_sessions",
-        "analytics_sources",
         "content_piece_issues",
         "content_pieces",
         "link_suggestions",
@@ -68,6 +67,7 @@ LARGE_OBJECT_WRITERS = (
 )
 
 CURRENT_TENANT = f"(SELECT {USER_ID_FUNCTION}())"
+CURRENT_SITE = f"(SELECT {SITE_ID_FUNCTION}())"
 
 SINGLE_COLUMN_FOREIGN_KEYS = """
 SELECT child.relname, child_col.attname, parent.relname, parent_col.attname
@@ -104,6 +104,17 @@ def _secure(conn, table: str, using: str) -> None:
     conn.exec_driver_sql(f"CREATE POLICY {POLICY} ON public.{qt} FOR SELECT USING ({using})")
 
 
+def _tables_with_column(conn, column: str) -> set[str]:
+    return {
+        r[0]
+        for r in conn.exec_driver_sql(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND column_name = %s",
+            (column,),
+        )
+    }
+
+
 def bootstrap() -> BootstrapResult:
     read = quote_ident(READ_ROLE)
     with engine.begin() as conn:
@@ -112,13 +123,14 @@ def bootstrap() -> BootstrapResult:
         conn.exec_driver_sql("REVOKE USAGE ON LANGUAGE plpgsql, sql FROM PUBLIC")
         for function in LARGE_OBJECT_WRITERS:
             conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION pg_catalog.{function} FROM PUBLIC")
-        conn.exec_driver_sql(
-            f"CREATE OR REPLACE FUNCTION {USER_ID_FUNCTION}() RETURNS text "
-            "LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS "
-            "$$ SELECT user_id FROM public.agent_tenants WHERE role_name = session_user $$"
-        )
-        conn.exec_driver_sql(f"REVOKE ALL ON FUNCTION {USER_ID_FUNCTION}() FROM PUBLIC")
-        conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION {USER_ID_FUNCTION}() TO {read}")
+        for function, column in ((USER_ID_FUNCTION, "user_id"), (SITE_ID_FUNCTION, "site_id")):
+            conn.exec_driver_sql(
+                f"CREATE OR REPLACE FUNCTION {function}() RETURNS text "
+                "LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS "
+                f"$$ SELECT {column} FROM public.agent_tenants WHERE role_name = session_user $$"
+            )
+            conn.exec_driver_sql(f"REVOKE ALL ON FUNCTION {function}() FROM PUBLIC")
+            conn.exec_driver_sql(f"GRANT EXECUTE ON FUNCTION {function}() TO {read}")
 
         tables = [
             r[0]
@@ -127,13 +139,8 @@ def bootstrap() -> BootstrapResult:
                 "WHERE table_schema = 'public' AND table_type = 'BASE TABLE'"
             )
         ]
-        user_scoped = {
-            r[0]
-            for r in conn.exec_driver_sql(
-                "SELECT table_name FROM information_schema.columns "
-                "WHERE table_schema = 'public' AND column_name = 'user_id'"
-            )
-        }
+        user_scoped = _tables_with_column(conn, "user_id")
+        site_scoped = _tables_with_column(conn, "site_id")
         owned_through: dict[str, list[str]] = {}
         for child, column, parent, parent_column in conn.exec_driver_sql(
             SINGLE_COLUMN_FOREIGN_KEYS
@@ -148,7 +155,11 @@ def bootstrap() -> BootstrapResult:
         granted, secured = [], []
         for table in tables:
             qt = quote_ident(table)
-            if table in user_scoped:
+            if table == "site":
+                using = f"user_id = {CURRENT_TENANT} AND id = {CURRENT_SITE}"
+            elif table in user_scoped and table in site_scoped:
+                using = f"user_id = {CURRENT_TENANT} AND site_id = {CURRENT_SITE}"
+            elif table in user_scoped:
                 using = f"user_id = {CURRENT_TENANT}"
             elif table in owned_through:
                 using = " AND ".join(owned_through[table])
@@ -165,12 +176,12 @@ def bootstrap() -> BootstrapResult:
     return BootstrapResult(granted=granted, rls=secured)
 
 
-def ensure_user(user_id: str) -> tuple[str, str]:
-    role, schema = tenant_names(user_id)
-    if user_id in _ensured:
+def ensure_tenant(user_id: str, site_id: str) -> tuple[str, str]:
+    role, schema = tenant_names(user_id, site_id)
+    if role in _ensured:
         return role, schema
     with _lock:
-        if user_id in _ensured:
+        if role in _ensured:
             return role, schema
         qr, qs = quote_ident(role), quote_ident(schema)
         attributes = (
@@ -190,28 +201,51 @@ def ensure_user(user_id: str) -> tuple[str, str]:
             conn.exec_driver_sql(f"CREATE SCHEMA IF NOT EXISTS {qs} AUTHORIZATION {qr}")
             conn.exec_driver_sql(f"ALTER SCHEMA {qs} OWNER TO {qr}")
             conn.exec_driver_sql(
-                "INSERT INTO public.agent_tenants (role_name, user_id) VALUES (%s, %s) "
-                "ON CONFLICT (role_name) DO UPDATE SET user_id = excluded.user_id",
-                (role, user_id),
+                "INSERT INTO public.agent_tenants (role_name, schema_name, user_id, site_id) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (role_name) DO NOTHING",
+                (role, schema, user_id, site_id),
             )
-        _ensured.add(user_id)
+        _ensured.add(role)
     return role, schema
 
 
-def drop_user(user_id: str) -> None:
-    role, schema = tenant_names(user_id)
+def _drop_role(conn, role: str, schema: str) -> None:
     qr = quote_ident(role)
-    with _lock:
-        with engine.begin() as conn:
-            if _role_exists(conn, role):
-                conn.exec_driver_sql(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = %s",
-                    (role,),
-                )
-                conn.exec_driver_sql(f"DROP SCHEMA IF EXISTS {quote_ident(schema)} CASCADE")
-                conn.exec_driver_sql(f"DROP OWNED BY {qr} CASCADE")
-                conn.exec_driver_sql(f"DROP ROLE {qr}")
-            conn.exec_driver_sql("DELETE FROM public.agent_tenants WHERE role_name = %s", (role,))
-        _ensured.discard(user_id)
-    for area in ("models", "social-listening"):
-        shutil.rmtree(settings.agent_data_dir / area / schema, ignore_errors=True)
+    if _role_exists(conn, role):
+        conn.exec_driver_sql(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = %s", (role,)
+        )
+        conn.exec_driver_sql(f"DROP SCHEMA IF EXISTS {quote_ident(schema)} CASCADE")
+        conn.exec_driver_sql(f"DROP OWNED BY {qr} CASCADE")
+        conn.exec_driver_sql(f"DROP ROLE {qr}")
+    conn.exec_driver_sql("DELETE FROM public.agent_tenants WHERE role_name = %s", (role,))
+    _ensured.discard(role)
+    shutil.rmtree(settings.agent_data_dir / "models" / schema, ignore_errors=True)
+
+
+def drop_tenants(user_id: str) -> None:
+    with _lock, engine.begin() as conn:
+        rows = conn.exec_driver_sql(
+            "SELECT role_name, schema_name FROM public.agent_tenants WHERE user_id = %s",
+            (user_id,),
+        ).fetchall()
+        for role, schema in rows:
+            _drop_role(conn, role, schema)
+
+
+ORPHAN_ROLES = """
+SELECT r.rolname FROM pg_roles r
+  JOIN pg_auth_members m ON m.member = r.oid
+  JOIN pg_roles g ON g.oid = m.roleid AND g.rolname = %s
+  JOIN pg_namespace n ON n.nspname = 'ws_' || substr(r.rolname, 7)
+ WHERE NOT EXISTS (SELECT 1 FROM public.agent_tenants t WHERE t.role_name = r.rolname)
+"""
+
+
+def drop_orphan_tenants() -> list[str]:
+    with _lock, engine.begin() as conn:
+        orphans = [r[0] for r in conn.exec_driver_sql(ORPHAN_ROLES, (READ_ROLE,))]
+        for role in orphans:
+            schema = "ws_" + role.removeprefix("agent_")
+            _drop_role(conn, role, schema)
+    return orphans

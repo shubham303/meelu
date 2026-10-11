@@ -2,6 +2,22 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChartFrame } from "./chart-frame";
+
+type HastNode = {
+  type?: string;
+  tagName?: string;
+  value?: string;
+  properties?: { className?: unknown };
+  children?: HastNode[];
+};
+
+function chartSource(pre: HastNode | undefined): string | null {
+  const code = pre?.children?.find((c) => c.tagName === "code");
+  const classes = code?.properties?.className;
+  if (!Array.isArray(classes) || !classes.includes("language-chart")) return null;
+  return (code?.children ?? []).map((c) => c.value ?? "").join("");
+}
 
 export function ChatMarkdown({ text }: { text: string }) {
   return (
@@ -25,12 +41,22 @@ export function ChatMarkdown({ text }: { text: string }) {
         code: (props) => (
           <code className="rounded bg-panel2 px-1 py-0.5 font-mono text-[0.85em]" {...props} />
         ),
-        pre: (props) => (
-          <pre
-            className="mb-2 overflow-x-auto rounded-lg border border-edge bg-panel2 p-2.5 text-xs [&_code]:bg-transparent [&_code]:p-0"
-            {...props}
-          />
-        ),
+        pre: ({ node, ...props }) => {
+          const chart = chartSource(node as HastNode | undefined);
+          if (chart !== null) {
+            return (
+              <div className="mb-2 overflow-hidden rounded-xl border border-edge bg-white">
+                <ChartFrame html={chart} />
+              </div>
+            );
+          }
+          return (
+            <pre
+              className="mb-2 overflow-x-auto rounded-lg border border-edge bg-panel2 p-2.5 text-xs [&_code]:bg-transparent [&_code]:p-0"
+              {...props}
+            />
+          );
+        },
         hr: () => <hr className="border-edge my-3" />,
         table: (props) => (
           <div className="overflow-x-auto mb-2">

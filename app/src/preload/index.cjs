@@ -52,7 +52,6 @@ const bridge = {
   getLlmConfig: () => ipcRenderer.invoke("llm:get"),
   setLlmConfig: (cfg) => ipcRenderer.invoke("llm:set", cfg),
   getConnectors: () => ipcRenderer.invoke("connectors:list"),
-  setConnector: (provider, values) => ipcRenderer.invoke("connectors:set", provider, values),
   removeConnector: (provider) => ipcRenderer.invoke("connectors:remove", provider),
   connectGsc: () => ipcRenderer.invoke("connectors:connectGsc"),
   connectGa4: () => ipcRenderer.invoke("connectors:connectGa4"),
@@ -65,14 +64,7 @@ const bridge = {
     ipcRenderer.on("social-signals:event", listener);
     return () => ipcRenderer.removeListener("social-signals:event", listener);
   },
-  analyticsSaveSource: (params) => ipcRenderer.invoke("analytics:saveSource", params),
-  analyticsCheckSession: (params) => ipcRenderer.invoke("analytics:checkSession", params),
-  analyticsResolvePaths: (params) => ipcRenderer.invoke("analytics:resolvePaths", params),
-  analyticsDeleteSource: (params) => ipcRenderer.invoke("analytics:deleteSource", params),
-  analyticsReadSource: (params) => ipcRenderer.invoke("analytics:readSource", params),
-  analyticsRevealSource: (params) => ipcRenderer.invoke("analytics:revealSource", params),
-  analyticsExportSource: (params) => ipcRenderer.invoke("analytics:exportSource", params),
-  analyticsExportText: (params) => ipcRenderer.invoke("analytics:exportText", params),
+  saveTextFile: (params) => ipcRenderer.invoke("files:saveText", params),
 };
 
 contextBridge.exposeInMainWorld("meeluAgent", bridge);
