@@ -16,40 +16,14 @@ import {
 } from "@/components/ui";
 import { CATEGORY_LABEL, isInstallable, MCP_CATALOG, type CatalogEntry } from "@/lib/mcp-catalog";
 import { formatRelative } from "@/lib/utils";
+import { ModelPricingCard } from "@/features/llm-models/model-pricing-card";
 import type { ConnectorsView, LlmConfigView, LlmProvider } from "../agent-tasks";
-
-const MODEL_PLACEHOLDER: Record<LlmProvider, string> = {
-  anthropic: "claude-haiku-4-5 (default)",
-  openrouter: "e.g. anthropic/claude-sonnet-5",
-  llamacpp: "blank — the server runs one model",
-  custom: "e.g. qwen3.5:35b-a3b",
-};
-
-const KEY_LABEL: Record<LlmProvider, string> = {
-  anthropic: "API key",
-  openrouter: "API key",
-  llamacpp: "API key (if llama-server was started with --api-key)",
-  custom: "API key (if your endpoint checks one)",
-};
-
-const KEY_PLACEHOLDER: Record<LlmProvider, string> = {
-  anthropic: "sk-ant-… (blank = this machine's Claude login)",
-  openrouter: "sk-or-v1-…",
-  llamacpp: "usually blank",
-  custom: "usually blank",
-};
-
-const BASE_URL_PLACEHOLDER: Partial<Record<LlmProvider, string>> = {
-  llamacpp: "http://localhost:8080 (default)",
-  custom: "http://localhost:11434",
-};
 
 function ModelProviderCard() {
   const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
   const [view, setView] = useState<LlmConfigView | null>(null);
-  const [provider, setProvider] = useState<LlmProvider>("anthropic");
+  const [provider, setProvider] = useState<LlmProvider>("meelu");
   const [model, setModel] = useState("");
-  const [baseUrl, setBaseUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -61,21 +35,17 @@ function ModelProviderCard() {
       setView(res);
       setProvider(res.provider);
       setModel(res.model);
-      setBaseUrl(res.baseUrl);
     });
   }, [bridge]);
 
   if (!bridge) return null;
 
   const apply = async (key: string | undefined) => {
-    if (!bridge.setLlmConfig) {
-      setErr("This app build predates model settings — restart the app after updating.");
-      return;
-    }
+    if (!bridge.setLlmConfig) return;
     setBusy(true);
     setErr(null);
     setSaved(false);
-    const res = await bridge.setLlmConfig({ provider, model, baseUrl, apiKey: key });
+    const res = await bridge.setLlmConfig({ provider, model, apiKey: key });
     setBusy(false);
     if ("error" in res) {
       setErr(res.error);
@@ -90,27 +60,12 @@ function ModelProviderCard() {
     <Card className="mb-6">
       <div className="flex items-center gap-2.5">
         <Cpu size={15} className="text-accent shrink-0" />
-        <p className="font-medium text-ink">Model &amp; provider</p>
-        {view?.saved && <Badge tone="good">set</Badge>}
+        <p className="font-medium text-ink">Who runs the model</p>
       </div>
       <p className="text-sm text-sub mt-1">
-        The brain. Tasks run on this device against the provider you pick here — your key,
-        your model, never our server&apos;s.
+        Meelu runs the model you pick below and charges your credits what it costs. Or run tasks
+        on your own Claude login or Anthropic API key from this device.
       </p>
-      {provider === "openrouter" && (
-        <p className="text-sm text-sub mt-2">
-          OpenRouter routes to any model it carries, named provider-first. Tasks here are
-          agentic — they lean on tool calling and long turns, so pick a model that handles
-          both well.
-        </p>
-      )}
-      {provider === "llamacpp" && (
-        <p className="text-sm text-sub mt-2">
-          A recent llama-server speaks the Anthropic Messages API. Start it with{" "}
-          <code>--jinja</code> so the model can call tools, and load a model that handles
-          tool calling and long turns well.
-        </p>
-      )}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Field label="Provider">
@@ -119,57 +74,40 @@ function ModelProviderCard() {
             onChange={(e) => setProvider(e.target.value as LlmProvider)}
             aria-label="LLM provider"
           >
-            <option value="anthropic">Anthropic API</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="llamacpp">llama.cpp (llama-server)</option>
-            <option value="custom">Custom endpoint (Ollama, LM Studio, proxy)</option>
+            <option value="meelu">Meelu credits</option>
+            <option value="anthropic">My Claude (this machine&apos;s login or an API key)</option>
           </Select>
         </Field>
-        <Field label="Model">
-          <Input
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder={MODEL_PLACEHOLDER[provider]}
-          />
-        </Field>
-        {(provider === "custom" || provider === "llamacpp") && (
-          <Field label="Base URL">
-            <Input
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder={BASE_URL_PLACEHOLDER[provider]}
-            />
-          </Field>
+        {provider === "anthropic" && (
+          <>
+            <Field label="Model">
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="claude-haiku-4-5 (default)"
+              />
+            </Field>
+            <Field label="Anthropic API key">
+              <Input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={
+                  view?.hasApiKey
+                    ? "•••• key saved — type to replace"
+                    : "sk-ant-… (blank = this machine's Claude login)"
+                }
+              />
+            </Field>
+          </>
         )}
-        <Field label={KEY_LABEL[provider]}>
-          <div className="space-y-1.5">
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={
-                view?.hasApiKey ? "•••• key saved — type to replace" : KEY_PLACEHOLDER[provider]
-              }
-            />
-            {provider === "openrouter" && (
-              <a
-                href="https://openrouter.ai/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-              >
-                Get your key <ExternalLink size={11} />
-              </a>
-            )}
-          </div>
-        </Field>
       </div>
 
       <div className="mt-4 flex items-center gap-2">
         <Button onClick={() => void apply(apiKey ? apiKey : undefined)} disabled={busy}>
           <Plug size={14} /> Save
         </Button>
-        {view?.hasApiKey && (
+        {provider === "anthropic" && view?.hasApiKey && (
           <Button variant="outline" onClick={() => void apply("")} disabled={busy}>
             <Trash2 size={14} /> Remove key
           </Button>
@@ -228,6 +166,7 @@ export default function ConnectionsPage() {
       />
 
       <ModelProviderCard />
+      <ModelPricingCard />
 
       {!canConnect && (
         <p className="text-sm text-sub mb-4">

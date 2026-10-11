@@ -9,16 +9,10 @@ const { LLM_PAGE_EXTRACTION_MODEL, pageExtractionLlm } = await import(
 );
 
 test("claude connections review pages with haiku", async () => {
-  const saved = { provider: "anthropic", model: "claude-opus-5-5", baseUrl: "", apiKey: "k" };
-  const target = await pageExtractionLlm(saved);
-  assert.equal(target.model, LLM_PAGE_EXTRACTION_MODEL);
+  const saved = { provider: "anthropic", model: "claude-opus-5-5", apiKey: "k" };
+  const { target, model } = await pageExtractionLlm(saved, "");
+  assert.equal(model, LLM_PAGE_EXTRACTION_MODEL);
   assert.equal(target.llm.model, LLM_PAGE_EXTRACTION_MODEL);
   assert.equal(target.llm.apiKey, "k");
-});
-
-test("a gateway connection reviews pages with its own model", async () => {
-  const saved = { provider: "custom", model: "qwen3-32b", baseUrl: "http://localhost:11434", apiKey: "" };
-  const target = await pageExtractionLlm(saved);
-  assert.equal(target.model, "qwen3-32b");
-  assert.equal(target.llm, saved);
+  assert.equal(target.purpose, "page_review");
 });

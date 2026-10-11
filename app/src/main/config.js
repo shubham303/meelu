@@ -49,10 +49,6 @@ export const GA_OAUTH_CLIENT = {
   clientSecret: env.MEELU_GA_CLIENT_SECRET || bundled.clientSecret || "",
 };
 
-export const OPENROUTER_BASE_URL = "https://openrouter.ai/api";
-
-export const LLAMACPP_BASE_URL = "http://127.0.0.1:8080";
-
 export const ENV_DEFAULTS = app.isPackaged
   ? { meeluApiKey: "", ...PACKAGED_ENDPOINTS[BUILD_FLAVOUR] }
   : {
