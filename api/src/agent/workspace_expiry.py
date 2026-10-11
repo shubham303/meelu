@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from src.agent.security import drop_orphan_tenants
-from src.agent.sql import engine, quote_ident
+from src.agent.sql import engine, quote_ident, tenant_txn
 from src.settings import settings
 
 SIDECARS = ("_ti_column_types", "_ti_derived_columns")
@@ -27,7 +27,7 @@ class SweepResult:
     models: list[str] = field(default_factory=list)
 
 
-def _sweep_tenant(conn, role: str, schema: str, now: datetime, cutoff: datetime) -> list[str]:
+def _expired_relations(conn, role: str, schema: str, now: datetime, cutoff: datetime):
     live = {
         name: (kind, int(activity))
         for name, kind, activity in conn.exec_driver_sql(WORKSPACE_RELATIONS, (schema,))
@@ -48,7 +48,7 @@ def _sweep_tenant(conn, role: str, schema: str, now: datetime, cutoff: datetime)
             (role, gone),
         )
 
-    dropped = []
+    expired = []
     for name, (kind, activity) in live.items():
         if name not in known:
             conn.exec_driver_sql(
@@ -66,23 +66,40 @@ def _sweep_tenant(conn, role: str, schema: str, now: datetime, cutoff: datetime)
                 (activity, now, role, name),
             )
             continue
-        if last_used >= cutoff:
-            continue
-        qs = quote_ident(schema)
+        if last_used < cutoff:
+            expired.append((name, kind))
+    return expired
+
+
+def _drop_as_tenant(role: str, schema: str, expired: list[tuple[str, str]]) -> None:
+    qs = quote_ident(schema)
+    with tenant_txn(role, schema) as conn:
+        for name, kind in expired:
+            conn.exec_driver_sql(
+                f"DROP {DROP_KEYWORD[kind]} IF EXISTS {qs}.{quote_ident(name)} CASCADE"
+            )
+            for sidecar in SIDECARS:
+                if conn.exec_driver_sql("SELECT to_regclass(%s)", (f"{qs}.{sidecar}",)).scalar():
+                    conn.exec_driver_sql(
+                        f"DELETE FROM {qs}.{sidecar} WHERE table_key = %s",
+                        (f"{schema}.{name}",),
+                    )
+
+
+def _sweep_tenant(role: str, schema: str, now: datetime, cutoff: datetime) -> list[str]:
+    with engine.begin() as conn:
+        expired = _expired_relations(conn, role, schema, now, cutoff)
+    if not expired:
+        return []
+    _drop_as_tenant(role, schema, expired)
+    names = [name for name, _ in expired]
+    with engine.begin() as conn:
         conn.exec_driver_sql(
-            f"DROP {DROP_KEYWORD[kind]} IF EXISTS {qs}.{quote_ident(name)} CASCADE"
+            "DELETE FROM public.agent_workspace_tables WHERE role_name = %s "
+            "AND table_name = ANY(%s)",
+            (role, names),
         )
-        for sidecar in SIDECARS:
-            if conn.exec_driver_sql("SELECT to_regclass(%s)", (f"{qs}.{sidecar}",)).scalar():
-                conn.exec_driver_sql(
-                    f"DELETE FROM {qs}.{sidecar} WHERE table_key = %s", (f"{schema}.{name}",)
-                )
-        conn.exec_driver_sql(
-            "DELETE FROM public.agent_workspace_tables WHERE role_name = %s AND table_name = %s",
-            (role, name),
-        )
-        dropped.append(f"{schema}.{name}")
-    return dropped
+    return [f"{schema}.{name}" for name in names]
 
 
 def _expire_models(cutoff: datetime) -> list[str]:
@@ -107,7 +124,6 @@ def sweep(now: datetime | None = None) -> SweepResult:
             "SELECT role_name, schema_name FROM public.agent_tenants"
         ).fetchall()
     for role, schema in tenants:
-        with engine.begin() as conn:
-            result.dropped += _sweep_tenant(conn, role, schema, now, cutoff)
+        result.dropped += _sweep_tenant(role, schema, now, cutoff)
     result.models = _expire_models(cutoff)
     return result

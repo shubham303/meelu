@@ -106,6 +106,9 @@ def run_single_statement(
         try:
             columns = None
             while len(kept) < limit:
+                cursor.execute(
+                    f"SET LOCAL statement_timeout = {settings.agent_statement_timeout_ms}"
+                )
                 cursor.execute(f"FETCH {FETCH_BATCH} FROM {RESULT_CURSOR}")
                 columns = [d.name for d in cursor.description]
                 batch = cursor.fetchall()
