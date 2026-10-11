@@ -40,6 +40,18 @@ class IdentityService:
         await access_tokens.create(db, user.id, hash_key(token))
         return SignIn(user=user, token=token, created=created)
 
+    async def revoke_all_sessions(self, db: AsyncSession, access_token: str) -> int:
+        try:
+            identity = await better_auth.verify_token(access_token)
+        except better_auth.AuthTokenError as e:
+            raise HTTPException(401, str(e)) from e
+        except better_auth.AuthUnavailableError as e:
+            raise HTTPException(503, str(e)) from e
+        user = await users.find_by_auth_id(db, identity.id)
+        if user is None:
+            return 0
+        return await access_tokens.delete_for_user(db, user.id)
+
     async def _resolve_user(
         self, db: AsyncSession, identity: better_auth.AuthIdentity
     ) -> tuple[UserRecord, bool]:

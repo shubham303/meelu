@@ -86,6 +86,13 @@ async def start_session(
     return SessionResponse(user=UserResponse.model_validate(result.user), created=result.created)
 
 
+@session_router.post("/sessions/revoke", status_code=204)
+async def revoke_sessions(body: SessionRequest, db: AsyncSession = Depends(get_db)) -> Response:
+    await identity_service.revoke_all_sessions(db, body.access_token)
+    await db.commit()
+    return Response(status_code=204)
+
+
 @session_router.post("/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)) -> Response:
     token = request.cookies.get(settings.session_cookie_name)

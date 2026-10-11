@@ -150,6 +150,14 @@ async def test_agent_cannot_write_into_another_workspace(pair):
         await sql(a, f'create table "{b.schema}".stolen (x int)')
 
 
+def test_app_connects_without_superuser():
+    with engine.begin() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT rolsuper, rolbypassrls, rolcreaterole FROM pg_roles WHERE rolname = current_user"
+        ).fetchone()
+    assert tuple(row) == (False, False, True)
+
+
 async def test_agent_cannot_create_functions_or_large_objects(pair):
     a, _ = pair
     with pytest.raises(psycopg.errors.InsufficientPrivilege):

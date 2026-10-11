@@ -367,3 +367,26 @@ async def test_jwks_download_failures_are_unavailable(monkeypatch):
     keys = better_auth.JwksKeys()
     with pytest.raises(better_auth.AuthTokenError):
         await keys.get("x")
+
+
+async def test_revoking_sessions_signs_out_every_device(client, email):
+    from src.app import app
+
+    await signup(client, email)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="https://test") as other:
+        await signup(other, email)
+        assert (await other.get("/api/auth/me")).status_code == 200
+
+        r = await client.post("/api/auth/sessions/revoke", json={"accessToken": mint_token(email)})
+        assert r.status_code == 204
+
+        assert (await client.get("/api/auth/me")).status_code == 401
+        assert (await other.get("/api/auth/me")).status_code == 401
+
+
+async def test_revoking_sessions_needs_a_valid_token(client, email):
+    await signup(client, email)
+    r = await client.post("/api/auth/sessions/revoke", json={"accessToken": "nope"})
+    assert r.status_code == 401
+    assert (await client.get("/api/auth/me")).status_code == 200
