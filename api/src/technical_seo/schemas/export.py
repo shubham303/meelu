@@ -8,7 +8,12 @@ from src.technical_seo.schemas.issues import PageIssueRecord, SiteIssueRecord
 CSV_COLUMNS = ("kind", "severity", "scope", "type", "state", "url", "issue")
 
 
+FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
 def cell(value: str) -> str:
+    if value.startswith(FORMULA_TRIGGERS):
+        value = "'" + value
     if re.search(r'["\n\r,]', value):
         escaped = value.replace('"', '""')
         return f'"{escaped}"'

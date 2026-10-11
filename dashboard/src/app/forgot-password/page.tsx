@@ -66,10 +66,11 @@ function ResetForm({ email }: { email: string }) {
       <Field label="Code">
         <CodeInput value={code} onChange={setCode} />
       </Field>
-      <Field label="New password">
+      <Field label="New password" hint="At least 8 characters.">
         <Input
           type="password"
           autoComplete="new-password"
+          minLength={8}
           maxLength={128}
           value={password}
           onChange={(e) => setPassword(e.target.value)}

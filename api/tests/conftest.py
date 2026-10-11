@@ -14,24 +14,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 TEST_DB_NAME = os.environ.get("MEELU_TEST_DB") or f"meelu_api_test_{os.getpid()}"
 
 
-def _base_database_url() -> str:
+def _env_value(name: str) -> str:
     env_path = Path(__file__).resolve().parent.parent / ".env"
     for line in env_path.read_text().splitlines():
-        if line.startswith("DATABASE_URL="):
+        if line.startswith(f"{name}="):
             return line.split("=", 1)[1].strip()
-    raise RuntimeError("DATABASE_URL not found in api/.env")
+    raise RuntimeError(f"{name} not found in api/.env")
 
 
-BASE_URL = _base_database_url()
-TEST_URL = BASE_URL.rsplit("/", 1)[0] + "/" + TEST_DB_NAME
-ADMIN_URL = BASE_URL.replace("postgresql+psycopg://", "postgresql://")
+def _on_test_database(url: str) -> str:
+    return url.rsplit("/", 1)[0] + "/" + TEST_DB_NAME
+
+
+def _plain(url: str) -> str:
+    return url.replace("postgresql+psycopg://", "postgresql://")
+
+
+BASE_URL = _env_value("DATABASE_URL")
+MIGRATE_BASE_URL = _env_value("MIGRATE_DATABASE_URL")
+TEST_URL = _on_test_database(BASE_URL)
+MIGRATE_TEST_URL = _on_test_database(MIGRATE_BASE_URL)
 
 os.environ["DATABASE_URL"] = TEST_URL
+os.environ["MIGRATE_DATABASE_URL"] = MIGRATE_TEST_URL
 
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
-    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
+    with psycopg.connect(_plain(MIGRATE_BASE_URL), autocommit=True) as conn:
         exists = conn.execute(
             "select 1 from pg_database where datname = %s", (TEST_DB_NAME,)
         ).fetchone()
@@ -42,9 +52,9 @@ def test_database():
 
     if os.environ.get("MEELU_TEST_DB"):
         return
-    with psycopg.connect(TEST_URL.replace("postgresql+psycopg://", "postgresql://")) as conn:
+    with psycopg.connect(_plain(MIGRATE_TEST_URL)) as conn:
         tenant_roles = [row[0] for row in conn.execute("select role_name from agent_tenants")]
-    with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
+    with psycopg.connect(_plain(MIGRATE_BASE_URL), autocommit=True) as conn:
         conn.execute(
             "select pg_terminate_backend(pid) from pg_stat_activity where datname = %s",
             (TEST_DB_NAME,),
@@ -59,12 +69,14 @@ def test_database():
 @pytest.fixture(scope="session", autouse=True)
 def schema(test_database):
     from sqlalchemy import text as sql_text
+    from sqlalchemy.ext.asyncio import create_async_engine
 
     import src.core.tables  # noqa: F401
-    from src.core.database import engine
+    from src.core.db_roles import grant_app_role
     from src.core.orm import Base
 
     async def build():
+        engine = create_async_engine(MIGRATE_TEST_URL)
         async with engine.begin() as conn:
             await conn.execute(sql_text("CREATE EXTENSION IF NOT EXISTS vector"))
             await conn.execute(sql_text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
@@ -73,6 +85,7 @@ def schema(test_database):
         await engine.dispose()
 
     asyncio.run(build())
+    grant_app_role(MIGRATE_TEST_URL, TEST_URL)
 
 
 @pytest.fixture

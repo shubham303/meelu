@@ -27,6 +27,7 @@ worker and the dashboard start. So the schema is never behind the code that quer
 ```bash
 cp .env.example .env
 # set POSTGRES_PASSWORD — e.g. openssl rand -base64 24
+# set APP_DB_PASSWORD — a different one, for the meelu_app role
 # set BETTER_AUTH_SECRET — e.g. openssl rand -base64 32
 docker compose up -d --build
 ```
@@ -107,7 +108,10 @@ out through Resend from `noreply@meelu.tech`.
 
 **Environment variables** live on each Coolify application. Nothing is
 build-time; every secret is runtime-only. Required:
-`DATABASE_URL`, `CORS_ORIGINS`, `APP_ORIGINS`, `DODO_PAYMENTS_BASE_URL`,
+`DATABASE_URL` (the non-superuser `meelu_app` role:
+`postgresql+psycopg://meelu_app:...@<db-host>:5432/meelu`), `MIGRATE_DATABASE_URL`
+(the Postgres superuser; only the `migrate` service gets it, runs Alembic, then
+creates `meelu_app` with that password and hands it every table), `CORS_ORIGINS`, `APP_ORIGINS`, `DODO_PAYMENTS_BASE_URL`,
 `DODO_PAYMENTS_RETURN_URL`, `AUTH_DATABASE_URL`
 (`postgres://auth_app:...@<db-host>:5432/auth`), `BETTER_AUTH_SECRET`,
 `BETTER_AUTH_URL` (`https://ui.meelu.tech` or `https://test-ui.meelu.tech`),

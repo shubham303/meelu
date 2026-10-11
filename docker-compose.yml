@@ -85,7 +85,8 @@ services:
     container_name: meelu-migrate
     restart: "no"
     environment:
-      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://meelu_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      MIGRATE_DATABASE_URL: ${MIGRATE_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,7 +104,7 @@ services:
     container_name: meelu-api
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://meelu_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       APP_ORIGINS: ${APP_ORIGINS:-["http://localhost:3000"]}
@@ -157,7 +158,7 @@ services:
     container_name: meelu-agent
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://meelu_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
       AGENT_DATA_DIR: /app/agent-data
       DATAFORSEO_AUTH: ${DATAFORSEO_AUTH:-}
       APIFY_API_KEY: ${APIFY_API_KEY:-}
@@ -223,7 +224,7 @@ services:
     container_name: meelu-embed-worker
     restart: unless-stopped
     environment:
-      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-craftmate}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://meelu_app:${APP_DB_PASSWORD}@postgres:5432/${POSTGRES_DB:-craftmate}}
       MEELU_EMBED_DISABLED: ${MEELU_EMBED_DISABLED:-}
       MEELU_EMBED_MODEL: ${MEELU_EMBED_MODEL:-}
       MEELU_EMBED_INTERVAL_MS: ${MEELU_EMBED_INTERVAL_MS:-}

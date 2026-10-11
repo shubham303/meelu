@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
-from src.agent.security import drop_orphan_tenants
+from src.agent.security import drop_orphan_tenants, ensure_tenant
 from src.agent.sql import engine, quote_ident, tenant_txn
 from src.settings import settings
 
@@ -121,9 +121,10 @@ def sweep(now: datetime | None = None) -> SweepResult:
     result = SweepResult(orphans=drop_orphan_tenants())
     with engine.begin() as conn:
         tenants = conn.exec_driver_sql(
-            "SELECT role_name, schema_name FROM public.agent_tenants"
+            "SELECT user_id, site_id FROM public.agent_tenants"
         ).fetchall()
-    for role, schema in tenants:
+    for user_id, site_id in tenants:
+        role, schema = ensure_tenant(user_id, site_id)
         result.dropped += _sweep_tenant(role, schema, now, cutoff)
     result.models = _expire_models(cutoff)
     return result

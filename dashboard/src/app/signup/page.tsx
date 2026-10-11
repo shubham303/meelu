@@ -89,10 +89,11 @@ export default function SignupPage() {
             required
           />
         </Field>
-        <Field label="Password">
+        <Field label="Password" hint="At least 8 characters.">
           <Input
             type="password"
             autoComplete="new-password"
+            minLength={8}
             maxLength={128}
             value={password}
             onChange={(e) => setPassword(e.target.value)}

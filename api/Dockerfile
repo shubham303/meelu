@@ -25,7 +25,7 @@ EXPOSE 8484
 CMD ["uvicorn", "src.agent.app:app", "--host", "0.0.0.0", "--port", "8484"]
 
 FROM base AS migrator
-CMD ["alembic", "upgrade", "head"]
+CMD ["sh", "-c", "alembic upgrade head && python -m src.core.db_roles"]
 
 FROM base AS embed-worker
 CMD ["python", "-m", "src.embed_worker"]

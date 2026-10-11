@@ -101,8 +101,9 @@ const CSV_COLUMNS = [
 ] as const;
 
 function cell(value: unknown): string {
-  const s = value == null ? "" : String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const raw = value == null ? "" : String(value);
+  const s = typeof value === "string" && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export async function downloadPostsCsv(queries: SocialListeningQuery[]): Promise<void> {

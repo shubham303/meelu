@@ -11,6 +11,7 @@ class Settings(EnvSettings):
 
     database_url: str = "postgresql+psycopg://craftmate:craftmate@localhost:5434/craftmate"
     database_pool_max: int = 20
+    migrate_database_url: str | None = None
 
     session_cookie_name: str = "meelu_session"
     session_lifetime_seconds: int = 60 * 60 * 24 * 30
