@@ -48,3 +48,5 @@ images/
 
 build/
 app/oauth-client.json
+
+temp.txt
