@@ -5,6 +5,7 @@ from src.content import models as content_models
 from src.crawl_jobs import models as crawl_jobs_models
 from src.credits import models as credits_models
 from src.keys import models as keys_models
+from src.llm import models as llm_models
 from src.notes import models as notes_models
 from src.payments import models as payments_models
 from src.profile import models as profile_models
@@ -30,6 +31,7 @@ __all__ = [
     "crawl_jobs_models",
     "credits_models",
     "keys_models",
+    "llm_models",
     "notes_models",
     "payments_models",
     "profile_models",

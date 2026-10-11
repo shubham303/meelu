@@ -119,8 +119,18 @@ async def me(request: Request, db: AsyncSession = Depends(get_db)) -> UserRespon
     return UserResponse.model_validate(user)
 
 
-async def current_user_id(request: Request, db: AsyncSession = Depends(get_db)) -> str:
+def request_api_key(request: Request) -> str | None:
     api_key = request.headers.get("x-api-key")
+    if api_key:
+        return api_key
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return token.strip() or None
+
+
+async def current_user_id(request: Request, db: AsyncSession = Depends(get_db)) -> str:
+    api_key = request_api_key(request)
     if api_key:
         return (await api_key_user(db, api_key)).id
 

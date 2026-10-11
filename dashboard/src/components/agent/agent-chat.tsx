@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUp, Paperclip, Sparkles, Square } from "lucide-react";
 import { IconButton } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { TaskModelPicker } from "@/features/llm-models/task-model-picker";
 import { ChatMarkdown } from "./chat-markdown";
 
 function Said({ children }: { children: ReactNode }) {
@@ -279,6 +280,7 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
                 placeholder={busy ? busyPlaceholder : placeholder}
                 className="flex-1 resize-none bg-transparent py-1.5 text-sm text-ink placeholder:text-faint focus:outline-none disabled:opacity-60 max-h-44"
               />
+              <TaskModelPicker />
               {busy && onStop ? (
                 <button
                   type="button"

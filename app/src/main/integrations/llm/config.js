@@ -1,22 +1,15 @@
 import fs from "node:fs";
 import { safeStorage } from "electron";
-import { LLAMACPP_BASE_URL, OPENROUTER_BASE_URL } from "../../config.js";
 import { appFile, writeSecretFile } from "../../paths.js";
 
-const PROVIDERS = new Set(["anthropic", "openrouter", "llamacpp", "custom"]);
+const PROVIDERS = new Set(["meelu", "anthropic"]);
 
 function configFile() {
   return appFile("llm-config.json");
 }
 
 function named(value) {
-  return PROVIDERS.has(value) ? value : "anthropic";
-}
-
-function urlFor(provider, stored) {
-  if (provider === "openrouter") return OPENROUTER_BASE_URL;
-  if (provider === "llamacpp") return stored || LLAMACPP_BASE_URL;
-  return stored ?? "";
+  return PROVIDERS.has(value) ? value : "meelu";
 }
 
 export function loadLlmConfig() {
@@ -24,7 +17,7 @@ export function loadLlmConfig() {
   try {
     raw = JSON.parse(fs.readFileSync(configFile(), "utf8"));
   } catch {
-    return null;
+    return { provider: "meelu", model: "", apiKey: "" };
   }
   let apiKey = "";
   if (raw.apiKeyEnc) {
@@ -37,56 +30,28 @@ export function loadLlmConfig() {
   const provider = named(raw.provider);
   return {
     provider,
-    model: raw.model ?? "",
-    baseUrl: urlFor(provider, raw.baseUrl),
-    apiKey,
+    model: provider === "anthropic" ? (raw.model ?? "") : "",
+    apiKey: provider === "anthropic" ? apiKey : "",
   };
 }
 
-export function saveLlmConfig({ provider, model, baseUrl, apiKey }) {
+export function saveLlmConfig({ provider, model, apiKey }) {
   const prev = loadLlmConfig();
-  const record = {
-    provider: named(provider),
-    model: (model ?? "").trim(),
-    baseUrl: (baseUrl ?? "").trim().replace(/\/+$/, ""),
-  };
-  const sameEndpoint =
-    prev !== null &&
-    prev.provider === record.provider &&
-    prev.baseUrl === urlFor(record.provider, record.baseUrl);
-  const keptKey = sameEndpoint ? prev.apiKey : "";
-  const key = apiKey === undefined ? keptKey : apiKey.trim();
-  if (record.provider === "custom" && !record.baseUrl) {
-    throw new Error("A custom provider needs a base URL (e.g. http://localhost:11434).");
-  }
-  if (record.provider === "openrouter") {
-    record.baseUrl = "";
-    if (!key) {
-      throw new Error("OpenRouter needs an API key — create one at openrouter.ai/keys.");
+  const record = { provider: named(provider) };
+  if (record.provider === "anthropic") {
+    record.model = (model ?? "").trim();
+    const key = apiKey === undefined ? (prev.provider === "anthropic" ? prev.apiKey : "") : apiKey.trim();
+    if (key) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error("Secure storage is unavailable on this machine, so the key was not saved.");
+      }
+      record.apiKeyEnc = safeStorage.encryptString(key).toString("base64");
     }
-    if (!record.model) {
-      throw new Error(
-        "OpenRouter needs a model id, written provider-first (e.g. anthropic/claude-sonnet-5).",
-      );
-    }
-  }
-  if (key) {
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("Secure storage is unavailable on this machine, so the key was not saved.");
-    }
-    record.apiKeyEnc = safeStorage.encryptString(key).toString("base64");
   }
   writeSecretFile(configFile(), JSON.stringify(record, null, 2));
 }
 
 export function describeLlmConfig() {
   const cfg = loadLlmConfig();
-  if (!cfg) return { saved: false, provider: "anthropic", model: "", baseUrl: "", hasApiKey: false };
-  return {
-    saved: true,
-    provider: cfg.provider,
-    model: cfg.model,
-    baseUrl: cfg.baseUrl,
-    hasApiKey: cfg.apiKey !== "",
-  };
+  return { provider: cfg.provider, model: cfg.model, hasApiKey: cfg.apiKey !== "" };
 }

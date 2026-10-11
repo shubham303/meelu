@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
+RAW_PATHS = ("/api/v1/llm/v1/",)
+
 
 def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse({"error": {"message": message}}, status_code=status)
@@ -35,7 +37,8 @@ def _validation_message(exc: RequestValidationError) -> str:
 class EnvelopeMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
-        if not request.url.path.startswith("/api/"):
+        path = request.url.path
+        if not path.startswith("/api/") or path.startswith(RAW_PATHS):
             return response
         if not (200 <= response.status_code < 300) or response.status_code == 204:
             return response

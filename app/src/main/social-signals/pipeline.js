@@ -270,7 +270,8 @@ async function drive(jobId, input, state, emit, { providers, llm, cookieHeader, 
     release();
     send(event, data);
   };
-  const ctx = { state, send, llm, providers, cookieHeader, siteId: input.siteId };
+  const target = { llm, cookieHeader, siteId: input.siteId, purpose: "social_listening" };
+  const ctx = { state, send, llm: target, providers, cookieHeader, siteId: input.siteId };
   let runId = null;
   const platformStats = {};
   const counts = { fetchedCount: 0, matchedCount: 0, keptCount: 0 };

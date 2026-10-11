@@ -9,7 +9,7 @@ export function messagesEndpoint(gateway, anthropicKey) {
   if (gateway) {
     return {
       url: `${gateway.baseUrl.replace(/\/+$/, "")}/v1/messages`,
-      headers: { authorization: `Bearer ${gateway.apiKey}` },
+      headers: { authorization: `Bearer ${gateway.apiKey}`, ...gateway.headers },
     };
   }
   const baseUrl = (process.env.ANTHROPIC_BASE_URL || ANTHROPIC_BASE_URL).replace(/\/+$/, "");

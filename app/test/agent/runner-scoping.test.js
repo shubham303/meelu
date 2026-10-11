@@ -4,7 +4,7 @@ import { register } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
-import { CATALOG, meeluTools, startLlm, startMcp, startScopeApi, systemText } from "./fakes.mjs";
+import { CATALOG, TEST_MODEL, meeluTools, startLlm, startMcp, startScopeApi, systemText } from "./fakes.mjs";
 
 register("./electron-loader.mjs", import.meta.url);
 
@@ -15,13 +15,11 @@ let runner;
 let cwd;
 
 before(async () => {
-  [scopeApi, mcp, llm] = await Promise.all([startScopeApi(), startMcp(), startLlm()]);
+  llm = await startLlm();
+  [scopeApi, mcp] = await Promise.all([startScopeApi(llm.url), startMcp()]);
   process.env.MEELU_BASE_URL = scopeApi.url;
   process.env.MEELU_AGENT_MCP_URL = mcp.url;
   process.env.MEELU_API_KEY = "emcp_test_key";
-  process.env.MEELU_LLM_BASE_URL = llm.url;
-  process.env.MEELU_LLM_API_KEY = "test";
-  process.env.MEELU_LLM_MODEL = "claude-haiku-4-5-20251001";
   cwd = fs.mkdtempSync(path.join(os.tmpdir(), "meelu-runner-test-"));
   runner = await import("../../src/main/agent/runner.js");
 });
@@ -33,11 +31,19 @@ after(() => {
   llm?.close();
 });
 
-async function turn(message, sessionId, { action = "ask-pages", askPermission = async () => "allow", history } = {}) {
+function lastTurn(req) {
+  return req.messages.filter((m) => m.role !== "system").at(-1);
+}
+
+async function turn(
+  message,
+  sessionId,
+  { action = "ask-pages", askPermission = async () => "allow", history, model } = {},
+) {
   const events = [];
   let sid = sessionId;
   await runner.runAgentTurn(
-    { action, siteId: "site_test", message, sessionId, form: {}, history },
+    { action, siteId: "site_test", message, sessionId, form: {}, history, model },
     (event, data) => {
       events.push([event, data]);
       if (event === "session") sid = data.sessionId;
@@ -107,7 +113,7 @@ test("add_desk sends the desk's tools on the next model call without a new hands
   assert.deepEqual(meeluTools(afterAdd), CONTENT_TOOLS);
   assert.ok(!afterAdd.tools.some((t) => t.name === "mcp__meelu__cluster"), "analytics still hidden");
 
-  const last = afterAdd.messages.at(-1).content;
+  const last = lastTurn(afterAdd).content;
   const result = last.find((b) => b.type === "tool_result");
   const resultText = typeof result.content === "string" ? result.content : result.content.map((c) => c.text).join("");
   assert.ok(resultText.includes("BRIEF FOR CONTENT"), "the desk brief comes back as the tool result");
@@ -220,7 +226,7 @@ test("a chat whose transcript is gone starts a new session that opens with the s
   });
   assert.equal(res.done.ok, true, res.done.error);
   assert.notEqual(res.sessionId, "0b9d5a8e-0000-4000-8000-000000000000");
-  const sent = JSON.stringify(llm.requests[start].messages.at(-1).content);
+  const sent = JSON.stringify(lastTurn(llm.requests[start]).content);
   assert.ok(sent.includes("[assistant]: India, by 40%."), sent);
   assert.ok(sent.includes("and on mobile?"));
 });
@@ -236,4 +242,26 @@ test("a chat whose transcript is on disk resumes it without the stored turns", a
   const sent = JSON.stringify(llm.requests[start].messages);
   assert.ok(sent.includes("first question"), "the resumed transcript carries the earlier turn");
   assert.ok(!sent.includes("NOT SENT"));
+});
+
+test("every model call goes to the Meelu api with the workspace key, the site and the purpose", async () => {
+  llm.script.push({ text: "routed" });
+  const start = scopeApi.llmHeaders.length;
+  const res = await turn("which page is thinnest?");
+  assert.equal(res.done.ok, true, res.done.error);
+  const sent = scopeApi.llmHeaders.slice(start);
+  assert.ok(sent.length > 0);
+  for (const headers of sent) {
+    assert.equal(headers.authorization, "Bearer emcp_test_key");
+    assert.equal(headers["x-meelu-purpose"], "agent");
+    assert.equal(headers["x-meelu-site"], "site_test");
+  }
+  assert.equal(llm.requests.at(-1).model, TEST_MODEL);
+});
+
+test("a task started with another model sends that model", async () => {
+  llm.script.push({ text: "picked" });
+  const res = await turn("use the other one", undefined, { model: "openai/gpt-6-luna" });
+  assert.equal(res.done.ok, true, res.done.error);
+  assert.equal(llm.requests.at(-1).model, "openai/gpt-6-luna");
 });

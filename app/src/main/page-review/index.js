@@ -36,11 +36,16 @@ function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
   });
 }
 
-export async function pageExtractionLlm(llm) {
-  const { gateway, model } = await resolveLlm(llm);
-  if (gateway) return { llm, model };
-  const claude = { ...(llm ?? { provider: "anthropic", baseUrl: "", apiKey: "" }) };
-  return { llm: { ...claude, model: LLM_PAGE_EXTRACTION_MODEL }, model: LLM_PAGE_EXTRACTION_MODEL };
+export async function pageExtractionLlm(llm, cookieHeader) {
+  const target = { llm, cookieHeader, purpose: "page_review" };
+  if (llm?.provider === "anthropic") {
+    return {
+      target: { ...target, llm: { ...llm, model: LLM_PAGE_EXTRACTION_MODEL } },
+      model: LLM_PAGE_EXTRACTION_MODEL,
+    };
+  }
+  const { model } = await resolveLlm(target);
+  return { target: { ...target, model }, model };
 }
 
 function reviewPrompt(page, questions) {
@@ -77,7 +82,10 @@ async function reviewSite(site, cookie, target, log) {
   let reviewed = 0;
   for (const page of pages) {
     try {
-      const answers = await jsonCall(SYSTEM, reviewPrompt(page, queue.questions), target.llm);
+      const answers = await jsonCall(SYSTEM, reviewPrompt(page, queue.questions), {
+        ...target.target,
+        siteId: site.id,
+      });
       await api(`/site/page-llm-extractions/by-page/${page.pageId}/review`, {
         method: "POST",
         siteId: site.id,
@@ -100,7 +108,7 @@ async function tick({ cookieHeader, llm, log }) {
   try {
     const sites = await api("/sites?page_size=100", { cookieHeader: cookie });
     if (!Array.isArray(sites) || !sites.length) return;
-    const target = await pageExtractionLlm(llm());
+    const target = await pageExtractionLlm(llm(), cookie);
     for (const site of sites) {
       if (!site?.id) continue;
       try {

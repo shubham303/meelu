@@ -28,6 +28,7 @@ import { useApi, useCurrentSite } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
 import { formatRelative } from "@/lib/utils";
 import type { PromptChip } from "@/features/prompt-chips/lib";
+import { taskModel } from "@/features/llm-models/models";
 import { RunRail, useAgentRunsOptional } from "@/components/agent/run-rail";
 import { AgentChat, type AgentChatItem } from "@/components/agent/agent-chat";
 import { ChartFrame } from "@/components/agent/chart-frame";
@@ -44,6 +45,7 @@ declare global {
         form: Record<string, string | undefined>;
         params?: Record<string, string>;
         files?: Array<{ name: string; type: string; data: string }>;
+        model?: string;
       }) => Promise<{ turnId?: string; error?: string }>;
       onEvent: (
         cb: (m: { turnId: string; event: string; data: Record<string, unknown> }) => void,
@@ -65,7 +67,6 @@ declare global {
       setLlmConfig?: (cfg: {
         provider: LlmProvider;
         model: string;
-        baseUrl: string;
         apiKey?: string;
       }) => Promise<LlmConfigView | { error: string }>;
       getConnectors?: () => Promise<ConnectorsView | { error: string }>;
@@ -103,13 +104,11 @@ export type ConnectorsView = Record<
 >;
 
 
-export type LlmProvider = "anthropic" | "openrouter" | "llamacpp" | "custom";
+export type LlmProvider = "meelu" | "anthropic";
 
 export interface LlmConfigView {
-  saved: boolean;
   provider: LlmProvider;
   model: string;
-  baseUrl: string;
   hasApiKey: boolean;
 }
 
@@ -790,6 +789,7 @@ function AgentTaskChat({
               form: draftRef.current,
               params,
               files: attachments.length > 0 ? attachments : undefined,
+              model: taskModel() ?? undefined,
             })
             .then((res) => {
               if (res.error || !res.turnId) {
@@ -1020,6 +1020,7 @@ export async function runInlineTurn({
         siteId: site && site !== GLOBAL ? site : null,
         message,
         form: form ?? {},
+        model: taskModel() ?? undefined,
       })
       .then((res) => {
         if (res.error || !res.turnId) {

@@ -13,14 +13,14 @@ function strings(v, cap) {
   return (Array.isArray(v) ? v : []).map((s) => String(s ?? "").trim()).filter(Boolean).slice(0, cap);
 }
 
-export async function expandLine({ line, siteContext }, llm) {
+export async function expandLine({ line, siteContext }, target) {
   const prompt = [
     `The line: ${line}`,
     siteContext ? `The marketer's site:\n${siteContext}` : "",
   ]
     .filter(Boolean)
     .join("\n\n");
-  const parsed = await jsonCall(SYSTEM, prompt, llm);
+  const parsed = await jsonCall(SYSTEM, prompt, target);
   return {
     keywords: strings(parsed.keywords, 6),
     negativeKeywords: strings(parsed.negativeKeywords, 6),
