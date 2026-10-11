@@ -53,24 +53,6 @@ def _html(value: Any) -> str:
     return value
 
 
-def _file_path(value: Any) -> str | None:
-    if value is None or value == "":
-        return None
-    if not isinstance(value, str):
-        raise ValueError("`filePath` must be a string.")
-    path = value.strip().replace("\\", "/")
-    if path == "":
-        return None
-    if path.startswith("/") or re.match(r"^[A-Za-z]:", path):
-        raise ValueError(
-            "`filePath` is relative to the analytics data directory on the user's machine — "
-            "pass the part below it, not an absolute path."
-        )
-    if any(part == ".." for part in path.split("/")):
-        raise ValueError("`filePath` may not step outside the analytics data directory.")
-    return path
-
-
 def _required_text(value: Any, field: str) -> str:
     text = ("" if value is None else str(value)).strip()
     if not text:
@@ -78,67 +60,9 @@ def _required_text(value: Any, field: str) -> str:
     return text
 
 
-def _blank_to_none(value: Any) -> str | None:
-    if value is None or value == "":
-        return None
-    return str(value)
-
-
-class AnalyticsSessionCreateRequest(RequestModel):
-    title: str | None = None
-    about: str = ""
-    session_key: str | None = None
-
-    @field_validator("title", mode="before")
-    @classmethod
-    def _validate_title(cls, v: Any) -> str | None:
-        return _blank_to_none(None if v is None else str(v).strip())
-
-    @field_validator("about", mode="before")
-    @classmethod
-    def _validate_about(cls, v: Any) -> str:
-        return v if isinstance(v, str) else ""
-
-    @field_validator("session_key", mode="before")
-    @classmethod
-    def _validate_session_key(cls, v: Any) -> str | None:
-        return _blank_to_none(v)
-
-
-class AnalyticsSessionUpdateRequest(RequestModel):
-    title: str | None = None
-    about: str | None = None
-    session_key: str | None = Field(default=None)
-
-    @field_validator("session_key", mode="before")
-    @classmethod
-    def _validate_session_key(cls, v: Any) -> str | None:
-        return _blank_to_none(v)
-
-    def changes(self) -> dict[str, Any]:
-        values = self.model_dump(exclude_unset=True)
-        return {k: v for k, v in values.items() if v is not None or k == "session_key"}
-
-
-class AnalyticsSourceCreateRequest(RequestModel):
-    name: str
-    file_path: str | None = None
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def _validate_name(cls, v: Any) -> str:
-        return _required_text(v, "name")
-
-    @field_validator("file_path", mode="before")
-    @classmethod
-    def _validate_file_path(cls, v: Any) -> str | None:
-        return _file_path(v)
-
-
 class AnalyticsReportCreateRequest(RequestModel):
     title: str
     html: str
-    session_id: str | None = None
     created_by: Literal["user", "agent"] = "agent"
 
     @field_validator("title", mode="before")
@@ -150,11 +74,6 @@ class AnalyticsReportCreateRequest(RequestModel):
     @classmethod
     def _validate_html(cls, v: Any) -> str:
         return _html(v)
-
-    @field_validator("session_id", mode="before")
-    @classmethod
-    def _validate_session_id(cls, v: Any) -> str | None:
-        return _blank_to_none(None if v is None else str(v).strip())
 
     @field_validator("created_by", mode="before")
     @classmethod
@@ -180,33 +99,10 @@ class AnalyticsReportUpdateRequest(RequestModel):
         return self.model_dump(exclude_none=True)
 
 
-class AnalyticsSessionRecord(EntityModel):
-    id: str
-    user_id: str
-    site_id: str
-    title: str
-    about: str
-    session_key: str | None = None
-    created_at: JsDateTime
-    updated_at: JsDateTime
-
-
-class AnalyticsSourceRecord(EntityModel):
-    id: str
-    user_id: str
-    site_id: str
-    session_id: str
-    name: str
-    file_path: str | None = None
-    created_at: JsDateTime
-    updated_at: JsDateTime
-
-
 class AnalyticsReportRecord(EntityModel):
     id: str
     user_id: str
     site_id: str
-    session_id: str | None = None
     title: str
     html: str
     created_by: str
@@ -218,7 +114,6 @@ class AnalyticsReportSummaryRecord(EntityModel):
     id: str
     user_id: str
     site_id: str
-    session_id: str | None = None
     title: str
     created_by: str
     html_bytes: int
@@ -231,7 +126,6 @@ class AnalyticsReportSummaryRecord(EntityModel):
             id=report.id,
             user_id=report.user_id,
             site_id=report.site_id,
-            session_id=report.session_id,
             title=report.title,
             created_by=report.created_by,
             html_bytes=len(report.html.encode("utf-8")),
@@ -240,48 +134,9 @@ class AnalyticsReportSummaryRecord(EntityModel):
         )
 
 
-class AnalyticsSessionResponse(EntityModel):
-    id: str
-    site_id: str
-    title: str
-    about: str
-    session_key: str | None = None
-    created_at: JsDateTime
-    updated_at: JsDateTime
-
-
-class AnalyticsSessionListItemResponse(AnalyticsSessionResponse):
-    pass
-
-
-class AnalyticsSessionDeleteResponse(EntityModel):
-    id: str
-    deleted: bool = Field(default=True)
-
-
-class AnalyticsSourceResponse(EntityModel):
-    id: str
-    site_id: str
-    session_id: str
-    name: str
-    file_path: str | None = None
-    created_at: JsDateTime
-    updated_at: JsDateTime
-
-
-class AnalyticsSourceListItemResponse(AnalyticsSourceResponse):
-    pass
-
-
-class AnalyticsSourceDeleteResponse(EntityModel):
-    id: str
-    deleted: bool = Field(default=True)
-
-
 class AnalyticsReportResponse(EntityModel):
     id: str
     site_id: str
-    session_id: str | None = None
     title: str
     html: str
     created_by: str
@@ -292,7 +147,6 @@ class AnalyticsReportResponse(EntityModel):
 class AnalyticsReportSummaryResponse(EntityModel):
     id: str
     site_id: str
-    session_id: str | None = None
     title: str
     created_by: str
     html_bytes: int
@@ -309,13 +163,96 @@ class AnalyticsReportDeleteResponse(EntityModel):
     deleted: bool = Field(default=True)
 
 
-class AnalyticsWorkspaceResult(EntityModel):
-    sessions: list[AnalyticsSessionRecord]
-    sources: list[AnalyticsSourceRecord]
-    reports: list[AnalyticsReportSummaryRecord]
+CHAT_TITLE_MAX = 80
 
 
-class AnalyticsWorkspaceResponse(EntityModel):
-    sessions: list[AnalyticsSessionResponse]
-    sources: list[AnalyticsSourceResponse]
-    reports: list[AnalyticsReportSummaryResponse]
+def _chat_title(value: Any) -> str:
+    text = " ".join(_required_text(value, "title").split())
+    return text if len(text) <= CHAT_TITLE_MAX else text[: CHAT_TITLE_MAX - 1].rstrip() + "…"
+
+
+class AnalyticsChatCreateRequest(RequestModel):
+    title: str
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _validate_title(cls, v: Any) -> str:
+        return _chat_title(v)
+
+
+class AnalyticsChatUpdateRequest(RequestModel):
+    title: str | None = None
+    sdk_session_id: str | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _validate_title(cls, v: Any) -> str | None:
+        return None if v is None else _chat_title(v)
+
+    def changes(self) -> dict[str, str]:
+        return self.model_dump(exclude_none=True)
+
+
+class AnalyticsChatMessageInput(RequestModel):
+    role: Literal["user", "assistant"]
+    text: str
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def _validate_text(cls, v: Any) -> str:
+        return _required_text(v, "text")
+
+
+class AnalyticsChatMessagesCreateRequest(RequestModel):
+    messages: list[AnalyticsChatMessageInput] = Field(min_length=1)
+
+
+class AnalyticsChatRecord(EntityModel):
+    id: str
+    user_id: str
+    site_id: str
+    title: str
+    sdk_session_id: str | None
+    created_at: JsDateTime
+    updated_at: JsDateTime
+
+
+class AnalyticsChatSummaryRecord(EntityModel):
+    id: str
+    title: str
+    updated_at: JsDateTime
+
+
+class AnalyticsChatMessageRecord(EntityModel):
+    id: str
+    chat_id: str
+    role: str
+    text: str
+    created_at: JsDateTime
+
+
+class AnalyticsChatResponse(EntityModel):
+    id: str
+    site_id: str
+    title: str
+    sdk_session_id: str | None
+    created_at: JsDateTime
+    updated_at: JsDateTime
+
+
+class AnalyticsChatListItemResponse(EntityModel):
+    id: str
+    title: str
+    updated_at: JsDateTime
+
+
+class AnalyticsChatMessageResponse(EntityModel):
+    id: str
+    role: str
+    text: str
+    created_at: JsDateTime
+
+
+class AnalyticsChatDeleteResponse(EntityModel):
+    id: str
+    deleted: bool = Field(default=True)

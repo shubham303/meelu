@@ -7,16 +7,7 @@ import { ENV_DEFAULTS, REPO_ROOT, UPDATE_MANIFEST_URL } from "./config.js";
 import { startUpdateCheck } from "./update-check.js";
 import { connectSearchConsole } from "./integrations/gsc/oauth.js";
 import { connectAnalytics } from "./integrations/ga/oauth.js";
-import {
-  checkSession,
-  deleteSource,
-  exportSource,
-  exportText,
-  readSource,
-  resolvePaths,
-  revealSource,
-  saveSource,
-} from "./analytics-store.js";
+import { saveTextFile } from "./save-text-file.js";
 import { closeAgentSessions, runAgentTurn } from "./agent/runner.js";
 import { requestCrawlStop, runCrawl } from "./crawler/index.js";
 import {
@@ -37,11 +28,9 @@ import { appDir, screenshotDir } from "./paths.js";
 import { crawlToken } from "./crawler/token.js";
 import { describeLlmConfig, loadLlmConfig, saveLlmConfig } from "./integrations/llm/config.js";
 import {
-  connectorValues,
   listConnectors,
   removeConnector,
   saveConnector,
-  saveManualConnector,
 } from "./connector-config.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -197,10 +186,6 @@ async function sessionCookieHeader() {
   return cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 }
 
-function connectorsFor() {
-  return { get: (provider) => connectorValues(provider) };
-}
-
 function registerAgentIpc() {
   const turns = new Map();
 
@@ -222,7 +207,6 @@ function registerAgentIpc() {
       abortController,
       cookieHeader,
       llm: loadLlmConfig(),
-      connectors: connectorsFor(),
     };
 
     drive(emit, options)
@@ -292,7 +276,6 @@ function registerAgentIpc() {
       abortController,
       cookieHeader,
       llm: loadLlmConfig(),
-      connectors: connectorsFor(),
     })
       .catch((err) => {
         if (!abortController.signal.aborted) {
@@ -468,15 +451,6 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     return listConnectors();
   });
-  ipcMain.handle("connectors:set", (ev, provider, values) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      saveManualConnector(provider, values ?? {});
-      return listConnectors();
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not save." };
-    }
-  });
   ipcMain.handle("connectors:remove", (ev, provider) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     try {
@@ -536,68 +510,12 @@ function registerAgentIpc() {
     }
   });
 
-  ipcMain.handle("analytics:saveSource", (ev, params) => {
+  ipcMain.handle("files:saveText", async (ev, params) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     try {
-      return saveSource(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not store the file." };
-    }
-  });
-  ipcMain.handle("analytics:checkSession", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return checkSession(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not check the session." };
-    }
-  });
-  ipcMain.handle("analytics:resolvePaths", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return resolvePaths(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not find the files." };
-    }
-  });
-  ipcMain.handle("analytics:readSource", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return readSource(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not read the file." };
-    }
-  });
-  ipcMain.handle("analytics:revealSource", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return revealSource(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not show the file." };
-    }
-  });
-  ipcMain.handle("analytics:exportSource", async (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return await exportSource(params ?? {});
+      return await saveTextFile(params ?? {});
     } catch (err) {
       return { error: err instanceof Error ? err.message : "Could not save the file." };
-    }
-  });
-  ipcMain.handle("analytics:exportText", async (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return await exportText(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not save the file." };
-    }
-  });
-  ipcMain.handle("analytics:deleteSource", (ev, params) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      return deleteSource(params ?? {});
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not delete the file." };
     }
   });
 }

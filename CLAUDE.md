@@ -3,7 +3,7 @@ We have four components
 1. api : the backend (Python, FastAPI, SQLAlchemy, Alembic, uv-managed). Stores data, owns the schema, exposes the REST apis, and runs the embedding worker as its own process. The apis serve the UI; the agent does not read through them.
 2. agent server : `api/src/agent`, a second entrypoint of the same codebase (`src.agent.app`, the `agent` compose service, MCP over streamable HTTP at /mcp). It gives the agent direct SQL over Postgres (RLS-scoped, read-only on canonical tables, a per-user workspace schema for derived work), the deterministic analytics algorithms, guide prompt tools, and each desk's write tools — a desk's `tools.py` registers on the shared FastMCP instance and calls that desk's own service.
 3. dashboard : web UI (Next.js frontend only; every /api path it serves is a rewrite to api).
-4. App : electron app that renders the same dashboard.. The app also has agent harness that uses claude sdk.. the harness runs locally and connects to the agent server over HTTP.. some external mcp servers can be installed as well. Crawling, page analysis, GSC/GA fetching and the schedules run locally in the app and talk to api over HTTP. Every shared third-party data vendor (DataForSEO, Apify, and whatever comes next) lives in the api under `api/src/providers`, keyed by ONE server-side account per vendor (`DATAFORSEO_*`, `APIFY_API_KEY` in settings). One facade per domain (`seo_data`, `social_search`) holds an ordered adapter list — primary first, fallbacks after — and the user never picks a vendor. `ProviderFacade.fetch` is the only path to a vendor: it fingerprints each adapter's exact vendor query (sha256) and looks it up in `provider_cache` first, where the vendor's raw JSON response is stored, otherwise walks the adapters in order, caches the response with a per-capability TTL (keyword data and live and historical SERPs pass no TTL and are not cached; the SEO desk keeps the time series it tracks in `seo_rank_history` and `seo_volume_history`), logs the call in `provider_call`, and charges the user's credit balance (`api/src/credits`, USD micros; the vendor's reported cost by default, `credits/pricing.py` overrides). The seo-data facade is exposed as MCP tools tagged `meelu/provider` on the agent server, which the app runner allows only when the scope lists that domain in `providers`; the social facade is a REST endpoint the app's local social listening pipeline calls. GA4, GSC and mailboxes stay user-specific and stay in the app (`app/src/main/integrations`). Page classification (`api/src/site_page_llm_extraction`) runs on the server: when a crawl settles as completed, a background loop walks every page whose content hash has no fresh row and asks the `json_data_extractor` facade (a DeepSeek model through OpenRouter's chat completions endpoint, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`) a fixed set of choice questions; add a question there to extract more per page.
+4. App : electron app that renders the same dashboard.. The app also has agent harness that uses claude sdk.. the harness runs locally and connects to the agent server over HTTP; it launches no other MCP servers. Crawling, page analysis, GSC/GA fetching and the schedules run locally in the app and talk to api over HTTP. Every shared third-party data vendor (DataForSEO, Apify, and whatever comes next) lives in the api under `api/src/providers`, keyed by ONE server-side account per vendor (`DATAFORSEO_*`, `APIFY_API_KEY` in settings). One facade per domain (`seo_data`, `social_search`) holds an ordered adapter list — primary first, fallbacks after — and the user never picks a vendor. `ProviderFacade.fetch` is the only path to a vendor: it fingerprints each adapter's exact vendor query (sha256) and looks it up in `provider_cache` first, where the vendor's raw JSON response is stored, otherwise walks the adapters in order, caches the response with a per-capability TTL (keyword data and live and historical SERPs pass no TTL and are not cached; the SEO desk keeps the time series it tracks in `seo_rank_history` and `seo_volume_history`), logs the call in `provider_call`, and charges the user's credit balance (`api/src/credits`, USD micros; the vendor's reported cost by default, `credits/pricing.py` overrides). The seo-data facade is exposed as MCP tools tagged `meelu/provider` on the agent server, which the app runner allows only when the scope lists that domain in `providers`; the social facade is a REST endpoint the app's local social listening pipeline calls. GA4, GSC and mailboxes stay user-specific and stay in the app (`app/src/main/integrations`). Page classification (`api/src/site_page_llm_extraction`) runs on the server: when a crawl settles as completed, a background loop walks every page whose content hash has no fresh row and asks the `json_data_extractor` facade (a DeepSeek model through OpenRouter's chat completions endpoint, `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`) a fixed set of choice questions; add a question there to extract more per page.
 dashboard and App look same. only difference is App has agentic actions.
 The Content desk writes and checks web pages for the user's own site only: each piece carries a title, H1, meta description, slug, target keyword and body. There are no channels and no social posts. Meelu never publishes or tracks where a piece went; the user puts it on the site by hand. The writer loads the Site and SEO desks with `add_desk` to pick the keyword and the internal links.
 
@@ -70,8 +70,9 @@ agent server's job.
 Never re-import analytics-mcp, add it as a dependency, or extract a shared
 algorithm package to deduplicate against it: the copies diverge freely, and
 coupling this repo to an external tool's release cycle is worse than any
-duplication. The analytics desk in the dashboard still references the old
-local tool and is pending rework.
+duplication. There is no CSV upload and no local analytics server: the
+analytics tools run on the agent server over the site's own tables, and only
+the Analytics desk lists them (other scopes reach them through `add_desk`).
 
 ## Nothing is in production
 
@@ -102,32 +103,28 @@ whose slice is vertical can be read, changed and deleted on its own; one that
 reaches sideways cannot be read without reading everything.
 
 The agent is what crosses desks, not the code. It already holds every read tool
-it was scoped, and installing another MCP server adds more — the analytics
-engine, a mailbox, a search provider. Combining them is the agent's job and it
-needs no help: a question that spans the corpus and a CSV is answered by calling
-one desk's download tool and the engine's query tool in the same turn. **Do not
-write a tool to pre-combine what the agent can combine itself.** The Analytics
-desk is the example to copy — its domain saves sessions, transcripts and
-reports, and reads nothing it does not own.
+it was scoped. Combining them is the agent's job and it needs no help: a question
+that spans two desks is answered with SQL over both desks' tables and the
+analytics tools in the same turn. **Do not write a tool to pre-combine what the
+agent can combine itself.** The Analytics desk is the example to copy — its
+domain saves reports, and reads nothing it does not own.
 
-## Bulk data leaves as a file path, never as tokens
+## Bulk data stays in the database, never in tokens
 
 A tool that hands rows to the model is bounded by what a conversation can hold.
 Anything that could be thousands of rows — the page corpus, a link graph, a
-keyword export — does not come back as data. **The MCP server walks the pages
-itself, writes a CSV under `MEELU_DATA_DIR`, and returns the path.** The model
-sees a filename and a row count; the rows never enter its context.
-
-`meelu_site_download_data` is the shape to copy. From there the path goes to
-the Analytics desk, whose engine ingests CSVs into DuckDB and answers questions
-over them for the cost of one session.
+keyword export, Search Console history — does not come back as data. The agent
+shapes it with SQL into a table in its per-site workspace schema, and the
+analytics tools on the agent server read that table by name. The model sees a
+table name, a row count and the computed result; the rows never enter its
+context. Workspace tables nobody has used for 7 days are dropped by the agent
+server's sweep.
 
 The consequence is a rule about where analysis lives: **a desk that owns data
 does not answer analytical questions about it.** Counting, averaging, grouping,
 trends and "which section has the most of X" are endless, and each one answered
-in-desk costs another walk through the corpus. The desk offers the download and
-names the Analytics desk; it does not page through its own tables to compute a
-number, and it does not read the CSV back.
+in-desk costs another walk through the corpus. The desk names the Analytics
+desk; it does not page through its own tables to compute a number.
 
 ## Never write comments in code
 

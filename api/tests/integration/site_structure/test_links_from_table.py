@@ -40,6 +40,7 @@ async def test_links_from_table(client, email):
 
     await workspace_table(
         user_id,
+        site["id"],
         "blog_to_money",
         "from_page_id text, to_page_id text, reason text",
         [

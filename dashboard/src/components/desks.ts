@@ -75,7 +75,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "Analytics",
     icon: BarChart3,
     stage: "measure",
-    blurb: "Any tabular source in, tables and charts out. The measured half.",
+    blurb: "Ask about your Search Console and Analytics data — answers with charts and evidence; keep the ones that matter as reports.",
     scope: "site",
   },
   {

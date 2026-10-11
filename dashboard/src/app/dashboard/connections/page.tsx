@@ -10,7 +10,6 @@ import {
   ConfirmDelete,
   Field,
   Input,
-  Modal,
   PageHeader,
   Select,
   Spinner,
@@ -203,11 +202,6 @@ export default function ConnectionsPage() {
     });
   }, [bridge]);
 
-  const [entry, setEntry] = useState<CatalogEntry | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [disconnect, setDisconnect] = useState<CatalogEntry | null>(null);
 
   const [oauthBusy, setOauthBusy] = useState<string | null>(null);
@@ -224,38 +218,6 @@ export default function ConnectionsPage() {
       return;
     }
     setConnectors(res);
-  };
-
-  const openConnect = (e: CatalogEntry) => {
-    if (e.connect) return void runOauthConnect(e);
-    setEntry(e);
-    setValues({});
-    setErr(null);
-    setModalOpen(true);
-  };
-
-  const save = async () => {
-    if (!entry || !bridge?.setConnector) return;
-    for (const f of entry.fields ?? []) {
-      if (!f.optional && (values[f.key] ?? "").trim() === "") {
-        setErr(`Missing required field: ${f.label}`);
-        return;
-      }
-    }
-    setBusy(true);
-    setErr(null);
-    const res = await bridge.setConnector(
-      entry.id,
-      values,
-      (entry.fields ?? []).filter((f) => f.secret).map((f) => f.key),
-    );
-    setBusy(false);
-    if ("error" in res) {
-      setErr(res.error as string);
-      return;
-    }
-    setConnectors(res);
-    setModalOpen(false);
   };
 
   return (
@@ -283,7 +245,6 @@ export default function ConnectionsPage() {
         <Stagger className="grid gap-4 sm:grid-cols-2">
           {MCP_CATALOG.map((e) => {
             const connected = connectors?.[e.id];
-            const needsKey = (e.fields ?? []).length > 0;
             const isOauth = !!e.connect;
             const waiting = oauthBusy === e.id;
             const planned = !isInstallable(e);
@@ -335,19 +296,14 @@ export default function ConnectionsPage() {
                     canConnect &&
                     (connected ? (
                       <>
-                        {(needsKey || isOauth) && (
+                        {isOauth && (
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={waiting}
-                            onClick={() => openConnect(e)}
+                            onClick={() => void runOauthConnect(e)}
                           >
-                            <Plug size={13} />{" "}
-                            {isOauth
-                              ? waiting
-                                ? "Waiting for Google…"
-                                : "Reconnect"
-                              : "Update key"}
+                            <Plug size={13} /> {waiting ? "Waiting for Google…" : "Reconnect"}
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => setDisconnect(e)}>
@@ -355,7 +311,7 @@ export default function ConnectionsPage() {
                         </Button>
                       </>
                     ) : (
-                      <Button size="sm" disabled={waiting} onClick={() => openConnect(e)}>
+                      <Button size="sm" disabled={!isOauth || waiting} onClick={() => void runOauthConnect(e)}>
                         <Cable size={13} />{" "}
                         {waiting ? "Waiting for Google…" : "Connect"}
                       </Button>
@@ -374,62 +330,6 @@ export default function ConnectionsPage() {
           })}
         </Stagger>
       )}
-
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={entry ? `Connect ${entry.name}` : "Connect"}
-      >
-        {entry && (
-          <div className="space-y-4">
-            <p className="text-sm text-sub">{entry.blurb}</p>
-            {(entry.fields ?? []).length === 0 ? (
-              <p className="text-sm text-sub">
-                No key needed — {entry.name} authenticates in the browser the first time the
-                agent uses it. Connecting just tells Meelu it&apos;s available.
-              </p>
-            ) : (
-              (entry.fields ?? []).map((f) => (
-                <Field
-                  key={f.key}
-                  label={f.optional ? `${f.label} (optional)` : f.label}
-                  hint={f.help}
-                >
-                  <div className="space-y-1.5">
-                    <Input
-                      type={f.secret ? "password" : "text"}
-                      value={values[f.key] ?? ""}
-                      onChange={(ev) =>
-                        setValues((v) => ({ ...v, [f.key]: ev.target.value }))
-                      }
-                      placeholder={f.placeholder}
-                    />
-                    {f.url && (
-                      <a
-                        href={f.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-                      >
-                        Get your key <ExternalLink size={11} />
-                      </a>
-                    )}
-                  </div>
-                </Field>
-              ))
-            )}
-            {err && <p className="text-sm text-bad">{err}</p>}
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button disabled={busy} onClick={save}>
-                Connect
-              </Button>
-            </div>
-          </div>
-        )}
-      </Modal>
 
       <ConfirmDelete
         open={disconnect !== null}

@@ -4,7 +4,6 @@ from typing import Any
 
 from src.core.orm import Base
 
-ServerTemplate = dict[str, Any]
 Tables = tuple[type[Base], ...]
 Tool = Callable[..., Any]
 
@@ -25,9 +24,8 @@ class AgentScope:
     writes: list[Tool] = field(default_factory=list)
     create_tool: Tool | list[Tool] | None = None
     is_global: bool = False
-    mcp_servers: dict[str, ServerTemplate] = field(default_factory=dict)
+    allow_attachments: bool = True
     limits: dict[str, Any] = field(default_factory=dict)
-    save_attachments: bool = False
     providers: list[str] = field(default_factory=list)
     local_tools: list[str] = field(default_factory=list)
     silent_writes: list[Tool] = field(default_factory=list)

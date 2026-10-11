@@ -343,7 +343,7 @@ facade has Lighthouse; do not build around it.
 For each step, follow the root `CLAUDE.md` order: agree scope → tables →
 schema review → repository/service/API with integration tests → agree MCP
 tools → app changes. Desk rules apply: no tool reads another desk's data;
-bulk rows leave as a CSV path, never as tokens; analytical questions about the
+bulk rows stay in the database, never in tokens; analytical questions about the
 data go to the Analytics desk.
 
 ## Open questions (settle before the schema step)

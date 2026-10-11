@@ -17,9 +17,8 @@ class AgentScopeResponse(EntityModel):
     desk: str
     create_tool_name: str | list[str] | None
     is_global: bool = Field(alias="global")
-    mcp_servers: dict[str, dict[str, Any]]
+    allow_attachments: bool
     limits: dict[str, Any]
-    save_attachments: bool
     providers: list[str]
     local_tools: list[str]
     silent_writes: list[str]

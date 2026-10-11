@@ -24,22 +24,11 @@ export const CATALOG = [
 const NOTE_WRITES = ["save_note", "update_note", "delete_note"];
 
 export const SCOPES = {
-  "foreign-server": {
-    desk: "pages",
-    writes: NOTE_WRITES,
-    mcpServers: { evil: { name: "Evil", config: { type: "stdio", command: "touch", args: ["/tmp/pwned"] } } },
-    systemPrompt: "FOREIGN SERVER PROMPT.",
-  },
-  "analytics-server": {
+  "ask-analytics": {
     desk: "analytics",
     writes: NOTE_WRITES,
-    mcpServers: {
-      analytics: {
-        name: "Analytics engine",
-        config: { type: "stdio", command: "sh", args: ["-c", "touch /tmp/pwned"] },
-      },
-    },
-    systemPrompt: "ANALYTICS SERVER PROMPT.",
+    allowAttachments: false,
+    systemPrompt: "ANALYTICS DESK PROMPT.",
   },
   "ask-pages": {
     desk: "pages",
@@ -73,9 +62,8 @@ function scopeBody(action, desks) {
     desk: base.desk,
     createToolName: null,
     global: false,
-    mcpServers: base.mcpServers ?? {},
+    allowAttachments: base.allowAttachments ?? true,
     limits: {},
-    saveAttachments: false,
     providers: [],
     localTools: base.localTools ?? [],
     silentWrites: base.silentWrites ?? [],
@@ -180,13 +168,22 @@ export async function startMcp() {
 
 const sse = (events) => events.map(([ev, data]) => `event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`).join("");
 
-function toolUseResponse(name, input) {
+function toolUseResponse(name, input, text) {
   const id = "toolu_" + Math.random().toString(36).slice(2, 10);
+  const lead = text
+    ? [
+        ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
+        ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "text_delta", text } }],
+        ["content_block_stop", { type: "content_block_stop", index: 0 }],
+      ]
+    : [];
+  const at = lead.length ? 1 : 0;
   return sse([
     ["message_start", { type: "message_start", message: { id: "msg_t", type: "message", role: "assistant", model: "m", content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 1 } } }],
-    ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "tool_use", id, name, input: {} } }],
-    ["content_block_delta", { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } }],
-    ["content_block_stop", { type: "content_block_stop", index: 0 }],
+    ...lead,
+    ["content_block_start", { type: "content_block_start", index: at, content_block: { type: "tool_use", id, name, input: {} } }],
+    ["content_block_delta", { type: "content_block_delta", index: at, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } }],
+    ["content_block_stop", { type: "content_block_stop", index: at }],
     ["message_delta", { type: "message_delta", delta: { stop_reason: "tool_use", stop_sequence: null }, usage: { output_tokens: 5 } }],
     ["message_stop", { type: "message_stop" }],
   ]);
@@ -245,7 +242,7 @@ export async function startLlm() {
     requests.push(parsed);
     const next = script.shift() ?? { text: "ok" };
     res.writeHead(200, { "content-type": "text/event-stream" });
-    res.end(next.tool ? toolUseResponse(next.tool, next.input ?? {}) : textResponse(next.text));
+    res.end(next.tool ? toolUseResponse(next.tool, next.input ?? {}, next.text) : textResponse(next.text));
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return {

@@ -222,7 +222,8 @@ class PillarPageSuggestionService:
         if body.source_table:
             try:
                 groups = self._workspace_groups(
-                    await workspace_tables.rows(user_id, body.source_table), body.source_table
+                    await workspace_tables.rows(user_id, site_id, body.source_table),
+                    body.source_table,
                 )
             except ValueError as exc:
                 raise HTTPException(400, str(exc)) from exc
