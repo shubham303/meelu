@@ -125,6 +125,10 @@ class AccessTokenRepository:
     async def delete(self, db: AsyncSession, token_hash: str) -> None:
         await db.execute(delete(AccessToken).where(AccessToken.token_hash == token_hash))
 
+    async def delete_for_user(self, db: AsyncSession, user_id: str) -> int:
+        result = await db.execute(delete(AccessToken).where(AccessToken.user_id == user_id))
+        return result.rowcount or 0
+
     async def delete_created_before(self, db: AsyncSession, cutoff: datetime) -> int:
         result = await db.execute(delete(AccessToken).where(AccessToken.created_at <= cutoff))
         return result.rowcount or 0

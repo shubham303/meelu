@@ -18,6 +18,7 @@ services:
     restart: "no"
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      MIGRATE_DATABASE_URL: ${MIGRATE_DATABASE_URL}
 
   api:
     build:
