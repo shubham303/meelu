@@ -33,11 +33,11 @@ after(() => {
   llm?.close();
 });
 
-async function turn(message, sessionId, { action = "ask-pages", askPermission = async () => "allow" } = {}) {
+async function turn(message, sessionId, { action = "ask-pages", askPermission = async () => "allow", history } = {}) {
   const events = [];
   let sid = sessionId;
   await runner.runAgentTurn(
-    { action, siteId: "site_test", message, sessionId, form: {} },
+    { action, siteId: "site_test", message, sessionId, form: {}, history },
     (event, data) => {
       events.push([event, data]);
       if (event === "session") sid = data.sessionId;
@@ -180,26 +180,60 @@ test("a live session refuses a turn sent for another website", async () => {
   );
 });
 
-function runWith(action, connectors) {
-  return runner.runAgentTurn(
-    { action, siteId: "site_test", message: "hi", form: {} },
-    () => {},
-    { cwd, abortController: new AbortController(), askPermission: async () => "allow", connectors },
+test("a desk that works only on database data refuses attached files", async () => {
+  await assert.rejects(
+    () =>
+      runner.runAgentTurn(
+        {
+          action: "ask-analytics",
+          siteId: "site_test",
+          message: "use this",
+          form: {},
+          files: [{ name: "data.csv", type: "text/csv", data: Buffer.from("a,b").toString("base64") }],
+        },
+        () => {},
+        { cwd, abortController: new AbortController(), askPermission: async () => "allow" },
+      ),
+    /does not take attached files/,
   );
-}
-
-test("a scope cannot launch a local server the app ships no template for", async () => {
-  await assert.rejects(() => runWith("foreign-server", { get: () => ({}) }), /does not know \(evil\)/);
 });
 
-test("the analytics server launches from the app's template, never the scope's command", async () => {
-  await assert.rejects(
-    () => runWith("analytics-server", { get: () => ({ projectDir: "relative/dir", dataDir: cwd }) }),
-    /projectDir set to an existing folder/,
+test("text after a tool call starts on a new paragraph, so a fenced block opens on its own line", async () => {
+  llm.script.push(
+    { tool: "mcp__desks__add_desk", input: { desk: "content" }, text: "Here is the chart:" },
+    { text: "```chart\n<svg></svg>\n```" },
   );
-  await assert.rejects(
-    () => runWith("analytics-server", { get: () => ({ projectDir: cwd, dataDir: path.join(cwd, "missing") }) }),
-    /dataDir set to an existing folder/,
-  );
-  assert.equal(fs.existsSync("/tmp/pwned"), false);
+  const res = await turn("chart it");
+  assert.equal(res.done.ok, true, res.done.error);
+  const streamed = res.events.filter(([e]) => e === "text").map(([, d]) => d.text).join("");
+  assert.equal(streamed, "Here is the chart:\n\n```chart\n<svg></svg>\n```");
+});
+
+test("a chat whose transcript is gone starts a new session that opens with the stored turns", async () => {
+  llm.script.push({ text: "continued" });
+  const start = llm.requests.length;
+  const res = await turn("and on mobile?", "0b9d5a8e-0000-4000-8000-000000000000", {
+    history: [
+      { role: "user", text: "Which country grew?" },
+      { role: "assistant", text: "India, by 40%." },
+    ],
+  });
+  assert.equal(res.done.ok, true, res.done.error);
+  assert.notEqual(res.sessionId, "0b9d5a8e-0000-4000-8000-000000000000");
+  const sent = JSON.stringify(llm.requests[start].messages.at(-1).content);
+  assert.ok(sent.includes("[assistant]: India, by 40%."), sent);
+  assert.ok(sent.includes("and on mobile?"));
+});
+
+test("a chat whose transcript is on disk resumes it without the stored turns", async () => {
+  llm.script.push({ text: "first" });
+  const first = await turn("first question");
+  runner.closeAgentSessions();
+  llm.script.push({ text: "second" });
+  const start = llm.requests.length;
+  const res = await turn("follow up", first.sessionId, { history: [{ role: "user", text: "NOT SENT" }] });
+  assert.equal(res.done.ok, true, res.done.error);
+  const sent = JSON.stringify(llm.requests[start].messages);
+  assert.ok(sent.includes("first question"), "the resumed transcript carries the earlier turn");
+  assert.ok(!sent.includes("NOT SENT"));
 });

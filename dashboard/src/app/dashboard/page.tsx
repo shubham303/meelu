@@ -12,7 +12,6 @@ import type { SiteProfile } from "@/lib/types";
 interface Stats {
   site?: { pages?: number; needsReading?: number };
   pages?: { open?: number; verified?: number; rejected?: number };
-  analytics?: { sources?: number; reports?: number };
   content?: { pieces?: number };
 }
 
@@ -57,7 +56,6 @@ export default function OverviewPage() {
     site: `${count(stats?.site?.pages, "page")} · ${num(stats?.site?.needsReading)} need reading`,
     pages: `${num(pages.open)} open · ${num(pages.verified)} verified fixed`,
     content: count(content.pieces, "piece"),
-    analytics: `${count(stats?.analytics?.sources, "source")} · ${num(stats?.analytics?.reports)} saved`,
   };
 
   const desks = WEBSITE_DESKS.filter((d) => d.id !== "overview");

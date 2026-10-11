@@ -94,16 +94,6 @@ class SocialListeningPostRepository:
         await db.flush()
         return PostResponse.model_validate(row)
 
-    async def list_all(
-        self, db: AsyncSession, site_id: str, filters: PostFilters
-    ) -> list[SocialListeningPost]:
-        result = await db.execute(
-            select(SocialListeningPost)
-            .where(*self._conditions(site_id, filters))
-            .order_by(*self._order(filters.sort))
-        )
-        return list(result.scalars().all())
-
     async def status_counts(self, db: AsyncSession, site_id: str) -> dict[str, int]:
         result = await db.execute(
             select(SocialListeningPost.status, func.count())

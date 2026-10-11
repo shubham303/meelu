@@ -1,41 +1,13 @@
-import asyncio
-import csv
-import time
-from datetime import UTC, datetime
-from pathlib import Path
-
 from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
-from src.settings import settings
 from src.social_listening.schemas import (
-    PostFilters,
     PostPatchRequest,
     PostResponse,
     QueryUpsertItem,
     UpsertResponse,
 )
 from src.social_listening.service import social_listening_service
-
-EXPORT_COLUMNS = (
-    "id",
-    "url",
-    "platform",
-    "title",
-    "text",
-    "author_handle",
-    "posted_at",
-    "engagement_score",
-    "engagement_comments",
-    "query_id",
-    "similarity",
-    "relevance",
-    "composite_score",
-    "status",
-    "drop_reason",
-    "keep_reason",
-    "suggested_angle",
-)
 
 
 @tool(writes=True, desk="social-listening")
@@ -63,58 +35,3 @@ async def social_listening_update_post(post_id: str, patch: PostPatchRequest) ->
     ctx = require_site()
     async with unit_of_work() as db:
         return await social_listening_service.patch_post(db, ctx.site_id, post_id, patch)
-
-
-def _purge_stale_exports(out_dir: Path) -> None:
-    cutoff = time.time() - settings.agent_export_ttl_hours * 3600
-    for old in out_dir.glob("posts-*.csv"):
-        if old.stat().st_mtime < cutoff:
-            old.unlink(missing_ok=True)
-
-
-def _write_export(schema: str, rows: list) -> Path:
-    out_dir = settings.agent_data_dir / "social-listening" / schema
-    out_dir.mkdir(parents=True, exist_ok=True)
-    _purge_stale_exports(out_dir)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    path = out_dir / f"posts-{stamp}.csv"
-    with open(path, "w", newline="") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(EXPORT_COLUMNS)
-        for row in rows:
-            writer.writerow(
-                [
-                    row.id,
-                    row.url,
-                    row.platform,
-                    row.title or "",
-                    (row.text or "").replace("\n", " "),
-                    row.author_handle or "",
-                    row.posted_at.isoformat() if row.posted_at else "",
-                    (row.engagement or {}).get("score", ""),
-                    (row.engagement or {}).get("comments", ""),
-                    row.query_id or "",
-                    row.similarity if row.similarity is not None else "",
-                    row.relevance if row.relevance is not None else "",
-                    row.composite_score if row.composite_score is not None else "",
-                    row.status,
-                    row.drop_reason or "",
-                    row.keep_reason or "",
-                    row.suggested_angle or "",
-                ]
-            )
-    return path
-
-
-@tool(desk="social-listening")
-async def social_listening_download_posts(status: str | None = None) -> dict:
-    """Export every post Meelu has seen (optionally one status) as a CSV file and return its
-    path and row count. Analyse the file with the analytics engine; the rows never come back
-    inline."""
-    ctx = require_site()
-    filters = PostFilters(statuses=[status] if status else None, sort="newest")
-    async with unit_of_work() as db:
-        found = await social_listening_service.export_posts(db, ctx.site_id, filters)
-    rows = found[: settings.agent_max_export_rows]
-    path = await asyncio.to_thread(_write_export, ctx.schema, rows)
-    return {"path": str(path), "rows": len(rows), "truncated": len(found) > len(rows)}

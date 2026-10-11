@@ -791,26 +791,31 @@ export interface ContentPiece extends ContentPieceSlim, PieceMedia {
   sourcePageId?: string | null;
 }
 
-export interface AnalyticsSession extends BaseEntity, SiteScoped {
-  title: string;
-  about: string;
-  sessionKey?: string | null;
-}
-
-export interface AnalyticsSource extends BaseEntity, SiteScoped {
-  sessionId: string;
-  name: string;
-  filePath?: string | null;
-}
-
 export interface AnalyticsReport extends BaseEntity, SiteScoped {
-  sessionId?: ID | null;
   title: string;
   html: string;
   createdBy: "agent" | "user";
 }
 
 export type AnalyticsReportSummary = Omit<AnalyticsReport, "html"> & { htmlBytes: number };
+
+export interface AnalyticsChat {
+  id: string;
+  siteId: string;
+  title: string;
+  sdkSessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AnalyticsChatSummary = Pick<AnalyticsChat, "id" | "title" | "updatedAt">;
+
+export interface AnalyticsChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
+}
 
 export interface ApiKey extends BaseEntity {
   name: string;

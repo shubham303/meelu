@@ -109,14 +109,16 @@ async def set_rows(model, ids, **values) -> None:
         await db.commit()
 
 
-async def workspace_table(user_id: str, name: str, columns: str, rows: list[tuple]) -> None:
+async def workspace_table(
+    user_id: str, site_id: str, name: str, columns: str, rows: list[tuple]
+) -> None:
     import asyncio
 
-    from src.agent.security import ensure_user
+    from src.agent.security import ensure_tenant
     from src.agent.sql import tenant_txn
 
     def write() -> None:
-        role, schema = ensure_user(user_id)
+        role, schema = ensure_tenant(user_id, site_id)
         with tenant_txn(role, schema) as conn:
             conn.exec_driver_sql(f'DROP TABLE IF EXISTS "{name}"')
             conn.exec_driver_sql(f'CREATE TABLE "{name}" ({columns})')

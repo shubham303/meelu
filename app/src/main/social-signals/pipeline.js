@@ -19,7 +19,7 @@ import {
 } from "./store.js";
 
 const DEFAULT_MIN_RELEVANCE = 0.6;
-const JUDGE_CONCURRENCY = 3;
+const JUDGE_CONCURRENCY = 5;
 const GATE_POLL_MS = 3000;
 const GATE_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_PER_LINE = 100;

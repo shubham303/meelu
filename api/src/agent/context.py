@@ -10,17 +10,17 @@ class AgentContext:
     site_id: str | None
     site_domain: str | None
     site_status: str | None
-    role: str
-    schema: str
+    role: str | None
+    schema: str | None
     api_key: str
 
 
 _current: ContextVar[AgentContext | None] = ContextVar("meelu_agent_context", default=None)
 
 
-def tenant_names(user_id: str) -> tuple[str, str]:
+def tenant_names(user_id: str, site_id: str) -> tuple[str, str]:
     base = re.sub(r"[^a-z0-9]", "", user_id.lower())[:20]
-    suffix = hashlib.sha256(user_id.encode()).hexdigest()[:8]
+    suffix = hashlib.sha256(f"{user_id}:{site_id}".encode()).hexdigest()[:12]
     return f"agent_{base}_{suffix}", f"ws_{base}_{suffix}"
 
 

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/use-api";
 import type { SocialListeningConfig, SocialListeningQuery } from "@/lib/types";
 import type { PlatformInfo } from "./lib";
+import { SettingsRows } from "./settings-rows";
 
 const SUMMARY_CHIPS = 3;
 const FIND_AFTER = 5;
@@ -76,6 +77,13 @@ export function ListeningCard({
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="h-px bg-edge" />
       <PlatformRow config={config} platformInfo={platformInfo} onToggle={togglePlatform} />
+      <SettingsRows
+        key={config?.maxAgeDays ?? "none"}
+        config={config}
+        onSave={(body) =>
+          void guarded(() => api("/api/v1/social-listening/config", { method: "PUT", body }), refreshConfig)
+        }
+      />
     </Card>
   );
 }

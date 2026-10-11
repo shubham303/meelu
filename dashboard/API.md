@@ -296,18 +296,15 @@ puts the page on the site by hand.
 
 ## Analytics
 
-The Analytics desk. It saves analysis sessions, their data sources and the
-reports made in them.
+The Analytics desk. It saves the reports the user keeps from the analytics chat.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/analytics/workspace` | All sessions, sources and reports for the website. |
-| GET, POST | `/analytics/sessions` | List sessions (paged); create a session. |
-| GET, PUT, DELETE | `/analytics/sessions/{session_id}` | Get, update or delete a session. |
-| GET, POST | `/analytics/sessions/{session_id}/sources` | List a session's sources; add a source. |
-| DELETE | `/analytics/sources/{source_id}` | Delete a source. |
-| GET, POST | `/analytics/reports` | List reports (paged); create a report. |
+| GET, POST | `/analytics/reports` | List reports (paged, `?q=` searches titles); create a report. |
 | GET, PUT, DELETE | `/analytics/reports/{report_id}` | Get, update or delete a report. |
+| GET, POST | `/analytics/chats` | List the website's Analytics chats (paged, newest activity first; id, title, updatedAt only); start a chat. |
+| GET, PUT, DELETE | `/analytics/chats/{chat_id}` | Get a chat; rename it or store its SDK session id; delete it with its messages. |
+| GET, POST | `/analytics/chats/{chat_id}/messages` | List a chat's messages (paged, newest first); append the user's question or the answer. |
 
 ## Notes
 

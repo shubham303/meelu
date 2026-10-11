@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.analytics.service import analytics_service
 from src.analytics.schemas import (
+    AnalyticsChatCreateRequest,
+    AnalyticsChatDeleteResponse,
+    AnalyticsChatListItemResponse,
+    AnalyticsChatMessageResponse,
+    AnalyticsChatMessagesCreateRequest,
+    AnalyticsChatResponse,
+    AnalyticsChatUpdateRequest,
     AnalyticsReportCreateRequest,
     AnalyticsReportDeleteResponse,
     AnalyticsReportListItemResponse,
@@ -10,17 +16,8 @@ from src.analytics.schemas import (
     AnalyticsReportSummaryRecord,
     AnalyticsReportSummaryResponse,
     AnalyticsReportUpdateRequest,
-    AnalyticsSessionCreateRequest,
-    AnalyticsSessionDeleteResponse,
-    AnalyticsSessionListItemResponse,
-    AnalyticsSessionResponse,
-    AnalyticsSessionUpdateRequest,
-    AnalyticsSourceCreateRequest,
-    AnalyticsSourceDeleteResponse,
-    AnalyticsSourceListItemResponse,
-    AnalyticsSourceResponse,
-    AnalyticsWorkspaceResponse,
 )
+from src.analytics.service import analytics_service
 from src.auth import AuthContext, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
@@ -29,112 +26,14 @@ from src.core.pagination.utils import get_pagination_params
 router = APIRouter()
 
 
-@router.get("/analytics/workspace")
-async def get_workspace(
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsWorkspaceResponse:
-    workspace = await analytics_service.get_workspace(db, ctx.user_id, ctx.site_id)
-    return AnalyticsWorkspaceResponse.model_validate(workspace)
-
-
-@router.get("/analytics/sessions")
-async def list_sessions(
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-    paging: PaginationParams = Depends(get_pagination_params),
-) -> PaginatedApiResponse[AnalyticsSessionListItemResponse]:
-    page = await analytics_service.list_sessions(db, ctx.user_id, ctx.site_id, paging)
-    return PaginatedApiResponse[AnalyticsSessionListItemResponse](
-        data=[AnalyticsSessionListItemResponse.model_validate(s) for s in page.data],
-        pagination=page.pagination,
-    )
-
-
-@router.post("/analytics/sessions", status_code=201)
-async def create_session(
-    body: AnalyticsSessionCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSessionResponse:
-    record = await analytics_service.create_session(db, ctx.user_id, ctx.site_id, body)
-    return AnalyticsSessionResponse.model_validate(record)
-
-
-@router.get("/analytics/sessions/{session_id}")
-async def get_session(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSessionResponse:
-    record = await analytics_service.get_session(db, ctx.user_id, ctx.site_id, session_id)
-    return AnalyticsSessionResponse.model_validate(record)
-
-
-@router.put("/analytics/sessions/{session_id}")
-async def update_session(
-    session_id: str,
-    body: AnalyticsSessionUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSessionResponse:
-    record = await analytics_service.update_session(db, ctx.user_id, ctx.site_id, session_id, body)
-    return AnalyticsSessionResponse.model_validate(record)
-
-
-@router.delete("/analytics/sessions/{session_id}")
-async def delete_session(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSessionDeleteResponse:
-    record = await analytics_service.delete_session(db, ctx.user_id, ctx.site_id, session_id)
-    return AnalyticsSessionDeleteResponse(id=record.id)
-
-
-@router.get("/analytics/sessions/{session_id}/sources")
-async def list_sources(
-    session_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-    paging: PaginationParams = Depends(get_pagination_params),
-) -> PaginatedApiResponse[AnalyticsSourceListItemResponse]:
-    page = await analytics_service.list_sources(db, ctx.user_id, ctx.site_id, session_id, paging)
-    return PaginatedApiResponse[AnalyticsSourceListItemResponse](
-        data=[AnalyticsSourceListItemResponse.model_validate(s) for s in page.data],
-        pagination=page.pagination,
-    )
-
-
-@router.post("/analytics/sessions/{session_id}/sources", status_code=201)
-async def create_source(
-    session_id: str,
-    body: AnalyticsSourceCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSourceResponse:
-    record = await analytics_service.create_source(db, ctx.user_id, ctx.site_id, session_id, body)
-    return AnalyticsSourceResponse.model_validate(record)
-
-
-@router.delete("/analytics/sources/{source_id}")
-async def delete_source(
-    source_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsSourceDeleteResponse:
-    record = await analytics_service.delete_source(db, ctx.user_id, ctx.site_id, source_id)
-    return AnalyticsSourceDeleteResponse(id=record.id)
-
-
 @router.get("/analytics/reports")
 async def list_reports(
-    session_id: str | None = Query(None, alias="sessionId"),
+    q: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
 ) -> PaginatedApiResponse[AnalyticsReportListItemResponse]:
-    page = await analytics_service.list_reports(db, ctx.user_id, ctx.site_id, paging, session_id)
+    page = await analytics_service.list_reports(db, ctx.user_id, ctx.site_id, paging, q)
     return PaginatedApiResponse[AnalyticsReportListItemResponse](
         data=[AnalyticsReportListItemResponse.model_validate(r) for r in page.data],
         pagination=page.pagination,
@@ -184,3 +83,82 @@ async def delete_report(
 ) -> AnalyticsReportDeleteResponse:
     record = await analytics_service.delete_report(db, ctx.user_id, ctx.site_id, report_id)
     return AnalyticsReportDeleteResponse(id=record.id)
+
+
+@router.get("/analytics/chats")
+async def list_chats(
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+    paging: PaginationParams = Depends(get_pagination_params),
+) -> PaginatedApiResponse[AnalyticsChatListItemResponse]:
+    page = await analytics_service.list_chats(db, ctx.user_id, ctx.site_id, paging)
+    return PaginatedApiResponse[AnalyticsChatListItemResponse](
+        data=[AnalyticsChatListItemResponse.model_validate(c) for c in page.data],
+        pagination=page.pagination,
+    )
+
+
+@router.post("/analytics/chats", status_code=201)
+async def create_chat(
+    body: AnalyticsChatCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> AnalyticsChatResponse:
+    record = await analytics_service.create_chat(db, ctx.user_id, ctx.site_id, body)
+    return AnalyticsChatResponse.model_validate(record)
+
+
+@router.get("/analytics/chats/{chat_id}")
+async def get_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> AnalyticsChatResponse:
+    record = await analytics_service.get_chat(db, ctx.user_id, ctx.site_id, chat_id)
+    return AnalyticsChatResponse.model_validate(record)
+
+
+@router.put("/analytics/chats/{chat_id}")
+async def update_chat(
+    chat_id: str,
+    body: AnalyticsChatUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> AnalyticsChatResponse:
+    record = await analytics_service.update_chat(db, ctx.user_id, ctx.site_id, chat_id, body)
+    return AnalyticsChatResponse.model_validate(record)
+
+
+@router.delete("/analytics/chats/{chat_id}")
+async def delete_chat(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> AnalyticsChatDeleteResponse:
+    record = await analytics_service.delete_chat(db, ctx.user_id, ctx.site_id, chat_id)
+    return AnalyticsChatDeleteResponse(id=record.id)
+
+
+@router.get("/analytics/chats/{chat_id}/messages")
+async def list_messages(
+    chat_id: str,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+    paging: PaginationParams = Depends(get_pagination_params),
+) -> PaginatedApiResponse[AnalyticsChatMessageResponse]:
+    page = await analytics_service.list_messages(db, ctx.user_id, ctx.site_id, chat_id, paging)
+    return PaginatedApiResponse[AnalyticsChatMessageResponse](
+        data=[AnalyticsChatMessageResponse.model_validate(m) for m in page.data],
+        pagination=page.pagination,
+    )
+
+
+@router.post("/analytics/chats/{chat_id}/messages", status_code=201)
+async def add_messages(
+    chat_id: str,
+    body: AnalyticsChatMessagesCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> list[AnalyticsChatMessageResponse]:
+    records = await analytics_service.add_messages(db, ctx.user_id, ctx.site_id, chat_id, body)
+    return [AnalyticsChatMessageResponse.model_validate(m) for m in records]

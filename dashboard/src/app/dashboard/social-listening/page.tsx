@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Inbox, RotateCw, SlidersHorizontal, Sparkles, Square } from "lucide-react";
+import { Download, Inbox, RotateCw, Sparkles, Square } from "lucide-react";
 import { PageEnter } from "@/components/animate";
 import { Button, IconButton, PageHeader, Spinner } from "@/components/ui";
 import { GLOBAL } from "@/lib/current-site";
@@ -32,7 +32,6 @@ import { PostCard } from "./post-card";
 import { ReplyPanel } from "./reply-panel";
 import { RunProgress } from "./run-progress";
 import { RunResult, type RunOutcome } from "./run-result";
-import { SettingsPopover } from "./settings-popover";
 
 const PAGE_SIZE = 25;
 const STEPS: RunStep[] = ["terms", "searching", "meaning", "judging"];
@@ -62,7 +61,6 @@ export default function SocialListeningPage() {
   const [tab, setTab] = useState<TabKey>("to_reply");
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [editingLines, setEditingLines] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [drawerPost, setDrawerPost] = useState<SocialListeningPost | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -300,16 +298,9 @@ export default function SocialListeningPage() {
         description="Posts where a reply from you belongs. Meelu finds them and suggests an angle. You decide which to answer."
         actions={
           <div className="relative flex items-center gap-2">
-            <IconButton
-              data-settings-toggle
-              title="Settings"
-              aria-label="Settings"
-              aria-expanded={settingsOpen}
-              onClick={() => setSettingsOpen((v) => !v)}
-              className={cn("h-9 w-9", settingsOpen && "bg-accent-soft text-accent")}
-            >
-              <SlidersHorizontal size={17} />
-            </IconButton>
+            <Button variant="ghost" onClick={() => void download()} disabled={downloading || lines.length === 0}>
+              <Download size={14} /> {downloading ? "Building CSV…" : "Download CSV"}
+            </Button>
             {running ? (
               <Button variant="outline" onClick={stop} disabled={stopping}>
                 <Square size={13} /> {stopping ? "Stopping…" : "Stop"}
@@ -334,15 +325,6 @@ export default function SocialListeningPage() {
               >
                 <Sparkles size={16} />
               </IconButton>
-            )}
-            {settingsOpen && (
-              <SettingsPopover
-                config={config}
-                onClose={() => setSettingsOpen(false)}
-                onSaved={refreshConfig}
-                onDownload={() => void download()}
-                downloading={downloading}
-              />
             )}
           </div>
         }

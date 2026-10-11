@@ -128,6 +128,9 @@ export function PostCard({
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => onStatus(post, "skipped")}>
               Skip
             </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => onStatus(post, "replied")}>
+              Mark done
+            </Button>
             <Button size="sm" variant="outline" onClick={() => onDraft(post)}>
               Draft reply
             </Button>

@@ -3,7 +3,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from src.agent.context import AgentContext, reset_context, set_context
-from src.agent.security import ensure_user
+from src.agent.security import ensure_tenant
 from src.core.database import unit_of_work
 from src.keys.repository import api_keys
 from src.profile.repository import users
@@ -29,7 +29,9 @@ async def resolve(api_key: str, site_header: str | None) -> AgentContext:
             if site is not None:
                 site_id, site_domain, site_status = site.id, site.domain, site.status
 
-    role, schema = await run_in_threadpool(ensure_user, user_id)
+    role = schema = None
+    if site_id:
+        role, schema = await run_in_threadpool(ensure_tenant, user_id, site_id)
     return AgentContext(
         user_id=user_id,
         site_id=site_id,
