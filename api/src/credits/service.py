@@ -124,7 +124,7 @@ class CreditService:
         domain: str,
         capability: str,
         vendor_cost_micros: int,
-        provider_call_id: str,
+        provider_call_id: str | None,
     ) -> int:
         price = pricing.vendor_call_price(domain, capability, vendor_cost_micros)
         if price <= 0:

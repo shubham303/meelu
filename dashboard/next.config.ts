@@ -30,6 +30,10 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  experimental: {
+    proxyTimeout: 10 * 60 * 1000,
+    proxyClientMaxBodySize: "32mb",
+  },
   images: { unoptimized: true },
   async rewrites() {
     const api = process.env.MEELU_API_URL ?? "http://localhost:8100";

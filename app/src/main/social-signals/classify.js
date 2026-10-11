@@ -46,8 +46,8 @@ function unit(n) {
   return Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : 0;
 }
 
-export async function judgeBatch(posts, ctx, llm) {
-  const parsed = await jsonCall(system(ctx), batchPrompt(posts), llm);
+export async function judgeBatch(posts, ctx, target) {
+  const parsed = await jsonCall(system(ctx), batchPrompt(posts), target);
   const byIndex = new Map();
   for (const r of Array.isArray(parsed.results) ? parsed.results : []) {
     const i = Number(r?.i);

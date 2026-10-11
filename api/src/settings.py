@@ -47,6 +47,15 @@ class Settings(EnvSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
     openrouter_model: str = "deepseek/deepseek-v4.1-flash"
+
+    llm_default_model: str = "anthropic/claude-haiku-5.5"
+    llm_featured_models: list[str] = [
+        "anthropic/claude-haiku-5.5",
+        "deepseek/deepseek-v4-flash",
+        "openai/gpt-6-luna",
+    ]
+    llm_catalog_ttl_seconds: int = 6 * 60 * 60
+    llm_stream_timeout_seconds: float = 600.0
     credits_signup_grant_usd: float = 1.0
     credits_site_daily_usd: float = 0.4
     credits_minimum_balance_usd: float = 0.2

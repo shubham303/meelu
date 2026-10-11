@@ -19,6 +19,7 @@ from src.credits.endpoints import router as credits_router
 from src.credits.service import InsufficientCreditsError, SiteDisabledError
 from src.identity import cron as identity_cron
 from src.keys.endpoints import router as keys_router
+from src.llm.endpoints import router as llm_router
 from src.notes.endpoints import router as notes_router
 from src.payments.endpoints import router as payments_router
 from src.profile.endpoints import router as profile_router
@@ -103,6 +104,7 @@ for desk in (
     payments_router,
     providers_router,
     scratchpad_router,
+    llm_router,
 ):
     app.include_router(desk, prefix="/api/v1")
 

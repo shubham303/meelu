@@ -1,8 +1,8 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutable, llmEnv, resolveLlm } from "../agent/runner.js";
 
-export async function jsonCall(system, prompt, llm) {
-  const { gateway, model, anthropicKey, limits } = await resolveLlm(llm);
+export async function jsonCall(system, prompt, target) {
+  const { gateway, model, anthropicKey, limits } = await resolveLlm(target);
   const q = query({
     prompt,
     options: {

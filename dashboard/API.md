@@ -25,8 +25,8 @@ not run.
 Every `/api/v1` endpoint needs one of these:
 
 - the `meelu_session` cookie, which `POST /api/auth/session` sets, or
-- an `x-api-key` header with a workspace API key (`emcp_...`). Keys are managed
-  in Settings.
+- an `x-api-key` header with a workspace API key (`emcp_...`), or the same
+  key as `Authorization: Bearer emcp_...`. Keys are managed in Settings.
 
 If neither is valid, the answer is 401. Two endpoints are for Meelu operators
 only and answer 403 to other users: `POST /credits/grant` and
@@ -346,10 +346,24 @@ account per vendor and charges calls to the user's credits.
 | GET | `/providers/social-listening/platforms` | Platforms social search supports. |
 | POST | `/providers/social-listening/search` | Search social posts through the provider. |
 
+## LLM
+
+Every LLM call the app makes goes through the api to OpenRouter on the
+server's key, and is charged to the user's credits at OpenRouter's reported
+cost. The default model is `anthropic/claude-haiku-5.5`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/llm/models` | Tool-capable models with price per million tokens and context size. Recommended first, then well-known providers, then the rest, cheapest first within each. |
+| GET | `/llm/preference` | The user's default model. |
+| PUT | `/llm/preference` | Set the default model. Only a listed model is accepted. |
+| GET | `/llm/calls` | The user's LLM call log with tokens and cost (paged, `?model=` filter). |
+| POST | `/llm/v1/messages` | Anthropic Messages API, streamed or not. Point an Anthropic client's base URL at `/api/v1/llm`. Optional headers: `x-meelu-site`, `x-meelu-purpose` (`agent`, `social_listening`, `page_review`, `site_summary`). Responses and errors are Anthropic's shape, not the envelope. A balance under the floor answers 402. |
+
 ## Credits and payments
 
-The user's balance in USD micros. Provider calls and websites are charged
-against it. Top-ups go through Dodo Payments.
+The user's balance in USD micros. Provider calls, LLM calls and websites are
+charged against it. Top-ups go through Dodo Payments.
 
 | Method | Path | Purpose |
 |---|---|---|
