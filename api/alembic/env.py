@@ -1,10 +1,9 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-import src.core.tables
+from alembic import context
 from src.core.orm import Base
 from src.settings import settings
 
@@ -14,10 +13,13 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+if not settings.migrate_database_url:
+    raise SystemExit("MIGRATE_DATABASE_URL is not set.")
+
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=settings.migrate_database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -33,7 +35,7 @@ def do_run_migrations(connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(settings.database_url)
+    engine = create_async_engine(settings.migrate_database_url)
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()

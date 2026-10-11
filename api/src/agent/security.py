@@ -56,21 +56,7 @@ READABLE_TABLES = frozenset(
     }
 )
 
-LARGE_OBJECT_WRITERS = (
-    "lo_creat(integer)",
-    "lo_create(oid)",
-    "lo_from_bytea(oid, bytea)",
-    "lo_import(text)",
-    "lo_import(text, oid)",
-    "lo_put(oid, bigint, bytea)",
-    "lowrite(integer, bytea)",
-)
-
-ADVISORY_LOCK_FUNCTIONS = (
-    "SELECT p.oid::regprocedure::text FROM pg_proc p "
-    "JOIN pg_namespace n ON n.oid = p.pronamespace "
-    "WHERE n.nspname = 'pg_catalog' AND p.proname LIKE %s"
-)
+TENANT_LIMITS = "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
 
 CURRENT_TENANT = f"(SELECT {USER_ID_FUNCTION}())"
 CURRENT_SITE = f"(SELECT {SITE_ID_FUNCTION}())"
@@ -126,13 +112,6 @@ def bootstrap() -> BootstrapResult:
     with engine.begin() as conn:
         _ensure_read_role(conn)
         conn.exec_driver_sql(f"GRANT USAGE ON SCHEMA public TO {read}")
-        conn.exec_driver_sql("REVOKE USAGE ON LANGUAGE plpgsql, sql FROM PUBLIC")
-        for function in LARGE_OBJECT_WRITERS:
-            conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION pg_catalog.{function} FROM PUBLIC")
-        for (signature,) in conn.exec_driver_sql(
-            ADVISORY_LOCK_FUNCTIONS, ("pg\\_%advisory\\_%",)
-        ).fetchall():
-            conn.exec_driver_sql(f"REVOKE EXECUTE ON FUNCTION {signature} FROM PUBLIC")
         for function, column in ((USER_ID_FUNCTION, "user_id"), (SITE_ID_FUNCTION, "site_id")):
             conn.exec_driver_sql(
                 f"CREATE OR REPLACE FUNCTION {function}() RETURNS text "
@@ -194,15 +173,16 @@ def ensure_tenant(user_id: str, site_id: str) -> tuple[str, str]:
         if role in _ensured:
             return role, schema
         qr, qs = quote_ident(role), quote_ident(schema)
-        attributes = (
-            f"LOGIN PASSWORD '{tenant_password(role)}' NOSUPERUSER NOCREATEDB NOCREATEROLE "
-            f"NOREPLICATION NOBYPASSRLS INHERIT "
+        login = (
+            f"LOGIN PASSWORD '{tenant_password(role)}' INHERIT "
             f"CONNECTION LIMIT {settings.agent_tenant_connections * 2}"
         )
         with engine.begin() as conn:
             _ensure_read_role(conn)
-            verb = "ALTER" if _role_exists(conn, role) else "CREATE"
-            conn.exec_driver_sql(f"{verb} ROLE {qr} WITH {attributes}")
+            if _role_exists(conn, role):
+                conn.exec_driver_sql(f"ALTER ROLE {qr} WITH {login}")
+            else:
+                conn.exec_driver_sql(f"CREATE ROLE {qr} WITH {login} {TENANT_LIMITS}")
             conn.exec_driver_sql(
                 f"ALTER ROLE {qr} SET temp_file_limit = '{settings.agent_temp_file_limit}'"
             )

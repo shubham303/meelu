@@ -3,12 +3,14 @@ import "server-only";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
-import { emailOTP, jwt } from "better-auth/plugins";
+import { emailOTP, jwt, signJWT, type JwtOptions } from "better-auth/plugins";
 import { Pool } from "pg";
 
 const SIGNUP_CAP = 10;
 const OTP_SECONDS = 600;
 const SENDER = "Meelu <noreply@meelu.tech>";
+const API = process.env.MEELU_API_URL ?? "http://localhost:8100";
+const PASSWORD_CHANGES = new Set(["/email-otp/reset-password", "/change-password"]);
 
 type OtpType = "sign-in" | "email-verification" | "forget-password" | "change-email";
 
@@ -55,6 +57,20 @@ async function sendOtpEmail(email: string, otp: string, type: OtpType): Promise<
 function buildOptions() {
   const baseURL = required("BETTER_AUTH_URL");
   const pool = new Pool({ connectionString: required("AUTH_DATABASE_URL"), max: 5 });
+  const jwtOptions = {
+    disableSettingJwtHeader: true,
+    jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" } },
+    jwt: {
+      issuer: baseURL,
+      audience: baseURL,
+      expirationTime: "5m",
+      definePayload: ({ user }) => ({
+        email: user.email,
+        emailVerified: user.emailVerified,
+        name: user.name,
+      }),
+    },
+  } satisfies JwtOptions;
 
   return {
     appName: "Meelu",
@@ -73,7 +89,7 @@ function buildOptions() {
     ],
     emailAndPassword: {
       enabled: true,
-      minPasswordLength: 1,
+      minPasswordLength: 8,
       requireEmailVerification: true,
       revokeSessionsOnPasswordReset: true,
     },
@@ -118,6 +134,26 @@ function buildOptions() {
         }
         await ctx.context.internalAdapter.deleteUser(existing.user.id);
       }),
+      after: createAuthMiddleware(async (ctx) => {
+        if (!PASSWORD_CHANGES.has(ctx.path)) return;
+        const returned = ctx.context.returned;
+        if (!returned || returned instanceof Error) return;
+        const email = typeof ctx.body?.email === "string" ? ctx.body.email.toLowerCase() : "";
+        const user =
+          ctx.context.session?.user ??
+          (email ? (await ctx.context.internalAdapter.findUserByEmail(email))?.user : undefined);
+        if (!user) return;
+        const accessToken = await signJWT(ctx, {
+          options: jwtOptions,
+          payload: { sub: user.id, email: user.email, emailVerified: true },
+        });
+        const res = await fetch(`${API}/api/auth/sessions/revoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken }),
+        });
+        if (!res.ok) console.error(`[auth] api kept sessions for ${user.id} after a password change: ${res.status}`);
+      }),
     },
     databaseHooks: {
       user: {
@@ -148,20 +184,7 @@ function buildOptions() {
           await sendOtpEmail(email, otp, type);
         },
       }),
-      jwt({
-        disableSettingJwtHeader: true,
-        jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" } },
-        jwt: {
-          issuer: baseURL,
-          audience: baseURL,
-          expirationTime: "5m",
-          definePayload: ({ user }) => ({
-            email: user.email,
-            emailVerified: user.emailVerified,
-            name: user.name,
-          }),
-        },
-      }),
+      jwt(jwtOptions),
       nextCookies(),
     ],
   } satisfies BetterAuthOptions;

@@ -43,7 +43,7 @@ const MESSAGES: Record<string, string> = {
   USER_ALREADY_EXISTS: "An account with this email already exists. Sign in instead.",
   SIGNUPS_FULL: "Sign-ups are full right now.",
   INVALID_EMAIL: "Enter a valid email address.",
-  PASSWORD_TOO_SHORT: "Enter a password.",
+  PASSWORD_TOO_SHORT: "Use at least 8 characters for your password.",
   PASSWORD_TOO_LONG: "That password is too long.",
   INVALID_OTP: "That code is not right. Check it and try again.",
   OTP_EXPIRED: "That code has expired. Send a new one.",
