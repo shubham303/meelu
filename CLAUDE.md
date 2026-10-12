@@ -7,6 +7,26 @@ We have four components
 dashboard and App look same. only difference is App has agentic actions.
 The Content desk writes and checks web pages for the user's own site only: each piece carries a title, H1, meta description, slug, target keyword and body. There are no channels and no social posts. Meelu never publishes or tracks where a piece went; the user puts it on the site by hand. The writer loads the Site and SEO desks with `add_desk` to pick the keyword and the internal links.
 
+## The website is its own project
+
+`website/` is the marketing site at meelu.tech (Next.js, deployed on its own by
+Coolify from this repo with base directory `/website`). It lives in this repo
+only so its copy can change in the same PR as the product. It is not part of
+the product and shares no code with it.
+
+- Never import from `dashboard/`, `app/`, `api/` or any other folder outside
+  `website/`, and never import from `website/` in them. No relative paths that
+  climb out, no path aliases, no workspace packages, no symlinks.
+- When the website needs something the product has (a component, a type, a
+  logo, a price), copy it into `website/` and let the copies drift. The
+  `/demo` dashboard under `website/src/demo` and `website/src/app/demo` is such
+  a copy with mock data; it never renders the real dashboard.
+- `website/` keeps its own `package.json`, lockfile, `Dockerfile` and
+  `node_modules`. It must build with only `website/` as the Docker context.
+- Product copy on the site (desks, pricing, what Meelu does and does not do)
+  must match the product. When a change makes a website claim false, fix the
+  website in the same PR.
+
 ## Meelu suggests, the human decides
 
 Meelu is a helpful tool, not a replacement for the person using it. It does not
