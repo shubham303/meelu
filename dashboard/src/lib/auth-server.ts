@@ -6,7 +6,6 @@ import { nextCookies } from "better-auth/next-js";
 import { emailOTP, jwt, signJWT, type JwtOptions } from "better-auth/plugins";
 import { Pool } from "pg";
 
-const SIGNUP_CAP = 10;
 const OTP_SECONDS = 600;
 const SENDER = "Meelu <noreply@meelu.tech>";
 const API = process.env.MEELU_API_URL ?? "http://localhost:8100";
@@ -154,22 +153,6 @@ function buildOptions() {
         });
         if (!res.ok) console.error(`[auth] api kept sessions for ${user.id} after a password change: ${res.status}`);
       }),
-    },
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user) => {
-            const { rows } = await pool.query<{ total: string }>('SELECT count(*) AS total FROM "user"');
-            if (Number(rows[0]?.total ?? 0) >= SIGNUP_CAP) {
-              throw new APIError("BAD_REQUEST", {
-                code: "SIGNUPS_FULL",
-                message: "Sign-ups are full right now.",
-              });
-            }
-            return { data: user };
-          },
-        },
-      },
     },
     plugins: [
       emailOTP({

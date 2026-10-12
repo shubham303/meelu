@@ -123,7 +123,7 @@ export default function Home() {
           <div className="mx-auto max-w-3xl text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-edge2 bg-panel px-3 py-1 text-xs text-sub">
               <Sparkles size={12} className="text-accent" />
-              In development · Built in the open
+              Beta · Built in the open
             </span>
             <h1 className="mt-5 font-display text-4xl leading-[1.08] tracking-tight text-ink text-balance sm:text-5xl lg:text-6xl">
               Meelu
@@ -235,14 +235,16 @@ export default function Home() {
           </h2>
           <p className="mx-auto mt-4 max-w-md text-sub text-pretty">
             Free to download for Mac and Windows. Sign in with your Meelu account.
-            New accounts start with 1 free credit.
+            New accounts start with 1 free credit. The app is in beta and updated continuously, and not yet
+            verified by Apple, Microsoft or Google, so expect a security warning
+            the first time you download and open it.
           </p>
           <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
             <Link
               href="/download"
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hi"
             >
-              <Download size={15} /> Download the app
+              <Download size={15} /> Download the beta
             </Link>
             <Link
               href="/pricing"
