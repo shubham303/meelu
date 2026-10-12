@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { Download } from "lucide-react";
-import { WaitlistDialog } from "@/components/waitlist-dialog";
 
 type Platform = "mac" | "windows" | "other";
 
@@ -12,23 +11,29 @@ type Build = {
   platform: Exclude<Platform, "other">;
   label: string;
   detail: string;
+  href: string;
 };
+
+const DOWNLOADS = "https://downloads.meelu.tech";
 
 const builds: Build[] = [
   {
     id: "mac-arm64",
+    href: `${DOWNLOADS}/Meelu-mac-arm64.dmg`,
     platform: "mac",
     label: "Download for macOS",
     detail: "Apple Silicon (M1–M4)",
   },
   {
     id: "mac-x64",
+    href: `${DOWNLOADS}/Meelu-mac-x64.dmg`,
     platform: "mac",
     label: "Download for macOS",
     detail: "Intel",
   },
   {
     id: "windows-x64",
+    href: `${DOWNLOADS}/Meelu-windows-x64.exe`,
     platform: "windows",
     label: "Download for Windows",
     detail: "Windows 10/11 (64-bit)",
@@ -49,6 +54,14 @@ function detectPlatform(): Platform {
   return "other";
 }
 
+function BetaTag() {
+  return (
+    <span className="rounded-full bg-white/20 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest">
+      Beta
+    </span>
+  );
+}
+
 function subscribe() {
   return () => {};
 }
@@ -61,34 +74,21 @@ function usePlatform(): Platform {
   return useSyncExternalStore(subscribe, detectPlatform, serverPlatform);
 }
 
-function useWaitlist() {
-  const [requested, setRequested] = useState<Platform | null>(null);
-  const dialog = (
-    <WaitlistDialog
-      open={requested !== null}
-      platform={requested ?? "other"}
-      onClose={() => setRequested(null)}
-    />
-  );
-  return { request: setRequested, dialog };
-}
-
 export function HeroDownload({ children }: { children?: ReactNode }) {
   const platform = usePlatform();
   const primary = builds.find((build) => build.platform === platform);
-  const waitlist = useWaitlist();
 
   return (
     <div className="flex flex-col items-center">
       <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <button
-          type="button"
-          onClick={() => waitlist.request(platform)}
+        <a
+          href={primary?.href ?? "/download"}
           className="inline-flex h-12 items-center gap-2.5 rounded-lg bg-accent px-6 text-base font-medium text-white transition-colors hover:bg-accent-hi"
         >
           <Download size={18} />
           {primary?.label ?? "Download the app"}
-        </button>
+          <BetaTag />
+        </a>
         {children}
       </div>
       <p className="mt-3 text-xs text-faint">
@@ -100,7 +100,16 @@ export function HeroDownload({ children }: { children?: ReactNode }) {
           {primary ? "Other platforms" : "All downloads"}
         </Link>
       </p>
-      {waitlist.dialog}
+      <p className="mt-2 max-w-md text-xs text-faint text-pretty">
+        Beta, updated continuously. Expect some bugs. Not yet verified by Apple, Microsoft or
+        Google, so expect a security warning when you download and open it.{" "}
+        <Link
+          href="/download#first-launch"
+          className="text-sub underline decoration-edge underline-offset-4 transition-colors hover:text-ink hover:decoration-accent"
+        >
+          How to open it
+        </Link>
+      </p>
     </div>
   );
 }
@@ -108,21 +117,20 @@ export function HeroDownload({ children }: { children?: ReactNode }) {
 export function DownloadButtons() {
   const platform = usePlatform();
   const primary = builds.find((build) => build.platform === platform);
-  const waitlist = useWaitlist();
   const rest = builds.filter((build) => build !== primary);
 
   return (
     <div className="flex w-full flex-col items-center">
       {primary && (
         <>
-          <button
-            type="button"
-            onClick={() => waitlist.request(primary.platform)}
+          <a
+            href={primary.href}
             className="inline-flex h-12 items-center gap-2.5 rounded-lg bg-accent px-6 text-base font-medium text-white transition-colors hover:bg-accent-hi"
           >
             <Download size={18} />
             {primary.label}
-          </button>
+            <BetaTag />
+          </a>
           <p className="mt-2.5 text-xs text-faint">{primary.detail}</p>
         </>
       )}
@@ -135,10 +143,9 @@ export function DownloadButtons() {
         )}
         <div className="mt-3 divide-y divide-edge rounded-2xl border border-edge bg-panel">
           {rest.map((build) => (
-            <button
-              type="button"
+            <a
               key={build.id}
-              onClick={() => waitlist.request(build.platform)}
+              href={build.href}
               className="group flex w-full items-center justify-between gap-4 px-5 py-4 transition-colors first:rounded-t-2xl last:rounded-b-2xl hover:bg-panel2"
             >
               <span className="flex flex-col text-left">
@@ -149,11 +156,10 @@ export function DownloadButtons() {
                 size={16}
                 className="shrink-0 text-faint transition-colors group-hover:text-accent"
               />
-            </button>
+            </a>
           ))}
         </div>
       </div>
-      {waitlist.dialog}
     </div>
   );
 }

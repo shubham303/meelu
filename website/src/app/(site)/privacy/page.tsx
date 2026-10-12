@@ -108,8 +108,8 @@ export default function PrivacyPage() {
         </p>
         <p>
           <strong className={strong}>On this website.</strong> We use Google Analytics to count
-          visits and see which pages are read. If you join the download waitlist, we store your
-          email address and the platform you chose. The free tools keep nothing you submit:
+          visits and see which pages are read. If you joined the download waitlist, we keep the
+          email address and platform you gave so we can tell you about Meelu. The free tools keep nothing you submit:
           most run in your browser, and the ones that fetch a page do so once and discard it.
         </p>
       </LegalSection>

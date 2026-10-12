@@ -30,7 +30,7 @@ export function SiteHeader() {
             className="ml-1 whitespace-nowrap rounded-lg bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hi sm:px-3.5 sm:text-sm"
           >
             <span className="sm:hidden">Download</span>
-            <span className="hidden sm:inline">Download the app</span>
+            <span className="hidden sm:inline">Download beta</span>
           </Link>
         </nav>
       </div>
