@@ -1,0 +1,57 @@
+"use client";
+
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+export function ChatMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: (props) => <p className="mb-2 last:mb-0" {...props} />,
+        ul: (props) => <ul className="list-disc pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
+        ol: (props) => <ol className="list-decimal pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
+        strong: (props) => <strong className="font-semibold" {...props} />,
+        a: (props) => (
+          <a className="text-accent underline" target="_blank" rel="noreferrer" {...props} />
+        ),
+        h1: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
+        h2: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
+        h3: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
+        h4: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
+        blockquote: (props) => (
+          <blockquote className="border-l-2 border-edge2 pl-3 text-sub mb-2" {...props} />
+        ),
+        code: (props) => (
+          <code className="rounded bg-panel2 px-1 py-0.5 font-mono text-[0.85em]" {...props} />
+        ),
+        pre: (props) => (
+          <pre
+            className="mb-2 overflow-x-auto rounded-lg border border-edge bg-panel2 p-2.5 text-xs [&_code]:bg-transparent [&_code]:p-0"
+            {...props}
+          />
+        ),
+        hr: () => <hr className="border-edge my-3" />,
+        table: (props) => (
+          <div className="overflow-x-auto mb-2">
+            <table
+              className="text-xs border-collapse [&_th]:border [&_th]:border-edge [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-edge [&_td]:px-2 [&_td]:py-1"
+              {...props}
+            />
+          </div>
+        ),
+        img: ({ alt, ...props }) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            {...props}
+            alt={alt ?? ""}
+            loading="lazy"
+            className="mb-2 max-w-full rounded-lg border border-edge"
+          />
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+}
