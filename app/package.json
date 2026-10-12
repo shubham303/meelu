@@ -1,7 +1,7 @@
 {
   "name": "meelu-app",
-  "version": "0.1.1",
-  "description": "Meelu desktop \u2014 the web dashboard in a window, plus the agent harness. One Next.js codebase renders web and app; the agent chrome self-gates on app mode, so the web stays a plain CRUD site.",
+  "version": "0.1.2",
+  "description": "Meelu desktop — the web dashboard in a window, plus the agent harness. One Next.js codebase renders web and app; the agent chrome self-gates on app mode, so the web stays a plain CRUD site.",
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",

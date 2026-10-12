@@ -41,7 +41,6 @@ const MESSAGES: Record<string, string> = {
   INVALID_EMAIL_OR_PASSWORD: "Wrong email or password.",
   EMAIL_NOT_VERIFIED: "Confirm your email address first. We sent you a new code.",
   USER_ALREADY_EXISTS: "An account with this email already exists. Sign in instead.",
-  SIGNUPS_FULL: "Sign-ups are full right now.",
   INVALID_EMAIL: "Enter a valid email address.",
   PASSWORD_TOO_SHORT: "Use at least 8 characters for your password.",
   PASSWORD_TOO_LONG: "That password is too long.",
