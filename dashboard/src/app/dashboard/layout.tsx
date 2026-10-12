@@ -4,6 +4,7 @@ import { sessionUserId } from "@/lib/server-session";
 import { Sidebar } from "@/components/sidebar";
 import { BillingBanner } from "@/components/billing-banner";
 import { UpdateBanner } from "@/components/update-banner";
+import { BetaBanner } from "@/components/beta-banner";
 import { AgentTasksProvider } from "./agent-tasks";
 import { AgentRunsProvider } from "@/components/agent/run-rail";
 import { MainFrame } from "./main-frame";
@@ -18,6 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <Sidebar />
         <AgentTasksProvider>
           <div className="flex min-w-0 flex-1 flex-col">
+            <BetaBanner />
             <UpdateBanner />
             <BillingBanner />
             <MainFrame>{children}</MainFrame>
