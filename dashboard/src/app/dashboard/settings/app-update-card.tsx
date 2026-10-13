@@ -17,6 +17,7 @@ interface CheckResult {
 }
 
 interface UpdateBridge {
+  appUpdate?: () => Promise<{ update?: AppUpdate | null }>;
   checkUpdate?: () => Promise<CheckResult>;
   downloadUpdate?: () => Promise<{ ok?: boolean }>;
 }
@@ -31,16 +32,22 @@ export function AppUpdateCard() {
   const [result, setResult] = useState<CheckResult | null>(null);
 
   const check = async () => {
-    const checkUpdate = updateBridge()?.checkUpdate;
-    if (!checkUpdate) {
-      setResult({
-        error: "This version of Meelu cannot check on demand. Get the latest from meelu.tech/download.",
-      });
-      return;
-    }
+    const bridge = updateBridge();
     setChecking(true);
     try {
-      setResult(await checkUpdate());
+      if (bridge?.checkUpdate) {
+        setResult(await bridge.checkUpdate());
+        return;
+      }
+      const launched = await bridge?.appUpdate?.();
+      setResult(
+        launched?.update
+          ? { update: launched.update }
+          : {
+              error:
+                "This Meelu is older than 0.1.4 and only checks when it starts. Quit and reopen Meelu to check again, or get the latest from meelu.tech/download.",
+            },
+      );
     } catch {
       setResult({ error: "The update check failed. Try again." });
     } finally {
