@@ -54,7 +54,7 @@ the first download matters more than saving the Store review time.
 4. [x] `appx` config in `app/package.json`, tile images in `app/build/appx/`, `npm run dist:store` (prod only), and an App build step that uploads the package as the `store` workflow artifact (not to R2).
 5. [ ] Test the Store package: submit it to Partner Center with a private audience first (it cannot be built or sideloaded on a Mac), install from the private Store link on a Windows PC, check the agent, crawl, GSC/GA sign-in.
 6. [x] Store installs (`process.windowsStore`) skip Meelu's own update check; the Settings card says the Store keeps Meelu up to date.
-7. [ ] Submit to Store certification (listing text, screenshots, privacy policy URL https://meelu.tech/privacy, age rating).
+7. [ ] Submit to Store certification. Submission 1 is filled in (0.1.5 package, private audience, listing, screenshots, logos, age rating, runFullTrust justification); waiting for Partner Center account verification before Submit for certification.
 8. [ ] Point the website's Windows button at the Store listing; keep the .exe as a secondary link.
 9. [ ] Update website and beta-banner copy that says Windows shows security warnings.
 
