@@ -15,6 +15,7 @@
     "boot-test": "MEELU_AUTOEXIT_MS=12000 electron .",
     "dist:mac": "node scripts/dist.mjs prod mac",
     "dist:win": "node scripts/dist.mjs prod win",
+    "dist:store": "node scripts/dist.mjs prod store",
     "dist:mac:test": "node scripts/dist.mjs test mac",
     "dist:win:test": "node scripts/dist.mjs test win"
   },
@@ -92,6 +93,17 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false
+    },
+    "appx": {
+      "identityName": "ShubhamRandive.Meelu",
+      "publisher": "CN=62EA4499-A8A4-4A51-BF17-4B19F01B3EF1",
+      "publisherDisplayName": "Shubham Randive",
+      "displayName": "Meelu",
+      "applicationId": "Meelu",
+      "backgroundColor": "#1F2D3D",
+      "languages": [
+        "en-US"
+      ]
     }
   }
 }

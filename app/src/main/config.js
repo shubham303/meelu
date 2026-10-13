@@ -25,9 +25,15 @@ function buildFlavour() {
 
 export const BUILD_FLAVOUR = buildFlavour();
 
-export const UPDATE_MANIFEST_URL = app.isPackaged
-  ? `https://downloads.meelu.tech/${BUILD_FLAVOUR === "test" ? "test/" : ""}version.json`
-  : env.MEELU_UPDATE_MANIFEST_URL ?? "";
+export const INSTALLED_FROM_STORE = Boolean(process.windowsStore);
+
+function updateManifestUrl() {
+  if (INSTALLED_FROM_STORE) return "";
+  if (!app.isPackaged) return env.MEELU_UPDATE_MANIFEST_URL ?? "";
+  return `https://downloads.meelu.tech/${BUILD_FLAVOUR === "test" ? "test/" : ""}version.json`;
+}
+
+export const UPDATE_MANIFEST_URL = updateManifestUrl();
 
 function bundledOauthClient() {
   try {
