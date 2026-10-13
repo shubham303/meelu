@@ -327,6 +327,8 @@ function sitePrompt(siteId) {
   return `\n\n## The website this task is about\n\nThis task is pinned to website \`${siteId}\`. The tools already know which website you mean; there is nothing to pass or choose. When you write SQL over site-scoped tables, filter with \`site_id = '${siteId}'\`. The database holds this user's other websites too.\n\n## Read the user's notes before you start\n\nBefore any other work, run \`SELECT note, kind FROM notes WHERE site_id = '${siteId}'\`. Notes are standing rules ('note') and past corrections ('feedback'). A note that contradicts your plan is the answer, not an obstacle. The user should never have to repeat one.`;
 }
 
+const LINKS_PROMPT = `\n\n## Linking to Meelu screens\n\nWhen you point the user at a record in Meelu, link with a path that starts with \`/dashboard\`, never a full URL or a domain: the chat opens it inside the app. A content piece is \`/dashboard/content/<id>\`, a crawled page \`/dashboard/site/pages/<id>\`, a keyword cluster \`/dashboard/seo/clusters/<id>\`, an analytics report \`/dashboard/analytics/reports/<id>\`. Use the row's id, never a slug or URL. Link nothing else inside Meelu; name the screen instead.`;
+
 function writesPrompt(writes, readOnly) {
   if (readOnly || writes.length === 0) return "";
   return `\n\n## What this task may write\n\nYou can SEE every Meelu tool, because one server serves every task. This task may make exactly ${writes.length === 1 ? "one write" : `${writes.length} writes`}: ${writes.map((w) => `\`${w}\``).join(", ")}.\n\nCall no other tool that creates, updates or deletes anything, even if the user asks mid-run. If the work needs a write outside that list, load the desk that owns it if the list below offers one. Otherwise say which write you needed and why, and stop. Read whatever helps. Your workspace schema is scratch space, not a write in this sense, but nothing saved only there counts as delivered.`;
@@ -692,6 +694,7 @@ async function buildConfig(session) {
       readerPrompt(withWeb) +
       vendorPrompt +
       sitePrompt(siteId) +
+      LINKS_PROMPT +
       writesPrompt(writes, readOnly) +
       (readOnly ? readOnlyPrompt() : "") +
       desksPrompt(deskOffers),

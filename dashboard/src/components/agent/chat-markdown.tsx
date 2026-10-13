@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChartFrame } from "./chart-frame";
@@ -11,6 +12,18 @@ type HastNode = {
   properties?: { className?: unknown };
   children?: HastNode[];
 };
+
+function inAppPath(href: string | undefined): string | null {
+  if (!href) return null;
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  try {
+    const url = new URL(href);
+    if (url.origin !== window.location.origin) return null;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return null;
+  }
+}
 
 function chartSource(pre: HastNode | undefined): string | null {
   const code = pre?.children?.find((c) => c.tagName === "code");
@@ -28,9 +41,19 @@ export function ChatMarkdown({ text }: { text: string }) {
         ul: (props) => <ul className="list-disc pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
         ol: (props) => <ol className="list-decimal pl-5 mb-2 last:mb-0 space-y-1" {...props} />,
         strong: (props) => <strong className="font-semibold" {...props} />,
-        a: (props) => (
-          <a className="text-accent underline" target="_blank" rel="noreferrer" {...props} />
-        ),
+        a: ({ href, ...props }) => {
+          const path = inAppPath(href);
+          if (path) return <Link href={path} className="text-accent underline" {...props} />;
+          return (
+            <a
+              className="text-accent underline"
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              {...props}
+            />
+          );
+        },
         h1: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
         h2: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
         h3: (props) => <p className="font-semibold mt-3 mb-1.5" {...props} />,
