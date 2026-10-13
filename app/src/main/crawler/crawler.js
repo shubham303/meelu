@@ -113,7 +113,6 @@ function halted(origin, startedAt, note, extra = {}) {
     complete: false,
     queued: 0,
     seen: [],
-    skipped: 0,
     stopped: true,
     sitemapsUsed: [],
     sitemapUrlCount: 0,
@@ -306,20 +305,10 @@ export async function crawlSite(domain, known, opts = {}) {
   const pages = [];
   const counts = { new: 0, changed: 0, unchanged: 0, error: 0 };
   let stopped = false;
-  let skipped = 0;
   let requested = 0;
   let linkRequested = 0;
 
   const linkBudget = Math.min(worklist.length * 2, MAX_PAGES - worklist.length);
-
-  const freshBefore = opts.freshBefore ? new Date(opts.freshBefore) : null;
-
-  const freshEnough = (url) => {
-    if (!freshBefore) return false;
-    const prior = priorByUrl.get(url);
-    if (!prior?.lastCrawledAt || prior.crawlComplete !== true) return false;
-    return new Date(prior.lastCrawledAt).getTime() >= freshBefore.getTime();
-  };
 
   const recordBlocked = (url) => {
     if (!blockedForGooglebot(url) || blockedSeen.has(url)) return;
@@ -340,18 +329,12 @@ export async function crawlSite(domain, known, opts = {}) {
     linkQueue.push(url);
   };
 
-  const skippedFresh = [];
   const takeBatch = (queue, n, budgetLeft) => {
     const batch = [];
     while (queue.length > 0 && batch.length < n && batch.length < budgetLeft) {
       const url = queue.shift();
       if (!mayFetch(url)) {
         recordBlocked(url);
-        continue;
-      }
-      if (freshEnough(url)) {
-        skipped++;
-        skippedFresh.push(url);
         continue;
       }
       batch.push(url);
@@ -384,13 +367,6 @@ export async function crawlSite(domain, known, opts = {}) {
   const batchSize = Math.max(concurrency, opts.batchSize ?? 25);
 
   const flush = async () => {
-    if (opts.onVisited && skippedFresh.length > 0) {
-      const urls = skippedFresh.splice(0, skippedFresh.length);
-      try {
-        await opts.onVisited(urls);
-      } catch {
-      }
-    }
     if (!opts.onBatch || pages.length === persistedUpTo) return;
     const batch = pages.slice(persistedUpTo);
     persistedUpTo = pages.length;
@@ -536,7 +512,7 @@ export async function crawlSite(domain, known, opts = {}) {
       );
       await sleep(delayMs);
 
-      if (pages.length - persistedUpTo >= batchSize || skippedFresh.length >= batchSize) {
+      if (pages.length - persistedUpTo >= batchSize) {
         await flush();
       }
 
@@ -563,7 +539,6 @@ export async function crawlSite(domain, known, opts = {}) {
         phase,
         fetched: pages.length - blockedSeen.size,
         queued: sitemapQueue.length + linkQueue.length,
-        skipped,
         seen: seen.size,
       });
       await runImageProbes();
@@ -609,13 +584,6 @@ export async function crawlSite(domain, known, opts = {}) {
     );
   }
   notes.push(`${worklist.length} URL(s) came from ${sitemap.used.join(", ")}.`);
-  if (skipped > 0) {
-    notes.push(
-      `${skipped} page(s) were skipped without a request: downloaded since ` +
-        `${freshBefore?.toISOString()} with nothing left for the crawl to do.`,
-    );
-  }
-
   if (blockedSeen.size > 0) {
     notes.push(
       `${blockedSeen.size} URL(s) are disallowed to Googlebot by robots.txt and were recorded ` +
@@ -651,7 +619,6 @@ export async function crawlSite(domain, known, opts = {}) {
     seen: [...seen],
     sitemapUrls: worklist,
     linkDiscovered: linkRequested,
-    skipped,
     stopped,
     sitemapsUsed: sitemap.used,
     sitemapAtRoot: sitemap.atRoot,

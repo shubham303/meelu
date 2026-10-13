@@ -6,7 +6,6 @@ import { api, apiPaged } from "@/lib/use-api";
 export interface CrawlBridge {
   crawlSite?: (payload: {
     siteId: string | null;
-    freshDays?: number;
     sitemapUrls?: string[];
   }) => Promise<{
     jobId?: string | null;
@@ -45,11 +44,9 @@ export interface CrawlView {
   phase?: CrawlPhase;
   fetched: number;
   queued: number;
-  skipped: number;
   discovered: number;
   error: string | null;
   stopReason: string | null;
-  cutoffDays: number | null;
   lastCrawledAt: string | null;
   pages: number;
 }
@@ -115,7 +112,6 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
         phase?: CrawlPhase;
         fetched?: number;
         queued?: number;
-        skipped?: number;
         seen?: number;
         ok?: boolean;
         error?: string;
@@ -134,7 +130,6 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
           phase: null,
           fetched: 0,
           queued: 0,
-          skipped: 0,
           discovered: 0,
           error: null,
           jobId: d.jobId ?? null,
@@ -149,7 +144,6 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
           phase: d.phase ?? s?.phase ?? null,
           fetched: d.fetched ?? s?.fetched ?? 0,
           queued: d.queued ?? s?.queued ?? 0,
-          skipped: d.skipped ?? s?.skipped ?? 0,
           discovered: d.seen ?? s?.discovered ?? 0,
         }));
       }
@@ -158,8 +152,7 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
         setNeedsSitemap(d.needsSitemap === true);
         setNote(
           d.ok
-            ? `${d.stopped ? "Stopped after reading" : "Read"} ${d.pagesStored ?? 0} page(s)` +
-                (d.skipped ? `; ${d.skipped} were still fresh and were left alone.` : ".")
+            ? `${d.stopped ? "Stopped after reading" : "Read"} ${d.pagesStored ?? 0} page(s).`
             : (d.error ?? "The crawl failed."),
         );
         setStatus((s) => (s ? { ...s, active: false, phase: null, state: "idle" } : s));
@@ -171,7 +164,7 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
   }, [poll, siteId]);
 
   const start = useCallback(
-    async (opts: { sitemapUrls?: string[]; freshDays?: number } = {}) => {
+    async (opts: { sitemapUrls?: string[] } = {}) => {
       setNote(null);
       setNeedsSitemap(false);
       const run = bridge()?.crawlSite;
@@ -182,7 +175,6 @@ export function useCrawl(siteId: string | null, onSettled: () => void) {
       const res = await run({
         siteId,
         ...(opts.sitemapUrls?.length ? { sitemapUrls: opts.sitemapUrls } : {}),
-        ...(opts.freshDays === undefined ? {} : { freshDays: opts.freshDays }),
       });
       if (res.error || res.started === false) {
         setNote(res.error ?? res.reason ?? "A crawl is already running.");
@@ -230,11 +222,9 @@ const IDLE: CrawlView = {
   phase: null,
   fetched: 0,
   queued: 0,
-  skipped: 0,
   discovered: 0,
   error: null,
   stopReason: null,
-  cutoffDays: null,
   lastCrawledAt: null,
   pages: 0,
 };

@@ -263,11 +263,6 @@ class SitePageBatchRequest(RequestModel):
     pages: list[SitePageCrawlItem]
 
 
-class SitePageVisitedRequest(RequestModel):
-    reset: bool = False
-    urls: list[str] | None = None
-
-
 class SitePageMatch(EntityModel):
     text: str
     heading_path: str | None = None
@@ -550,11 +545,9 @@ class PhraseHit(EntityModel):
 class CrawlKnownPageRecord(EntityModel):
     url: str
     inlinks: int
-    crawl_complete: bool
     content_hash: str | None = None
     etag: str | None = None
     last_modified: str | None = None
-    last_crawled_at: JsDateTime | None = None
 
 
 class SitemapPresenceResult(EntityModel):
@@ -702,10 +695,6 @@ class SitePageBatchResult(EntityModel):
 
 class SitePageVisitSweepResult(EntityModel):
     reset: int
-
-
-class SitePageVisitedResult(EntityModel):
-    visited: int
 
 
 class SitePagePruneResult(EntityModel):

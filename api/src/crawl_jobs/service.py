@@ -1,10 +1,8 @@
-import math
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
@@ -29,8 +27,6 @@ from src.sites.service import site_service
 from src.technical_seo.rules.ai_crawlers import read_crawler_access
 from src.technical_seo.rules.host_variants import read_host_variants
 
-DEFAULT_FRESH_DAYS = float(os.environ.get("MEELU_CRAWL_FRESH_DAYS", "7"))
-
 STALE_JOB_MS = float(os.environ.get("MEELU_CRAWL_STALE_MS", str(10 * 60 * 1000)))
 
 FRONTIER_LIMIT = 20_000
@@ -39,11 +35,10 @@ CRAWL_BATCH = int(os.environ.get("MEELU_CRAWL_BATCH", "25"))
 
 CRAWL_CONCURRENCY = int(os.environ.get("MEELU_CRAWL_CONCURRENCY", "8"))
 
-HEARTBEAT_COUNTER_KEYS = ("discovered", "skipped", "fetched", "queued")
+HEARTBEAT_COUNTER_KEYS = ("discovered", "fetched", "queued")
 
 SETTLE_COUNTER_KEYS = (
     "discovered",
-    "skipped",
     "fetched",
     "queued",
     "new_pages",
@@ -54,25 +49,6 @@ SETTLE_COUNTER_KEYS = (
 )
 
 
-class CrawlFreshness(BaseModel):
-    at: datetime | None
-    days: int | float
-
-
-def _whole(days: float) -> int | float:
-    return int(days) if float(days).is_integer() else days
-
-
-def _freshness(fresh_days: float | None, fresh_before: datetime | None) -> CrawlFreshness:
-    if fresh_before is not None:
-        elapsed = (datetime.now(UTC) - fresh_before).total_seconds() / 86_400
-        return CrawlFreshness(at=fresh_before, days=max(0, math.floor(elapsed + 0.5)))
-    days = fresh_days if fresh_days is not None else DEFAULT_FRESH_DAYS
-    if days <= 0:
-        return CrawlFreshness(at=None, days=0)
-    return CrawlFreshness(at=datetime.now(UTC) - timedelta(days=days), days=_whole(days))
-
-
 class CrawlJobService:
     async def _plan(
         self, db: AsyncSession, target: SiteRecord, job: CrawlJobRecord
@@ -80,7 +56,6 @@ class CrawlJobService:
         return CrawlPlanResponse(
             job=job,
             target=CrawlTargetResponse(site_id=target.id, domain=target.domain, name=target.name),
-            fresh_before=job.fresh_before,
             sitemap_urls=job.sitemap_urls if job.sitemap_urls else target.sitemap_urls,
             concurrency=CRAWL_CONCURRENCY,
             batch_size=CRAWL_BATCH,
@@ -128,14 +103,11 @@ class CrawlJobService:
         if body.sitemap_urls:
             await sites.merge(db, user_id, target.id, {"sitemap_urls": body.sitemap_urls})
 
-        fresh = _freshness(body.fresh_days, body.fresh_before)
         job = await site_crawl_jobs.open(
             db,
             user_id,
             target.id,
             trigger=body.trigger,
-            fresh_before=fresh.at,
-            cutoff_days=fresh.days,
             sitemap_urls=body.sitemap_urls or [],
         )
 
@@ -304,12 +276,9 @@ class CrawlJobService:
             finished_at=latest.finished_at,
             fetched=latest.fetched,
             queued=latest.queued,
-            skipped=latest.skipped,
             discovered=latest.discovered,
             error=latest.error,
             stop_reason=latest.stop_reason,
-            cutoff_days=latest.cutoff_days,
-            fresh_before=latest.fresh_before,
             last_crawled_at=target.last_crawled_at,
             last_crawl_complete=latest.complete,
             sitemap_urls=target.sitemap_urls,

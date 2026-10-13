@@ -624,14 +624,11 @@ export interface SiteTrafficSync extends BaseEntity, SiteScoped {
 export interface SiteCrawlJob extends BaseEntity, SiteScoped {
   status: SiteCrawlJobStatus;
   trigger: string;
-  freshBefore?: string;
-  cutoffDays?: number;
   sitemapUrls: string[];
   startedAt?: string;
   finishedAt?: string;
   heartbeatAt?: string;
   discovered: number;
-  skipped: number;
   fetched: number;
   queued: number;
   newPages: number;

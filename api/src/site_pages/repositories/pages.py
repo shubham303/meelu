@@ -608,9 +608,8 @@ class SitePageRepository:
         rows = (
             await db.execute(
                 text(
-                    f"""
-    select url, content_hash, etag, last_modified, last_crawled_at, inlinks,
-           ({CRAWL_COMPLETE_SQL}) as crawl_complete
+                    """
+    select url, content_hash, etag, last_modified, inlinks
       from site_pages
      where site_id = :site_id
      limit :limit
@@ -623,11 +622,9 @@ class SitePageRepository:
             CrawlKnownPageRecord(
                 url=str(r["url"]),
                 inlinks=int(r["inlinks"] or 0),
-                crawl_complete=r["crawl_complete"] is True,
                 content_hash=r["content_hash"],
                 etag=r["etag"],
                 last_modified=r["last_modified"],
-                last_crawled_at=r["last_crawled_at"],
             )
             for r in rows
         ]
@@ -639,23 +636,6 @@ class SitePageRepository:
             .values(visited=False)
             .returning(SitePage.id)
         )
-        return len(result.scalars().all())
-
-    async def mark_visited(self, db: AsyncSession, site_id: str, urls: list[str]) -> int:
-        if not urls:
-            return 0
-        stmt = text(
-            """
-    update site_pages
-       set visited = true
-     where site_id = :site_id
-       and regexp_replace(url, '/+$', '') in (
-             select regexp_replace(u, '/+$', '') from unnest(cast(:urls as text[])) as u
-           )
-    returning id
-    """
-        ).bindparams(bindparam("urls", type_=ARRAY(TEXT)))
-        result = await db.execute(stmt, {"site_id": site_id, "urls": urls})
         return len(result.scalars().all())
 
     async def delete_unvisited(self, db: AsyncSession, site_id: str) -> int:
