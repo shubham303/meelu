@@ -34,8 +34,6 @@ from src.site_pages.schemas import (
     SitePageSlimRecord,
     SitePageStatsResult,
     SitePageUpdateRequest,
-    SitePageVisitedRequest,
-    SitePageVisitedResult,
     SitePageVisitSweepResult,
 )
 from src.site_pages.schemas.links import (
@@ -241,20 +239,6 @@ class SitePageService:
 
     async def start_visit_sweep(self, db: AsyncSession, site_id: str) -> SitePageVisitSweepResult:
         return SitePageVisitSweepResult(reset=await site_pages.mark_all_unvisited(db, site_id))
-
-    async def mark_visited(
-        self, db: AsyncSession, site_id: str, body: SitePageVisitedRequest
-    ) -> SitePageVisitedResult:
-        if not body.urls:
-            raise HTTPException(400, "Send `urls: [...]` — the pages the crawl just reached.")
-        seen: dict[str, None] = {}
-        for u in body.urls:
-            if u != "":
-                seen[normalise_url(u)] = None
-        urls = list(seen)
-        if not urls:
-            raise HTTPException(400, "`urls` held no usable URLs.")
-        return SitePageVisitedResult(visited=await site_pages.mark_visited(db, site_id, urls))
 
     async def prune(self, db: AsyncSession, site_id: str) -> SitePagePruneResult:
         return SitePagePruneResult(deleted=await site_pages.delete_unvisited(db, site_id))

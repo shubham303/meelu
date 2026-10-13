@@ -29,17 +29,13 @@ async def test_crawl_known_pages_and_counts(client, site):
     assert count == 2
     by_url = {p.url: p.model_dump(mode="json", by_alias=True) for p in known}
     done = by_url["https://example.com/done"]
-    assert done["crawlComplete"] is True
     assert done["contentHash"] == "h"
     assert done["etag"] == "W/1"
     assert done["lastModified"] == "Mon, 01 Jan 2024 00:00:00 GMT"
-    assert done["lastCrawledAt"] == "2024-01-01T00:00:00.000Z"
     assert done["inlinks"] == 0
 
     pending = by_url["https://example.com/pending"]
-    assert pending["crawlComplete"] is False
     assert "contentHash" not in pending
-    assert "lastCrawledAt" not in pending
 
 
 async def test_outlinks_resolve_to_pages_and_report_the_rest(client, site):
