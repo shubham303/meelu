@@ -1,4 +1,4 @@
-const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+const CHECK_EVERY_MS = 10 * 60 * 1000;
 const FALLBACK_DOWNLOAD_URL = "https://meelu.tech/download";
 
 function versionParts(version) {
@@ -32,7 +32,12 @@ export function availableUpdate(manifest, { currentVersion, platform, arch }) {
 
 export function startUpdateCheck({ manifestUrl, currentVersion, onUpdate, log }) {
   let latest = null;
-  if (!manifestUrl) return { current: () => latest };
+  if (!manifestUrl) {
+    return {
+      current: () => latest,
+      checkNow: async () => ({ error: "Update checks run only in the installed app." }),
+    };
+  }
 
   const check = async () => {
     try {
@@ -48,12 +53,14 @@ export function startUpdateCheck({ manifestUrl, currentVersion, onUpdate, log })
         log(`update available: ${currentVersion} → ${update.version}`);
         onUpdate(update);
       }
+      return { update };
     } catch (err) {
       log("update check failed:", err.message);
+      return { error: "Could not reach the update server. Check your connection and try again." };
     }
   };
 
   void check();
   setInterval(() => void check(), CHECK_EVERY_MS).unref();
-  return { current: () => latest };
+  return { current: () => latest, checkNow: check };
 }
