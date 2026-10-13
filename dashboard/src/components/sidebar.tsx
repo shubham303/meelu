@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Cable,
+  Coins,
   Globe,
   LogOut,
   PanelLeftClose,
@@ -17,7 +18,7 @@ import { GLOBAL } from "@/lib/current-site";
 import { useCurrentSite } from "@/lib/use-api";
 import { signOut, useSession } from "@/lib/session";
 import { Logo } from "./logo";
-import { SessionUsage } from "./session-usage";
+import { useCredits } from "@/lib/use-credits";
 import { SiteSwitcher } from "./site-switcher";
 import { AnalyticsTree } from "./analytics-tree";
 import { APP_DESKS, GLOBAL_HOME, WEBSITE_DESKS, type Desk } from "./desks";
@@ -190,12 +191,28 @@ export function Sidebar() {
           <LogOut size={16} className="shrink-0" />
           {!collapsed && "Sign out"}
         </button>
-        <SessionUsage compact={collapsed} />
+        <CreditsLink collapsed={collapsed} className={linkClass(pathname.startsWith("/dashboard/credits"))} />
         {session?.user && !collapsed && (
           <p className="px-3 pt-2 text-[11px] text-faint truncate">{session.user.email}</p>
         )}
       </div>
     </aside>
+  );
+}
+
+function CreditsLink({ collapsed, className }: { collapsed: boolean; className: string }) {
+  const { data } = useCredits();
+  const amount = data ? `$${data.balanceUsd.toFixed(2)}` : "—";
+  return (
+    <Link href="/dashboard/credits" title={collapsed ? `Credits: ${amount}` : undefined} className={className}>
+      <Coins size={16} className="shrink-0" />
+      {!collapsed && (
+        <span className="flex flex-1 items-center justify-between gap-2">
+          Credits
+          <span className="tabular-nums text-ink">{amount}</span>
+        </span>
+      )}
+    </Link>
   );
 }
 
