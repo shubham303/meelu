@@ -38,7 +38,9 @@ coverage/
 
 # Dev-only annotation captures (app annotator, Cmd+Shift+A)
 .annotations/
-.claude/
+.claude/settings.local.json
+.claude/*.lock
+.claude/worktrees/
 
 # Timestamped screen captures from dev sessions — scratch, not assets.
 images/
