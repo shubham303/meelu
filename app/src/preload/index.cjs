@@ -41,6 +41,7 @@ const bridge = {
   abort: (turnId) => ipcRenderer.invoke("agent:abort", turnId),
   sessionUsage: () => ipcRenderer.invoke("usage:session"),
   appUpdate: () => ipcRenderer.invoke("app:update"),
+  checkUpdate: () => ipcRenderer.invoke("app:checkUpdate"),
   downloadUpdate: () => ipcRenderer.invoke("app:downloadUpdate"),
   onAppUpdate: (callback) => {
     const listener = (_event, update) => callback(update);

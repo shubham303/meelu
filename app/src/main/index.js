@@ -41,7 +41,7 @@ const EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 let win = null;
 let connecting = false;
-let updates = { current: () => null };
+let updates = { current: () => null, checkNow: async () => ({ update: null }) };
 
 const permissionGrants = { full: false, always: new Set() };
 const pendingPermissions = new Map();
@@ -230,6 +230,11 @@ function registerAgentIpc() {
   ipcMain.handle("app:update", (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     return { update: updates.current() };
+  });
+
+  ipcMain.handle("app:checkUpdate", async (ev) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return { currentVersion: app.getVersion(), ...(await updates.checkNow()) };
   });
 
   ipcMain.handle("app:downloadUpdate", (ev) => {
