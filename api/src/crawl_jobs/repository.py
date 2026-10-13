@@ -147,8 +147,6 @@ class SiteCrawlJobRepository:
         site_id: str,
         *,
         trigger: str,
-        fresh_before: datetime | None,
-        cutoff_days: int | None,
         sitemap_urls: list[str],
     ) -> CrawlJobRecord | None:
         now = datetime.now(UTC)
@@ -160,8 +158,6 @@ class SiteCrawlJobRepository:
                 site_id=site_id,
                 status="queued",
                 trigger=trigger,
-                fresh_before=fresh_before,
-                cutoff_days=cutoff_days,
                 sitemap_urls=sitemap_urls,
                 created_at=now,
                 updated_at=now,

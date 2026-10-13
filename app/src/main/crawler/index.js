@@ -39,7 +39,7 @@ export async function runCrawl(params, emit, options = {}) {
     const { render, ...rest } = params;
     return runRender({ ...rest, device: render }, options.emitRender ?? emit, options);
   }
-  const { siteId, freshDays, sitemapUrls, trigger = "user" } = params ?? {};
+  const { siteId, sitemapUrls, trigger = "user" } = params ?? {};
   const cookieHeader = options.cookieHeader ?? "";
   if (!siteId) throw new Error("A crawl needs a website — no siteId was passed.");
 
@@ -49,7 +49,6 @@ export async function runCrawl(params, emit, options = {}) {
     cookieHeader,
     body: {
       trigger,
-      ...(Number.isFinite(Number(freshDays)) ? { freshDays: Number(freshDays) } : {}),
       ...(Array.isArray(sitemapUrls) ? { sitemapUrls } : {}),
     },
   });
@@ -105,7 +104,7 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
   emit("crawl:started", { domain: target.domain, known: plan.known.length });
 
   let stored = 0;
-  let progress = { fetched: 0, queued: 0, skipped: 0, seen: 0 };
+  let progress = { fetched: 0, queued: 0, seen: 0 };
   let sweepReliable = true;
 
   const savePages = async (batch) => {
@@ -128,27 +127,10 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
     }
   };
 
-  const markVisited = async (urls) => {
-    try {
-      for (let i = 0; i < urls.length; i += 500) {
-        await api("/site/pages/visited", {
-          method: "POST",
-          siteId,
-          cookieHeader,
-          body: { urls: urls.slice(i, i + 500) },
-        });
-      }
-    } catch (e) {
-      sweepReliable = false;
-      throw e;
-    }
-  };
-
-  const sweepStarted = await api("/site/pages/visited", {
+  const sweepStarted = await api("/site/pages/sweep", {
     method: "POST",
     siteId,
     cookieHeader,
-    body: { reset: true },
   })
     .then(() => true)
     .catch(() => false);
@@ -160,7 +142,6 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
       sitemapUrls: plan.sitemapUrls,
       linkFrontier: plan.linkFrontier ?? [],
       crawlToken: crawlToken(target.domain),
-      freshBefore: plan.freshBefore ?? undefined,
       shouldStop: async () => {
         if (running.get(jobId)?.stop) return true;
         const beat = await api(`/site/crawl-jobs/${jobId}`, {
@@ -172,9 +153,8 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
         return beat?.stop === true;
       },
       onBatch: savePages,
-      onVisited: markVisited,
       onProgress: (p) => {
-        progress = { fetched: p.fetched, queued: p.queued, skipped: p.skipped, discovered: p.seen };
+        progress = { fetched: p.fetched, queued: p.queued, discovered: p.seen };
         emit("crawl:progress", p);
       },
     });
@@ -216,7 +196,7 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
 
     if (!sweepReliable) {
       result.notes.push(
-        "Some pages could not be saved or marked as seen, so pages that have gone were left " +
+        "Some pages could not be saved, so pages that have gone were left " +
           "on record rather than risk removing live ones. The next complete crawl will prune them.",
       );
     }
@@ -256,7 +236,6 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
       body: {
         status: result.stopped ? "cancelled" : "completed",
         discovered: result.seen.length,
-        skipped: result.skipped,
         fetched: result.pages.length - (result.blockedByRobots ?? 0),
         queued: result.queued,
         newPages: result.counts.new,
@@ -291,7 +270,6 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
       complete: result.complete,
       counts: result.counts,
       pagesStored: stored,
-      skipped: result.skipped,
       notes: result.notes,
       job: settled,
     });

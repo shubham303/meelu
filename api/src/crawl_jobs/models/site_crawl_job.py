@@ -29,8 +29,6 @@ class SiteCrawlJob(EntityMixin, SiteScopedMixin, Base):
 
     status: Mapped[str] = mapped_column(nullable=False, server_default=text("'queued'"))
     trigger: Mapped[str] = mapped_column(nullable=False, server_default=text("'user'"))
-    fresh_before: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    cutoff_days: Mapped[int | None] = mapped_column(Integer)
     sitemap_urls: Mapped[list[str]] = mapped_column(
         ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
     )
@@ -41,7 +39,6 @@ class SiteCrawlJob(EntityMixin, SiteScopedMixin, Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     discovered: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
-    skipped: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     fetched: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     queued: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     new_pages: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
