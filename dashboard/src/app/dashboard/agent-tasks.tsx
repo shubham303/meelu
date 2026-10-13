@@ -156,6 +156,9 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
+  const [instantId, setInstantId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(SHEET_DEFAULT);
+  const [panelMaximized, setPanelMaximized] = useState(false);
   const tasksRef = useRef<AgentTask[]>([]);
 
   const { data: sites } = useApi<Array<{ id: string; name: string }>>("/api/v1/sites?page_size=100");
@@ -191,6 +194,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
         tasksRef.current = next;
         return next;
       });
+      setInstantId(null);
       setOpenTaskId(id);
       setLastTaskId(id);
       return id;
@@ -198,6 +202,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     [isApp],
   );
   const openTask = useCallback((id: string) => {
+    setInstantId(null);
     setOpenTaskId(id);
     setLastTaskId(id);
   }, []);
@@ -211,6 +216,11 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...hooks } : t))),
     [],
   );
+  const switchTask = useCallback((id: string) => {
+    setInstantId(id);
+    setOpenTaskId(id);
+    setLastTaskId(id);
+  }, []);
   const hasTask = useCallback((id: string) => tasksRef.current.some((t) => t.id === id), []);
   const setTaskStatus = useCallback(
     (id: string, status: AgentTaskStatus) =>
@@ -276,9 +286,27 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
           autoStart={task.autoStart}
           siteId={task.siteId}
           open={openTaskId === task.id && mineIds.has(task.id)}
-          onOpenChange={(o) =>
-            setOpenTaskId((prev) => (o ? task.id : prev === task.id ? null : prev))
+          instant={instantId === task.id}
+          width={panelWidth}
+          onWidthChange={setPanelWidth}
+          maximized={panelMaximized}
+          onMaximizedChange={setPanelMaximized}
+          tabs={
+            <TaskTabs
+              tasks={mine}
+              activeId={task.id}
+              onPick={switchTask}
+              onShowAll={() => {
+                setInstantId(null);
+                setOpenTaskId(null);
+                setListOpen(true);
+              }}
+            />
           }
+          onOpenChange={(o) => {
+            if (!o) setInstantId(null);
+            setOpenTaskId((prev) => (o ? task.id : prev === task.id ? null : prev));
+          }}
           onStatus={(s) => setTaskStatus(task.id, s)}
           onCreated={async () => {
             await task.onCreated?.();
@@ -318,6 +346,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
         siteName={siteName}
         onOpenTask={(id) => {
           setListOpen(false);
+          setInstantId(null);
           setOpenTaskId(id);
           setLastTaskId(id);
         }}
@@ -328,7 +357,10 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
       {isApp && lastTaskId !== null && mineIds.has(lastTaskId) && openTaskId === null && !listOpen && (
         <button
           type="button"
-          onClick={() => setOpenTaskId(lastTaskId)}
+          onClick={() => {
+            setInstantId(null);
+            setOpenTaskId(lastTaskId);
+          }}
           aria-label="Reopen last task panel"
           title="Reopen last task panel"
           className="fixed right-0 top-1/2 z-30 flex h-40 w-4 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-edge2 bg-panel/95 shadow-[0_2px_14px_rgb(31_45_61/0.10)] backdrop-blur-sm transition-colors hover:border-accent/50 hover:bg-panel cursor-pointer"
@@ -359,6 +391,55 @@ const STATUS_LABEL: Record<AgentTaskStatus, string> = {
   done: "done",
   failed: "failed",
 };
+
+function TaskTabs({
+  tasks,
+  activeId,
+  onPick,
+  onShowAll,
+}: {
+  tasks: AgentTask[];
+  activeId: string;
+  onPick: (id: string) => void;
+  onShowAll: () => void;
+}) {
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
+  if (tasks.length < 2) return null;
+  return (
+    <div className="flex items-center gap-1.5 border-b border-edge px-3 py-2">
+      <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
+        {tasks.map((task) => {
+          const active = task.id === activeId;
+          return (
+            <button
+              key={task.id}
+              ref={active ? activeRef : undefined}
+              type="button"
+              onClick={() => !active && onPick(task.id)}
+              aria-current={active ? "true" : undefined}
+              title={`${task.title} · ${STATUS_LABEL[task.status]}`}
+              className={`flex max-w-48 shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+                active
+                  ? "border-accent/50 bg-accent-soft text-accent"
+                  : "border-edge bg-panel2/50 text-sub hover:border-accent/50 hover:text-ink cursor-pointer"
+              }`}
+            >
+              <StatusSignal status={task.status} />
+              <span className="truncate">{task.title}</span>
+            </button>
+          );
+        })}
+      </div>
+      <IconButton onClick={onShowAll} aria-label="All tasks" title="All tasks">
+        <ListTodo size={14} />
+      </IconButton>
+    </div>
+  );
+}
 
 function TasksSheet({
   open,
@@ -525,6 +606,12 @@ function AgentTaskChat({
   autoStart,
   siteId,
   open,
+  instant,
+  width,
+  onWidthChange,
+  maximized,
+  onMaximizedChange,
+  tabs,
   onOpenChange,
   onStatus,
   onCreated,
@@ -539,6 +626,12 @@ function AgentTaskChat({
   autoStart?: string;
   siteId: string | null;
   open: boolean;
+  instant: boolean;
+  width: number;
+  onWidthChange: (width: number) => void;
+  maximized: boolean;
+  onMaximizedChange: (maximized: boolean) => void;
+  tabs: ReactNode;
   onOpenChange: (open: boolean) => void;
   onStatus: (status: AgentTaskStatus) => void;
   onCreated: () => void | Promise<void>;
@@ -561,8 +654,6 @@ function AgentTaskChat({
 
   const [closing, setClosing] = useState(false);
   const visible = open || closing;
-  const [width, setWidth] = useState(SHEET_DEFAULT);
-  const [maximized, setMaximized] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startX: number; startWidth: number; overshoot: number } | null>(null);
@@ -576,7 +667,10 @@ function AgentTaskChat({
   useGSAP(
     () => {
       if (!panelRef.current) return;
-      if (open) {
+      if (open && instant) {
+        gsap.set(panelRef.current, { xPercent: 0, x: 0 });
+        gsap.set(backdropRef.current, { opacity: 1 });
+      } else if (open) {
         gsap.fromTo(
           panelRef.current,
           { xPercent: 100, x: 0 },
@@ -605,7 +699,7 @@ function AgentTaskChat({
     const max = Math.floor(window.innerWidth * 0.85);
     const min = Math.min(SHEET_MIN, max);
     const desired = drag.current.startWidth + (drag.current.startX - e.clientX);
-    setWidth(Math.min(Math.max(desired, min), max));
+    onWidthChange(Math.min(Math.max(desired, min), max));
     const overshoot = Math.max(0, min - desired);
     drag.current.overshoot = overshoot;
     if (panelRef.current) gsap.set(panelRef.current, { x: overshoot });
@@ -880,7 +974,7 @@ function AgentTaskChat({
           )}
           <h2 className="font-display text-lg text-ink flex-1 truncate">{title}</h2>
           <IconButton
-            onClick={() => setMaximized((v) => !v)}
+            onClick={() => onMaximizedChange(!maximized)}
             aria-label={maximized ? "Restore" : "Maximize"}
             title={maximized ? "Restore" : "Maximize"}
           >
@@ -890,6 +984,8 @@ function AgentTaskChat({
             <X size={16} />
           </IconButton>
         </div>
+
+        {tabs}
 
         <input
           ref={fileInputRef}
