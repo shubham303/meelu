@@ -113,6 +113,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: mac
+          retention-days: 1
           path: app/dist/Meelu*.dmg
           if-no-files-found: error
 
@@ -152,6 +153,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
+          retention-days: 1
           path: app/dist/Meelu*.exe
           if-no-files-found: error
 
@@ -163,12 +165,15 @@ jobs:
         if: needs.check.outputs.flavour == 'prod'
         with:
           name: store
+          retention-days: 7
           path: app/dist/Meelu*.appx
           if-no-files-found: error
 
   publish:
     needs: [check, mac, windows]
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -215,3 +220,13 @@ jobs:
             > version.json
           cat version.json
           aws s3 cp version.json "s3://meelu-downloads/${PREFIX}version.json" --endpoint-url "$R2_ENDPOINT" --content-type application/json --cache-control "no-cache" --only-show-errors
+
+      - name: Delete the installer artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name == "mac" or .name == "windows") | .id' |
+            while read -r id; do
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
+            done
