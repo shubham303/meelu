@@ -1,5 +1,3 @@
-from datetime import UTC, datetime, timedelta
-
 from tests.integration.site_jobs.conftest import add_page, backdate_heartbeat, site_owner
 
 
@@ -8,14 +6,13 @@ async def open_crawl(client, **body):
 
 
 async def test_crawl_lifecycle(client, site):
-    r = await open_crawl(client, trigger="user", freshDays=7)
+    r = await open_crawl(client, trigger="user")
     assert r.status_code == 202, r.text
     opened = r.json()["data"]
     assert opened["started"] is True
     assert opened["job"]["status"] == "queued"
     assert opened["job"]["trigger"] == "user"
     assert opened["job"]["siteId"] == site["id"]
-    assert opened["job"]["cutoffDays"] == 7
     assert opened["job"]["sitemapUrls"] == []
     assert opened["job"]["discovered"] == 0
     assert opened["job"]["complete"] is False
@@ -31,7 +28,6 @@ async def test_crawl_lifecycle(client, site):
     assert plan["sitemapUrls"] == []
     assert plan["known"] == []
     assert plan["linkFrontier"] == []
-    assert plan["freshBefore"].endswith("Z")
 
     job_id = opened["job"]["id"]
 
@@ -48,7 +44,7 @@ async def test_crawl_lifecycle(client, site):
 
     r = await client.patch(
         f"/api/v1/site/crawl-jobs/{job_id}",
-        json={"heartbeat": True, "fetched": 3, "queued": 5, "skipped": 1, "discovered": 9},
+        json={"heartbeat": True, "fetched": 3, "queued": 5, "discovered": 9},
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"] == {"stop": False}
@@ -57,7 +53,6 @@ async def test_crawl_lifecycle(client, site):
     beaten = r.json()["data"]
     assert beaten["fetched"] == 3
     assert beaten["queued"] == 5
-    assert beaten["skipped"] == 1
     assert beaten["discovered"] == 9
     assert beaten["heartbeatAt"] is not None
 
@@ -66,7 +61,6 @@ async def test_crawl_lifecycle(client, site):
         json={
             "status": "completed",
             "discovered": 12,
-            "skipped": 2,
             "fetched": 10,
             "queued": 0,
             "newPages": 4,
@@ -224,43 +218,6 @@ async def test_open_reaps_when_asked(client, site):
     assert body["started"] is True
     assert [j["id"] for j in body["reaped"]] == [first]
     assert body["reaped"][0]["error"] == "no progress reported — the process running it is gone"
-
-
-async def test_freshness_cutoff(client, site):
-    r = await open_crawl(client, freshDays=3)
-    job = r.json()["data"]["job"]
-    assert job["cutoffDays"] == 3
-    fresh_before = datetime.fromisoformat(job["freshBefore"].replace("Z", "+00:00"))
-    expected = datetime.now(UTC) - timedelta(days=3)
-    assert abs((fresh_before - expected).total_seconds()) < 60
-    await client.patch(f"/api/v1/site/crawl-jobs/{job['id']}", json={"status": "cancelling"})
-
-    r = await open_crawl(client, freshDays=0)
-    job = r.json()["data"]["job"]
-    assert job["cutoffDays"] == 0
-    assert "freshBefore" not in job
-    assert r.json()["data"]["plan"].get("freshBefore") is None
-    await client.patch(f"/api/v1/site/crawl-jobs/{job['id']}", json={"status": "cancelling"})
-
-    r = await open_crawl(client)
-    job = r.json()["data"]["job"]
-    assert job["cutoffDays"] == 7
-    await client.patch(f"/api/v1/site/crawl-jobs/{job['id']}", json={"status": "cancelling"})
-
-    stamp = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    r = await open_crawl(client, freshBefore=stamp)
-    job = r.json()["data"]["job"]
-    assert job["cutoffDays"] == 10
-    assert job["freshBefore"].startswith(stamp[:10])
-    await client.patch(f"/api/v1/site/crawl-jobs/{job['id']}", json={"status": "cancelling"})
-
-    r = await open_crawl(client, freshBefore="not a date")
-    assert r.status_code == 400
-    assert r.json() == {
-        "error": {
-            "message": "freshBefore: Input should be a valid datetime or date, invalid character in year"
-        }
-    }
 
 
 async def test_sitemap_urls_land_on_the_site_record(client, site):

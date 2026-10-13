@@ -44,14 +44,11 @@ class CrawlJobRecord(EntityModel):
     site_id: str
     status: str
     trigger: str
-    fresh_before: JsDateTime | None = None
-    cutoff_days: int | None = None
     sitemap_urls: list[str]
     started_at: JsDateTime | None = None
     finished_at: JsDateTime | None = None
     heartbeat_at: JsDateTime | None = None
     discovered: int
-    skipped: int
     fetched: int
     queued: int
     new_pages: int
@@ -78,8 +75,6 @@ class CrawlJobListItemResponse(CrawlJobRecord):
 
 class CrawlJobCreateRequest(RequestModel):
     trigger: str = "api"
-    fresh_days: float | None = None
-    fresh_before: datetime | None = None
     sitemap_urls: list[str] | None = None
     reap: bool = False
     stale_ms: float | None = None
@@ -99,7 +94,6 @@ class CrawlJobUpdateRequest(RequestModel):
     heartbeat: bool | None = None
     reason: str | None = None
     discovered: int | None = None
-    skipped: int | None = None
     fetched: int | None = None
     queued: int | None = None
     new_pages: int | None = None
@@ -151,7 +145,6 @@ class CrawlTargetResponse(EntityModel):
 class CrawlPlanResponse(EntityModel):
     job: CrawlJobResponse
     target: CrawlTargetResponse
-    fresh_before: JsDateTime | None = None
     sitemap_urls: list[str]
     concurrency: int
     batch_size: int
@@ -195,12 +188,9 @@ class CrawlStatusResponse(EntityModel):
     finished_at: JsDateTime | None = None
     fetched: int = 0
     queued: int = 0
-    skipped: int = 0
     discovered: int = 0
     error: str | None = None
     stop_reason: str | None = None
-    cutoff_days: int | None = None
-    fresh_before: JsDateTime | None = None
     last_crawled_at: JsDateTime | None = None
     last_crawl_complete: bool = False
     sitemap_urls: list[str]

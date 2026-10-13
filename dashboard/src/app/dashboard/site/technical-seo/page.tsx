@@ -208,7 +208,7 @@ export default function SiteTechnicalSeoPage() {
     setAsking(false);
     setPhase("crawling");
     waiting.current = true;
-    const started = await crawl.start({ freshDays: 0 });
+    const started = await crawl.start();
     if (!started) {
       waiting.current = false;
       setPhase("idle");

@@ -24,8 +24,6 @@ from src.site_pages.schemas import (
     SitePageStatsResponse,
     SitePageTextListItemResponse,
     SitePageUpdateRequest,
-    SitePageVisitedRequest,
-    SitePageVisitedResult,
     SitePageVisitSweepResult,
 )
 from src.site_pages.schemas.links import SitePageOutlinksRequest, SitePageOutlinksResult
@@ -124,15 +122,12 @@ async def page_discovery(
     )
 
 
-@router.post("/site/pages/visited")
-async def mark_visited(
-    body: SitePageVisitedRequest,
+@router.post("/site/pages/sweep")
+async def start_visit_sweep(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-) -> SitePageVisitSweepResult | SitePageVisitedResult:
-    if body.reset:
-        return await site_page_service.start_visit_sweep(db, ctx.site_id)
-    return await site_page_service.mark_visited(db, ctx.site_id, body)
+) -> SitePageVisitSweepResult:
+    return await site_page_service.start_visit_sweep(db, ctx.site_id)
 
 
 @router.post("/site/pages/prune")
