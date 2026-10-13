@@ -13,6 +13,7 @@ interface AppUpdate {
 interface CheckResult {
   currentVersion?: string;
   update?: AppUpdate | null;
+  store?: boolean;
   error?: string;
 }
 
@@ -67,7 +68,9 @@ export function AppUpdateCard() {
             <p className="text-sm text-sub mt-0.5">
               {result?.error
                 ? result.error
-                : update
+                : result?.store
+                  ? "This Meelu was installed from the Microsoft Store, which keeps it up to date."
+                  : update
                   ? `Meelu ${update.version} is available · you have ${update.currentVersion}. Download it, quit Meelu, then install it over this one. Your sign-in and settings stay.`
                   : result
                     ? `You have the latest version${result.currentVersion ? ` (${result.currentVersion})` : ""}.`
