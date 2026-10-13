@@ -36,7 +36,7 @@ class Settings(EnvSettings):
     dodo_payments_webhook_secret: str = ""
     dodo_payments_base_url: str = "https://test.dodopayments.com"
     dodo_payments_credits_product_id: str = ""
-    dodo_payments_return_url: str = "http://localhost:3000/dashboard"
+    dodo_payments_return_url: str = "https://meelu.tech/payment-complete"
     payments_min_topup_usd: float = 5.0
     payments_max_topup_usd: float = 500.0
 
