@@ -18,8 +18,8 @@ import {
 import { startPageReviewSchedule } from "./page-review/index.js";
 import { requestRenderStop, runRender } from "./render/index.js";
 import { AVAILABLE_CHECKS, runTextChecks } from "./text-checks/index.js";
-import { inspectPageUrl, listGscProperties, requestSearchSyncStop, runIndexCheck, runSearchSync } from "./integrations/gsc/sync.js";
-import { listGaProperties, requestTrafficSyncStop, runTrafficSync } from "./integrations/ga/sync.js";
+import { inspectPageUrl, listGscProperties, runIndexCheck, runSearchSync, stopSearchSync } from "./integrations/gsc/sync.js";
+import { listGaProperties, runTrafficSync, stopTrafficSync } from "./integrations/ga/sync.js";
 import { startCrawlSchedule } from "./crawler/schedule.js";
 import { describeSite, startSiteSummarySchedule } from "./site-summary/index.js";
 import { createProviders } from "./providers/index.js";
@@ -331,9 +331,14 @@ function registerAgentIpc() {
     }
   });
 
-  ipcMain.handle("site:searchSyncStop", (ev, { syncId } = {}) => {
+  ipcMain.handle("site:searchSyncStop", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return { stopping: requestSearchSyncStop(syncId) };
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    try {
+      return await stopSearchSync(payload ?? {}, emitCrawl, { cookieHeader });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "The search-data sync could not be stopped." };
+    }
   });
 
   ipcMain.handle("site:trafficSync", async (ev, payload) => {
@@ -346,9 +351,14 @@ function registerAgentIpc() {
     }
   });
 
-  ipcMain.handle("site:trafficSyncStop", (ev, { syncId } = {}) => {
+  ipcMain.handle("site:trafficSyncStop", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    return { stopping: requestTrafficSyncStop(syncId) };
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    try {
+      return await stopTrafficSync(payload ?? {}, emitCrawl, { cookieHeader });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "The traffic sync could not be stopped." };
+    }
   });
 
   ipcMain.handle("site:gaProperties", async (ev) => {

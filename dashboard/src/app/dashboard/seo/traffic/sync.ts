@@ -22,7 +22,7 @@ interface TrafficBridge {
     reason?: string;
     error?: string;
   }>;
-  stopTrafficSync?: (syncId: string) => Promise<{ stopping?: boolean; error?: string }>;
+  stopTrafficSync?: (payload: { syncId: string; siteId: string | null }) => Promise<{ stopping?: boolean; error?: string }>;
   gaProperties?: () => Promise<{
     connected?: boolean;
     accounts?: GaAccount[];
@@ -139,8 +139,12 @@ export function useTrafficSync(
   const stop = useCallback(async () => {
     if (!currentSyncId) return;
     setStopping(true);
-    await bridge()?.stopTrafficSync?.(currentSyncId);
-  }, [currentSyncId]);
+    const res = await bridge()?.stopTrafficSync?.({ syncId: currentSyncId, siteId });
+    if (res?.error) {
+      setStopping(false);
+      setError(res.error);
+    }
+  }, [currentSyncId, siteId]);
 
   const canSync = !!bridge()?.trafficSync;
 
