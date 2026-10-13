@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { Download } from "lucide-react";
+import { useDownloadPrompt } from "@/components/download-prompt";
 
 type Platform = "mac" | "windows" | "other";
 
@@ -77,12 +78,15 @@ function usePlatform(): Platform {
 export function HeroDownload({ children }: { children?: ReactNode }) {
   const platform = usePlatform();
   const primary = builds.find((build) => build.platform === platform);
+  const { onDownloadClick, prompt } = useDownloadPrompt();
 
   return (
     <div className="flex flex-col items-center">
+      {prompt}
       <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
         <a
           href={primary?.href ?? "/download"}
+          onClick={primary ? onDownloadClick(primary) : undefined}
           className="inline-flex h-12 items-center gap-2.5 rounded-lg bg-accent px-6 text-base font-medium text-white transition-colors hover:bg-accent-hi"
         >
           <Download size={18} />
@@ -118,13 +122,16 @@ export function DownloadButtons() {
   const platform = usePlatform();
   const primary = builds.find((build) => build.platform === platform);
   const rest = builds.filter((build) => build !== primary);
+  const { onDownloadClick, prompt } = useDownloadPrompt();
 
   return (
     <div className="flex w-full flex-col items-center">
+      {prompt}
       {primary && (
         <>
           <a
             href={primary.href}
+            onClick={onDownloadClick(primary)}
             className="inline-flex h-12 items-center gap-2.5 rounded-lg bg-accent px-6 text-base font-medium text-white transition-colors hover:bg-accent-hi"
           >
             <Download size={18} />
@@ -146,6 +153,7 @@ export function DownloadButtons() {
             <a
               key={build.id}
               href={build.href}
+              onClick={onDownloadClick(build)}
               className="group flex w-full items-center justify-between gap-4 px-5 py-4 transition-colors first:rounded-t-2xl last:rounded-b-2xl hover:bg-panel2"
             >
               <span className="flex flex-col text-left">
