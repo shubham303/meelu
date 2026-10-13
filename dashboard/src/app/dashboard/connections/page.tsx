@@ -19,6 +19,14 @@ import { formatRelative } from "@/lib/utils";
 import { ModelPricingCard } from "@/features/llm-models/model-pricing-card";
 import type { ConnectorsView, LlmConfigView, LlmProvider } from "../agent-tasks";
 
+const CLAUDE_MODELS = [
+  { id: "", label: "Claude Haiku 4.5 (default)" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+  { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
+];
+
 function ModelProviderCard() {
   const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
   const [view, setView] = useState<LlmConfigView | null>(null);
@@ -81,11 +89,14 @@ function ModelProviderCard() {
         {provider === "anthropic" && (
           <>
             <Field label="Model">
-              <Input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="claude-haiku-4-5 (default)"
-              />
+              <Select value={model} onChange={(e) => setModel(e.target.value)} aria-label="Model">
+                {CLAUDE_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+                {!CLAUDE_MODELS.some((m) => m.id === model) && <option value={model}>{model}</option>}
+              </Select>
             </Field>
             <Field label="Anthropic API key">
               <Input

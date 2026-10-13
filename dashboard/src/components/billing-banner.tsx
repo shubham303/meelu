@@ -92,7 +92,7 @@ export function BillingBanner() {
             <RefreshCw size={13} className={checking ? "animate-spin" : undefined} />
             Check again
           </Button>
-          <Link href="/dashboard/connections">
+          <Link href="/dashboard/credits">
             <Button size="sm">Add credits</Button>
           </Link>
         </div>
