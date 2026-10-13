@@ -41,6 +41,7 @@ import { subscribeToUsage, usageServerSnapshot, usageSnapshot } from "@/lib/sess
 import type { ApiKey, CreatedApiKey, UserProfile } from "@/lib/types";
 import * as chips from "@/features/prompt-chips/profile";
 import { useAgentTasks } from "../agent-tasks";
+import { AppUpdateCard } from "./app-update-card";
 import { CreditsCard } from "./credits-card";
 
 function SectionHeader({ icon: Icon, title, hint }: { icon: LucideIcon; title: string; hint?: string }) {
@@ -84,6 +85,7 @@ export default function SettingsPage() {
         <CreditsCard />
         <AccountSection />
         {isApp && <ModelUsageSection />}
+        {isApp && <AppUpdateCard />}
       </Stagger>
     </PageEnter>
   );
