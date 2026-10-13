@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ENV_DEFAULTS, REPO_ROOT, UPDATE_MANIFEST_URL } from "./config.js";
+import { ENV_DEFAULTS, INSTALLED_FROM_STORE, REPO_ROOT, UPDATE_MANIFEST_URL } from "./config.js";
 import { startUpdateCheck } from "./update-check.js";
 import { connectSearchConsole } from "./integrations/gsc/oauth.js";
 import { connectAnalytics } from "./integrations/ga/oauth.js";
@@ -234,6 +234,7 @@ function registerAgentIpc() {
 
   ipcMain.handle("app:checkUpdate", async (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
+    if (INSTALLED_FROM_STORE) return { currentVersion: app.getVersion(), store: true };
     return { currentVersion: app.getVersion(), ...(await updates.checkNow()) };
   });
 

@@ -14,6 +14,7 @@ const FLAVOURS = {
 const PLATFORMS = {
   mac: { os: "darwin", flag: "--mac", label: "mac", archs: ["arm64", "x64"] },
   win: { os: "win32", flag: "--win", label: "windows", archs: ["x64"] },
+  store: { os: "win32", flag: "--win", target: "appx", label: "windows", archs: ["x64"], prodOnly: true },
 };
 
 function fail(message) {
@@ -32,7 +33,8 @@ function installed(name) {
 const [flavourName, platformName, ...rest] = process.argv.slice(2);
 const flavour = FLAVOURS[flavourName];
 const platform = PLATFORMS[platformName];
-if (!flavour || !platform) fail("usage: node scripts/dist.mjs <prod|test> <mac|win> [--arm64] [--x64]");
+if (!flavour || !platform) fail("usage: node scripts/dist.mjs <prod|test> <mac|win|store> [--arm64] [--x64]");
+if (platform.prodOnly && flavourName !== "prod") fail(`${platformName} builds use the Store identity and exist only for prod`);
 
 const requested = platform.archs.filter((arch) => rest.includes(`--${arch}`));
 const archs = requested.length
@@ -52,13 +54,14 @@ const passthrough = rest.filter((arg) => !platform.archs.some((arch) => arg === 
 
 const args = [
   platform.flag,
+  ...(platform.target ? [platform.target] : []),
   ...archs.map((arch) => `--${arch}`),
   "--publish",
   "never",
   `-c.extraMetadata.meeluFlavour=${flavourName}`,
   `-c.productName=${flavour.productName}`,
   `-c.appId=${flavour.appId}`,
-  `-c.${platformName}.artifactName=${flavour.artifactPrefix}-${platform.label}-\${arch}.\${ext}`,
+  `-c.${platform.target ?? platformName}.artifactName=${flavour.artifactPrefix}-${platform.label}-\${arch}.\${ext}`,
   ...(platformName === "mac"
     ? [
         "-c.electronFuses.enableEmbeddedAsarIntegrityValidation=true",
