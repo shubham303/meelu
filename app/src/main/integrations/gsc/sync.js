@@ -33,11 +33,21 @@ function api(path, { method = "GET", body, siteId, cookieHeader, allow = [] } = 
   });
 }
 
-export function requestSearchSyncStop(syncId) {
+export async function stopSearchSync(params, broadcast, options = {}) {
+  const { syncId, siteId } = params ?? {};
   const live = running.get(syncId);
-  if (!live) return false;
-  live.stop = true;
-  return true;
+  if (live) {
+    live.stop = true;
+    return { stopping: true };
+  }
+  const sync = await api(`/site/search-data/sync-jobs/${syncId}`, {
+    method: "PATCH",
+    siteId,
+    cookieHeader: options.cookieHeader ?? "",
+    body: { status: "cancelled" },
+  });
+  broadcast("search:done", { syncId, siteId, ok: true, stopped: true, sync });
+  return { stopping: true };
 }
 
 let indexCheck = null;

@@ -14,7 +14,7 @@ interface SearchBridge {
     reason?: string;
     error?: string;
   }>;
-  stopSearchSync?: (syncId: string) => Promise<{ stopping?: boolean; error?: string }>;
+  stopSearchSync?: (payload: { syncId: string; siteId: string | null }) => Promise<{ stopping?: boolean; error?: string }>;
   gscProperties?: (domain: string) => Promise<{
     connected?: boolean;
     properties?: GscProperty[];
@@ -148,8 +148,12 @@ export function useSearchSync(
   const stop = useCallback(async () => {
     if (!currentSyncId) return;
     setStopping(true);
-    await bridge()?.stopSearchSync?.(currentSyncId);
-  }, [currentSyncId]);
+    const res = await bridge()?.stopSearchSync?.({ syncId: currentSyncId, siteId });
+    if (res?.error) {
+      setStopping(false);
+      setError(res.error);
+    }
+  }, [currentSyncId, siteId]);
 
   const canSync = !!bridge()?.searchSync;
 
