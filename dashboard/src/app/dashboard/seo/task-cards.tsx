@@ -38,6 +38,7 @@ export function TaskCards({
                 suggestions: chips,
                 draft: {},
                 autoStart: chip.prompt,
+                promptSurface: "seo",
                 onCreated: onRan,
               })
             }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowUp, Paperclip, Sparkles, Square } from "lucide-react";
+import { ArrowUp, Bookmark, Paperclip, Sparkles, Square } from "lucide-react";
 import { IconButton } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { TaskModelPicker } from "@/features/llm-models/task-model-picker";
@@ -16,12 +16,22 @@ function Said({ children }: { children: ReactNode }) {
   );
 }
 
-function ChatBubble({ children }: { children: ReactNode }) {
+function ChatBubble({ children, onSave }: { children: ReactNode; onSave?: () => void }) {
   return (
-    <div className="flex justify-end">
+    <div className="group flex flex-col items-end gap-1">
       <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap text-ink">
         {children}
       </div>
+      {onSave && (
+        <button
+          type="button"
+          onClick={onSave}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-faint opacity-0 transition hover:text-accent focus:opacity-100 group-hover:opacity-100 cursor-pointer"
+        >
+          <Bookmark size={11} />
+          Save as prompt
+        </button>
+      )}
     </div>
   );
 }
@@ -80,7 +90,7 @@ function ChatChips<TChip extends ChatChip>({
 }
 
 export type AgentChatItem =
-  | { kind: "user"; key: string | number; text: string; files?: string[] }
+  | { kind: "user"; key: string | number; text: string; files?: string[]; savable?: boolean }
   | { kind: "assistant"; key: string | number; text: string }
   | { kind: "tool"; key: string | number; text: string }
   | { kind: "custom"; key: string | number; render: ReactNode };
@@ -93,6 +103,7 @@ export interface AgentChatProps<TChip extends ChatChip = ChatChip> {
   chips?: TChip[];
   chipsRoomy?: boolean;
   onPickChip?: (chip: TChip) => void;
+  onSaveUserText?: (text: string) => void;
   onSend: (text: string) => void;
   onStop?: () => void;
   allowEmptySend?: boolean;
@@ -122,6 +133,7 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
   chips = [],
   chipsRoomy,
   onPickChip,
+  onSaveUserText,
   onSend,
   onStop,
   allowEmptySend,
@@ -183,7 +195,12 @@ export function AgentChat<TChip extends ChatChip = ChatChip>({
         {items.map((item) => {
           if (item.kind === "user") {
             return (
-              <ChatBubble key={item.key}>
+              <ChatBubble
+                key={item.key}
+                onSave={
+                  onSaveUserText && item.savable ? () => onSaveUserText(item.text) : undefined
+                }
+              >
                 {(item.files ?? []).length > 0 && (
                   <span className="flex flex-wrap gap-1.5 mb-1.5">
                     {(item.files ?? []).map((name, j) => (
