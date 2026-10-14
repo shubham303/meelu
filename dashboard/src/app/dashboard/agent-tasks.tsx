@@ -33,6 +33,8 @@ import { RunRail, useAgentRunsOptional } from "@/components/agent/run-rail";
 import { AgentChat, type AgentChatItem } from "@/components/agent/agent-chat";
 import { ChartFrame } from "@/components/agent/chart-frame";
 import { PermissionPrompt } from "@/components/agent/permission-prompt";
+import type { UserPromptSurface } from "@/features/user-prompts/api";
+import { UserPromptEditor } from "@/features/user-prompts/prompt-editor";
 
 declare global {
   interface Window {
@@ -123,6 +125,7 @@ export interface AgentTaskInit {
   suggestions?: PromptChip[];
   global?: boolean;
   autoStart?: string;
+  promptSurface?: UserPromptSurface;
   onCreated?: () => void | Promise<void>;
   onWrote?: (tool: string) => void | Promise<void>;
 }
@@ -284,6 +287,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
           params={task.params}
           suggestions={task.suggestions}
           autoStart={task.autoStart}
+          promptSurface={task.promptSurface}
           siteId={task.siteId}
           open={openTaskId === task.id && mineIds.has(task.id)}
           instant={instantId === task.id}
@@ -575,7 +579,7 @@ const SHEET_MIN = 360;
 const SHEET_DEFAULT = 672;
 
 type ChatItem =
-  | { kind: "user"; text: string; files?: string[] }
+  | { kind: "user"; text: string; files?: string[]; typed: boolean }
   | { kind: "assistant"; text: string }
   | { kind: "tool"; text: string; name?: string }
   | { kind: "chart"; html: string }
@@ -604,6 +608,7 @@ function AgentTaskChat({
   params,
   suggestions,
   autoStart,
+  promptSurface,
   siteId,
   open,
   instant,
@@ -624,6 +629,7 @@ function AgentTaskChat({
   params?: Record<string, string>;
   suggestions?: PromptChip[];
   autoStart?: string;
+  promptSurface?: UserPromptSurface;
   siteId: string | null;
   open: boolean;
   instant: boolean;
@@ -643,6 +649,7 @@ function AgentTaskChat({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingPrompt, setSavingPrompt] = useState<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const abortRef = useRef<{ abort: () => void } | null>(null);
   const draftRef = useRef(draft);
@@ -810,6 +817,7 @@ function AgentTaskChat({
       kind: "user",
       text: displayAs ?? message,
       files: attachments.map((f) => f.name),
+      typed: displayAs === undefined && text.trim() !== "",
     });
 
     let created = false;
@@ -919,7 +927,9 @@ function AgentTaskChat({
   if (!visible || typeof document === "undefined") return null;
 
   const agentItems: AgentChatItem[] = items.map((item, i) => {
-    if (item.kind === "user") return { kind: "user", key: i, text: item.text, files: item.files };
+    if (item.kind === "user") {
+      return { kind: "user", key: i, text: item.text, files: item.files, savable: item.typed };
+    }
     if (item.kind === "assistant") return { kind: "assistant", key: i, text: item.text };
     if (item.kind === "tool") return { kind: "tool", key: i, text: item.text };
     if (item.kind === "chart") {
@@ -1006,6 +1016,7 @@ function AgentTaskChat({
           emptyState={<p className="text-sm text-faint">{emptyHint}</p>}
           chips={suggestions ?? []}
           onPickChip={(chip) => void send(chip.prompt, chip.label)}
+          onSaveUserText={promptSurface ? setSavingPrompt : undefined}
           onSend={(text) => void send(text)}
           onStop={() => abortRef.current?.abort()}
           allowEmptySend={files.length > 0}
@@ -1053,6 +1064,15 @@ function AgentTaskChat({
           autoFocus
         />
       </div>
+      {promptSurface && (
+        <UserPromptEditor
+          open={savingPrompt !== null}
+          onClose={() => setSavingPrompt(null)}
+          surface={promptSurface}
+          initialPrompt={savingPrompt ?? ""}
+          elevated
+        />
+      )}
     </div>,
     document.body,
   );

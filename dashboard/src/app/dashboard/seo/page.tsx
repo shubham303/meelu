@@ -24,6 +24,7 @@ import { SiteAskButton } from "../site/site-ask";
 import { useAgentTasks } from "../agent-tasks";
 import { marketLabel } from "./market";
 import { SEO_ASK, TaskCards } from "./task-cards";
+import { YourPrompts } from "@/features/user-prompts/your-prompts";
 import type { KeywordCluster, SiteSeoLists, TrackedOverview } from "./types";
 import { WinnabilityBar, position } from "./winnability";
 
@@ -110,6 +111,7 @@ export default function SeoPage() {
               hint="Ask about clusters, search performance, competitors or tracked keywords."
               suggestions={chips.desk()}
               endpoint={SEO_ASK}
+              promptSurface="seo"
               onRan={reload}
             />
           </div>
@@ -117,6 +119,13 @@ export default function SeoPage() {
       />
 
       <TaskCards title="Start a task" chips={chips.desk()} onRan={reload} />
+      <YourPrompts
+        surface="seo"
+        endpoint={SEO_ASK}
+        titlePrefix="SEO"
+        suggestions={chips.desk()}
+        onRan={reload}
+      />
 
       <Stagger className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
