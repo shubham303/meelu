@@ -22,6 +22,7 @@ from src.site_structure import models as site_structure_models
 from src.sites import models as sites_models
 from src.social_listening import models as social_listening_models
 from src.technical_seo import models as technical_seo_models
+from src.user_prompts import models as user_prompts_models
 
 __all__ = [
     "agent_models",
@@ -31,6 +32,8 @@ __all__ = [
     "crawl_jobs_models",
     "credits_models",
     "keys_models",
+    "keyword_clusters_models",
+    "keyword_tracking_models",
     "llm_models",
     "notes_models",
     "payments_models",
@@ -39,8 +42,6 @@ __all__ = [
     "render_jobs_models",
     "scratchpad_models",
     "site_pages_models",
-    "keyword_clusters_models",
-    "keyword_tracking_models",
     "site_search_models",
     "site_seo_models",
     "site_structure_models",
@@ -48,4 +49,5 @@ __all__ = [
     "sites_models",
     "social_listening_models",
     "technical_seo_models",
+    "user_prompts_models",
 ]

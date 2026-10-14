@@ -5,6 +5,7 @@ import { IconButton } from "@/components/ui";
 import { useIsApp } from "@/lib/use-app-mode";
 import { useAgentTasks } from "../agent-tasks";
 import type { PromptChip } from "@/features/prompt-chips/lib";
+import type { UserPromptSurface } from "@/features/user-prompts/api";
 
 export function SiteAskButton({
   title,
@@ -13,6 +14,7 @@ export function SiteAskButton({
   draft,
   onRan,
   endpoint = "/api/agent/ask-site",
+  promptSurface,
 }: {
   title: string;
   hint: string;
@@ -20,6 +22,7 @@ export function SiteAskButton({
   draft?: Record<string, string | undefined>;
   onRan?: () => void;
   endpoint?: string;
+  promptSurface?: UserPromptSurface;
 }) {
   const isApp = useIsApp();
   const { launchTask } = useAgentTasks();
@@ -37,6 +40,7 @@ export function SiteAskButton({
           emptyHint: hint,
           suggestions,
           draft: draft ?? {},
+          promptSurface,
           onCreated: onRan,
         })
       }

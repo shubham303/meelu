@@ -39,6 +39,7 @@ export function LinkStrategies({
                 suggestions: strategies,
                 draft: {},
                 autoStart: s.prompt,
+                promptSurface: "structure",
                 onCreated: onRan,
               })
             }
