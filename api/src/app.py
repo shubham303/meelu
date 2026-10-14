@@ -42,6 +42,7 @@ from src.sites.endpoints import router as sites_router
 from src.social_listening.endpoints import router as social_listening_router
 from src.stats.endpoints import router as stats_router
 from src.technical_seo.endpoints import router as technical_seo_router
+from src.user_prompts.endpoints import router as user_prompts_router
 
 configure_logging()
 
@@ -97,6 +98,7 @@ for desk in (
     content_router,
     analytics_router,
     notes_router,
+    user_prompts_router,
     social_listening_router,
     agent_scope_router,
     agent_plans_router,

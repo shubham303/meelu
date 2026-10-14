@@ -8,6 +8,7 @@ import { Badge, Card, EmptyState, Spinner, PageHeader, Tabs } from "@/components
 import { useApi } from "@/lib/use-api";
 import { cn } from "@/lib/utils";
 import { SiteAskButton } from "../site-ask";
+import { YourPrompts } from "@/features/user-prompts/your-prompts";
 import type { SiteDiscovery, SiteDiscoveryPage, SuggestionSummary } from "@/lib/types";
 import * as chips from "@/features/prompt-chips/site";
 import { LinkSuggestions } from "./link-suggestions";
@@ -52,6 +53,7 @@ export default function SiteStructurePage() {
             title="Find links — Structure"
             hint="Pick a link strategy or write your own. The agent runs it through the link pipeline and the results land in the suggestions."
             suggestions={chips.structure()}
+            promptSurface="structure"
           />
         }
       />
@@ -95,12 +97,24 @@ export default function SiteStructurePage() {
           {section === "links" && (
             <>
               <LinkStrategies title="Find links" strategies={chips.linkStrategies()} />
+              <YourPrompts
+                surface="structure"
+                endpoint="/api/agent/ask-site"
+                titlePrefix="Structure"
+                suggestions={chips.structure()}
+              />
               <LinkSuggestions summary={linkSummary} refreshSummary={refreshLinkSummary} />
             </>
           )}
           {section === "pillars" && (
             <>
               <LinkStrategies title="Find pillar pages" strategies={chips.pillarStrategies()} />
+              <YourPrompts
+                surface="structure"
+                endpoint="/api/agent/ask-site"
+                titlePrefix="Structure"
+                suggestions={chips.structure()}
+              />
               <PillarSuggestions summary={pillarSummary} refreshSummary={refreshPillarSummary} />
             </>
           )}
