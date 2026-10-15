@@ -1,5 +1,5 @@
-import { DAY, dayKey, hashString, NOW, seeded } from "../rand";
-import { ORIGIN, PAGES } from "./site";
+import { DAY, dayKey, NOW, seeded } from "../rand";
+import { ORIGIN, PAGE_BY_PATH, PAGES } from "./site";
 
 const MAX_DAYS = 480;
 
@@ -77,8 +77,20 @@ export const PAGE_SERIES = new Map<string, Daily[]>(
 export const FIRST_DAY = dayKey(MAX_DAYS - 1);
 export const LAST_DAY = dayKey(1);
 
-export function totalsFor(url: string | null, days: number, shift = 0) {
-  const lists = url ? [PAGE_SERIES.get(url) ?? []] : [...PAGE_SERIES.values()];
+export const DAYS_STORED = MAX_DAYS;
+
+function seriesFor(url: string | string[] | null): Daily[][] {
+  if (url === null) return [...PAGE_SERIES.values()];
+  return (Array.isArray(url) ? url : [url]).map((u) => PAGE_SERIES.get(u) ?? []);
+}
+
+export function matchPage(url: string): string {
+  const bare = url.replace(/\/+$/, "");
+  return [...PAGE_SERIES.keys()].find((k) => k.replace(/\/+$/, "") === bare) ?? url;
+}
+
+export function totalsFor(url: string | string[] | null, days: number, shift = 0) {
+  const lists = seriesFor(url);
   let clicks = 0;
   let impressions = 0;
   let posWeighted = 0;
@@ -99,7 +111,7 @@ export function totalsFor(url: string | null, days: number, shift = 0) {
 }
 
 export function pointsFor(url: string | null, days: number) {
-  const lists = url ? [PAGE_SERIES.get(url) ?? []] : [...PAGE_SERIES.values()];
+  const lists = seriesFor(url);
   const out = [];
   for (let d = days; d >= 1; d--) {
     let clicks = 0;
@@ -127,7 +139,7 @@ export function pageRows(days: number) {
   return [...PAGE_SERIES.keys()].map((url) => {
     const cur = totalsFor(url, days);
     const prev = totalsFor(url, days, days);
-    const page = PAGES.find((p) => p.url === url);
+    const page = PAGE_BY_PATH.get(new URL(url).pathname);
     return {
       page: url,
       clicks: cur.clicks,
@@ -213,15 +225,15 @@ export function queryRows(days: number, pages: string[] | null) {
     const share = 0.08 + qrng() * 0.3;
     const impressions = Math.round(pageTotal.impressions * share);
     const clicks = Math.round(impressions * ctr);
-    const page = PAGES.find((p) => p.url === url);
+    const page = PAGE_BY_PATH.get(path);
     return { query, page: url, inlinks: page?.inlinks ?? null, clicks, impressions, position: pos + (qrng() - 0.5) };
   });
   const filtered = pages && pages.length ? rows.filter((r) => pages.some((p) => p.replace(/\/$/, "") === r.page.replace(/\/$/, ""))) : rows;
   return filtered.sort((a, b) => b.clicks - a.clicks);
 }
 
-export function strikingRows() {
-  return queryRows(28, null)
+export function strikingRows(days: number) {
+  return queryRows(days, null)
     .filter((r) => r.position !== null && r.position > 10 && r.position <= 20)
     .sort((a, b) => b.impressions - a.impressions);
 }
@@ -235,6 +247,13 @@ export function indexationCounts() {
   return counts;
 }
 
-export function seedFor(s: string): number {
-  return hashString(s);
+export function neverChecked(): number {
+  return PAGES.filter((p) => p.status === 200 && !p.indexCheckedAt).length;
+}
+
+export function weeklyClicks(weeks: number): number[] {
+  const all = pointsFor(null, weeks * 7);
+  return Array.from({ length: weeks }, (_, w) =>
+    all.slice(w * 7, w * 7 + 7).reduce((sum, p) => sum + p.clicks, 0),
+  );
 }

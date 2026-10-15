@@ -6,75 +6,80 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   ExternalLink,
   Link2,
+  LocateFixed,
+  RefreshCw,
   RotateCcw,
   Search as SearchIcon,
   Trash2,
   X,
 } from "lucide-react";
 import { Badge, Button, ConfirmDelete, EmptyState, Select, Spinner, Tabs, type BadgeTone } from "@demo/components/ui";
-import { api, useApi, usePagedApi } from "@demo/lib/use-api";
+import { api, usePagedApi } from "@demo/lib/use-api";
 import { cn, formatRelative } from "@demo/lib/utils";
 import {
   LINK_SUGGESTION_ACTIONS,
   type LinkSuggestion,
   type LinkSuggestionAction,
-  type LinkSuggestionState,
-  type LinkSuggestionSummary,
+  type SuggestionState,
+  type SuggestionSummary,
 } from "@demo/lib/types";
 
 const PAGE_SIZE = 50;
 
-type TabState = Exclude<LinkSuggestionState, "draft">;
+const FRAGMENT_WORDS = 5;
+
+type TabState = Extract<SuggestionState, "review_approved" | "user_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
-  ready: "Ready",
-  done: "Done",
+  review_approved: "Approved",
   user_rejected: "Turned down",
-  llm_rejected: "Screened out",
-  stale: "Stale",
+};
+
+const SUMMARY_KEY: Record<TabState, keyof SuggestionSummary> = {
+  review_approved: "reviewApproved",
+  user_rejected: "userRejected",
 };
 
 const ACTION_LABEL: Record<LinkSuggestionAction, string> = {
   create: "Add link",
   delete: "Remove link",
-  edit: "Change link",
 };
 
 const ACTION_TONE: Record<LinkSuggestionAction, BadgeTone> = {
   create: "good",
   delete: "bad",
-  edit: "accent",
 };
 
 const EMPTY: Record<TabState, string> = {
-  ready: "No link suggestions ready. Ask the agent to find internal links worth adding, and they land here.",
-  done: "Nothing marked done yet.",
+  review_approved:
+    "No approved link suggestions. Ask the agent to find internal links worth adding, and the ones that pass review land here.",
   user_rejected: "Nothing turned down yet.",
-  llm_rejected: "The agent has not screened anything out.",
-  stale: "No suggestion has gone stale. One does when either page leaves the crawl.",
 };
 
-const EMPTY_SUMMARY: LinkSuggestionSummary = {
+const EMPTY_SUMMARY: SuggestionSummary = {
   draft: 0,
-  ready: 0,
-  llm_rejected: 0,
-  user_rejected: 0,
-  done: 0,
-  stale: 0,
+  screeningRejected: 0,
+  screeningApproved: 0,
+  reviewApproved: 0,
+  reviewRejected: 0,
+  userRejected: 0,
 };
 
-export function LinkSuggestions() {
-  const [state, setState] = useState<TabState>("ready");
+export function LinkSuggestions({
+  summary,
+  refreshSummary,
+}: {
+  summary: SuggestionSummary | null;
+  refreshSummary: () => void;
+}) {
+  const [state, setState] = useState<TabState>("review_approved");
   const [action, setAction] = useState<LinkSuggestionAction | "">("");
   const [q, setQ] = useState("");
   const [needle, setNeedle] = useState("");
   const [page, setPage] = useState(1);
-
-  const { data: summary, refresh: refreshSummary } = useApi<LinkSuggestionSummary>(
-    "/api/v1/site/structure/link-suggestions/summary",
-  );
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -109,25 +114,40 @@ export function LinkSuggestions() {
     void refreshSummary();
   }, [refresh, refreshSummary]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSuggestions = async () => {
+    setRefreshing(true);
+    try {
+      await api("/api/v1/site/structure/link-suggestions/reconcile", { method: "POST" });
+      reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const counts = summary ?? EMPTY_SUMMARY;
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const total = counts.reviewApproved + counts.userRejected;
   const nothingAtAll = summary !== null && total === 0;
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink">Link suggestions</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={refreshSuggestions}
+            title="Clear suggestions the site has caught up with: the link now exists, is already gone, or a page left the crawl"
+          >
+            <RefreshCw size={13} className={cn(refreshing && "animate-spin")} /> Refresh
+          </Button>
+        </div>
         <span className="text-xs text-faint">
-          Internal links the agent proposes. You make the change on the site, then mark it done.
+          Internal links the agent proposes. Make the change on the site; after the next crawl, Refresh clears it.
         </span>
       </div>
 
-      {counts.draft > 0 && (
-        <p className="mb-3 text-xs text-sub">
-          {counts.draft} suggestion{counts.draft === 1 ? "" : "s"} still being screened by the
-          agent. Only the ones that pass show here.
-        </p>
-      )}
 
       {nothingAtAll ? (
         <EmptyState
@@ -143,7 +163,7 @@ export function LinkSuggestions() {
             tabs={(Object.keys(STATE_LABEL) as TabState[]).map((k) => ({
               key: k,
               label: STATE_LABEL[k],
-              count: counts[k],
+              count: counts[SUMMARY_KEY[k]],
             }))}
           />
 
@@ -225,7 +245,7 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const move = async (to: LinkSuggestionState) => {
+  const move = async (to: SuggestionState) => {
     setBusy(true);
     try {
       await api(`/api/v1/site/structure/link-suggestions/${row.id}`, {
@@ -278,29 +298,31 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
           <p className={cn("text-[13px] leading-relaxed text-ink", !expanded && "line-clamp-2")}>
             {row.suggestion}
           </p>
+          {row.fromChunkText ? (
+            <Passage row={row} text={row.fromChunkText} clamp={!expanded} />
+          ) : (
+            <p className="text-xs text-faint">
+              No passage pinned: {row.action === "delete" ? "find the link" : "place the link"} anywhere in the
+              body copy.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-faint">
-            {row.fromChunkHeading && <span className="truncate">in “{row.fromChunkHeading}”</span>}
+            {row.action === "delete" && row.anchor && (
+              <span className="truncate">link text “{row.anchor}”</span>
+            )}
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
-            {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
-            {row.state === "stale" && <Badge tone="warn">Stale</Badge>}
-            {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1" onClick={stop} onKeyDown={stop}>
-          {row.state === "ready" && (
-            <>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => move("done")}>
-                <Check size={13} /> Done
-              </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
-                <X size={13} /> Turn down
-              </Button>
-            </>
+          {row.state === "review_approved" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
+              <X size={13} /> Turn down
+            </Button>
           )}
-          {row.state !== "ready" && (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("ready")}>
-              <RotateCcw size={13} /> Reopen
+          {row.state === "user_rejected" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("review_approved")}>
+              <RotateCcw size={13} /> Restore
             </Button>
           )}
           <Button
@@ -321,14 +343,6 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
           <PageLink url={row.fromUrl ?? row.fromPageId} />
           <span className="text-faint">To</span>
           <PageLink url={row.toUrl ?? row.toPageId} />
-          <span className="text-faint">Where</span>
-          <span className="text-sub">
-            {row.fromChunkHeading
-              ? `Passage ${row.fromChunkOrdinal ?? "?"} — ${row.fromChunkHeading}`
-              : row.fromChunkId
-                ? `Passage ${row.fromChunkOrdinal ?? "?"}`
-                : "No passage pinned; anywhere in the body copy."}
-          </span>
           {row.confidence !== null && row.confidence !== undefined && (
             <>
               <span className="text-faint">Screen</span>
@@ -358,6 +372,72 @@ function SuggestionRow({ row, onChanged }: { row: LinkSuggestion; onChanged: () 
       />
     </div>
   );
+}
+
+function Passage({ row, text, clamp }: { row: LinkSuggestion; text: string; clamp: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+    }
+  };
+
+  return (
+    <div className="rounded-lg border-l-2 border-accent/60 bg-panel2/60 px-3 py-2">
+      <p className="mb-1 truncate text-[11px] text-faint">
+        {row.action === "delete" ? "The link sits in this passage" : "Add the link in this passage"}
+        {row.fromChunkHeading && <> · under “{row.fromChunkHeading}”</>}
+      </p>
+      <p className={cn("whitespace-pre-line text-xs leading-relaxed text-sub", clamp && "line-clamp-3")}>
+        <Marked text={text} mark={row.action === "delete" ? row.anchor : null} />
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]" onClick={stop} onKeyDown={stop}>
+        {row.fromUrl && (
+          <a
+            href={passageUrl(row.fromUrl, text)}
+            target="_blank"
+            rel="noreferrer"
+            title="Opens the page scrolled to this passage, highlighted (Chrome, Edge, Safari)"
+            className="inline-flex items-center gap-1 text-sub hover:text-accent"
+          >
+            <LocateFixed size={11} /> Open at passage
+          </a>
+        )}
+        <button type="button" onClick={copy} className="inline-flex items-center gap-1 text-sub hover:text-accent">
+          {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied" : "Copy passage"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Marked({ text, mark }: { text: string; mark: string | null | undefined }) {
+  const at = mark ? text.toLowerCase().indexOf(mark.toLowerCase()) : -1;
+  if (!mark || at < 0) return <>{text}</>;
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="rounded bg-bad/20 px-0.5 text-ink">{text.slice(at, at + mark.length)}</mark>
+      {text.slice(at + mark.length)}
+    </>
+  );
+}
+
+function fragment(words: string[]): string {
+  return encodeURIComponent(words.join(" ")).replace(/-/g, "%2D");
+}
+
+function passageUrl(url: string, text: string): string {
+  const words = text.split(/\s+/).filter(Boolean);
+  const base = url.split("#")[0];
+  if (words.length === 0) return base;
+  if (words.length <= FRAGMENT_WORDS * 2) return `${base}#:~:text=${fragment(words)}`;
+  return `${base}#:~:text=${fragment(words.slice(0, FRAGMENT_WORDS))},${fragment(words.slice(-FRAGMENT_WORDS))}`;
 }
 
 function PageLink({ url }: { url: string }) {

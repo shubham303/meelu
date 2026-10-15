@@ -28,14 +28,13 @@ import {
   PageHeader,
   Spinner,
 } from "@demo/components/ui";
-
+import { issuesCsv } from "@demo/mock/api";
 import { api, useApi, useCurrentSite } from "@demo/lib/use-api";
 import { cn, formatRelative } from "@demo/lib/utils";
 import { CrawlProgress } from "../crawl-progress";
 import { RenderProgress } from "../render-progress";
 import { SiteAskButton } from "../site-ask";
 import { useCrawl } from "../tracked";
-import { issuesCsv } from "@demo/mock/api";
 import { type Render, useRender } from "../tracked-render";
 import * as chips from "@demo/features/prompt-chips/site";
 import {
@@ -209,7 +208,7 @@ export default function SiteTechnicalSeoPage() {
     setAsking(false);
     setPhase("crawling");
     waiting.current = true;
-    const started = await crawl.start({ freshDays: 0 });
+    const started = await crawl.start();
     if (!started) {
       waiting.current = false;
       setPhase("idle");

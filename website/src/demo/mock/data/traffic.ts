@@ -1,5 +1,5 @@
 import { DAY, dayKey, NOW, seeded } from "../rand";
-import { PAGES } from "./site";
+import { PAGE_BY_PATH } from "./site";
 
 const MAX_DAYS = 400;
 
@@ -167,7 +167,7 @@ export function landingRows(days: number) {
   const prev = totals(days, days);
   const lrng = seeded(days);
   return LANDING_WEIGHTS.map(([path, w]) => {
-    const page = PAGES.find((p) => new URL(p.url).pathname === path);
+    const page = PAGE_BY_PATH.get(path);
     const sessions = Math.round(cur.sessions * w);
     return {
       landingPage: path,
@@ -288,3 +288,8 @@ export function breakdownRows(by: string, days: number) {
 export const TRAFFIC_FIRST_DAY = dayKey(MAX_DAYS - 1);
 export const TRAFFIC_LAST_DAY = dayKey(1);
 export const CHANNEL_NAMES = CHANNELS.map(([n]) => n);
+export const DAYS_STORED = MAX_DAYS;
+
+export function channelShare(channel: string): number {
+  return CHANNELS.find(([name]) => name === channel)?.[1] ?? 0;
+}

@@ -8,7 +8,6 @@ export function CrawlProgress({ crawl }: { crawl: Crawl }) {
 
   const fetched = status?.fetched ?? 0;
   const queued = status?.queued ?? 0;
-  const skipped = status?.skipped ?? 0;
   const discovered = status?.discovered ?? 0;
   const total = fetched + queued;
   const share = total > 0 ? Math.min(99, Math.round((fetched / total) * 100)) : null;
@@ -27,7 +26,6 @@ export function CrawlProgress({ crawl }: { crawl: Crawl }) {
     scheduled && "started on its daily schedule",
     queued > 0 && `${queued} still queued`,
     discovered > fetched && `${discovered} found so far`,
-    skipped > 0 && `${skipped} still fresh, left alone`,
   ].filter(Boolean) as string[];
 
   return (

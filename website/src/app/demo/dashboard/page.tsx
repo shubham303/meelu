@@ -12,8 +12,7 @@ import type { SiteProfile } from "@demo/lib/types";
 interface Stats {
   site?: { pages?: number; needsReading?: number };
   pages?: { open?: number; verified?: number; rejected?: number };
-  analytics?: { sources?: number; reports?: number };
-  content?: { drafts?: number; blocked?: number };
+  content?: { pieces?: number };
 }
 
 function num(n: number | undefined): string {
@@ -44,9 +43,8 @@ export default function OverviewPage() {
 
   const waiting = [
     {
-      label: "Pieces in draft",
-      value: content.drafts,
-      hint: content.blocked ? `${content.blocked} blocked by channel limits` : undefined,
+      label: "Pieces written",
+      value: content.pieces,
     },
     {
       label: "Page issues open",
@@ -57,8 +55,7 @@ export default function OverviewPage() {
   const line: Record<string, string> = {
     site: `${count(stats?.site?.pages, "page")} · ${num(stats?.site?.needsReading)} need reading`,
     pages: `${num(pages.open)} open · ${num(pages.verified)} verified fixed`,
-    content: `${num(content.drafts)} in draft · ${num(content.blocked)} blocked`,
-    analytics: `${count(stats?.analytics?.sources, "source")} · ${num(stats?.analytics?.reports)} saved`,
+    content: count(content.pieces, "piece"),
   };
 
   const desks = WEBSITE_DESKS.filter((d) => d.id !== "overview");
@@ -113,7 +110,6 @@ export default function OverviewPage() {
             key={stat.label}
             label={stat.label}
             value={num(stat.value)}
-            hint={stat.hint}
           />
         ))}
       </Stagger>
