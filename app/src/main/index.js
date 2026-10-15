@@ -23,6 +23,7 @@ import { inspectPageUrl, listGscProperties, runIndexCheck, runSearchSync, stopSe
 import { listGaProperties, runTrafficSync, stopTrafficSync } from "./integrations/ga/sync.js";
 import { startCrawlSchedule } from "./crawler/schedule.js";
 import { describeSite, startSiteSummarySchedule } from "./site-summary/index.js";
+import { onBillingBlocked } from "./social-signals/llm.js";
 import { createProviders } from "./providers/index.js";
 import { clearOrphanedJobs } from "./orphaned-jobs.js";
 import { appDir, screenshotDir } from "./paths.js";
@@ -171,6 +172,10 @@ function emitSignals(message) {
 
 function emitSummary(event, data) {
   if (win && !win.isDestroyed()) win.webContents.send("site-summary:event", { event, data });
+}
+
+function emitBillingBlocked(message) {
+  if (win && !win.isDestroyed()) win.webContents.send("billing:blocked", { message });
 }
 
 function emitRender(event, data) {
@@ -676,6 +681,8 @@ function boot() {
   void connect();
 
   clearOrphanedJobs({ cookieHeader: sessionCookieHeader, log });
+
+  onBillingBlocked(emitBillingBlocked);
 
   startCrawlSchedule({ cookieHeader: sessionCookieHeader, emit: emitCrawl, log });
 

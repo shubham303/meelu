@@ -6,10 +6,12 @@ import { CreditCard, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
 import { api, useCurrentSite } from "@/lib/use-api";
 import { formatUsd } from "@/lib/utils";
+import { bridge } from "@/components/agent/bridge";
 import {
   billingBlock,
   clearBillingBlock,
   resolveBillingBlock,
+  setBillingBlock,
   subscribeToBillingBlock,
   type BillingBlock,
 } from "@/lib/billing-block";
@@ -53,6 +55,14 @@ export function BillingBanner() {
       setChecking(false);
     }
   }, [block]);
+
+  useEffect(
+    () =>
+      bridge()?.onBillingBlocked?.(({ message }) =>
+        setBillingBlock({ code: "insufficient_credits", message }),
+      ),
+    [],
+  );
 
   const siteId = useCurrentSite();
   useEffect(() => {
