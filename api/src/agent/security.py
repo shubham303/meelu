@@ -52,6 +52,7 @@ READABLE_TABLES = frozenset(
         "social_listening_post",
         "social_listening_query",
         "social_listening_run",
+        "social_post",
         "structure_jobs",
     }
 )
@@ -131,6 +132,7 @@ def bootstrap() -> BootstrapResult:
         user_scoped = _tables_with_column(conn, "user_id")
         site_scoped = _tables_with_column(conn, "site_id")
         owned_through: dict[str, list[str]] = {}
+        referenced_by: dict[str, list[str]] = {}
         for child, column, parent, parent_column in conn.exec_driver_sql(
             SINGLE_COLUMN_FOREIGN_KEYS
         ):
@@ -139,6 +141,12 @@ def bootstrap() -> BootstrapResult:
                     f"EXISTS (SELECT 1 FROM public.{quote_ident(parent)} p "
                     f"WHERE p.{quote_ident(parent_column)} = "
                     f"public.{quote_ident(child)}.{quote_ident(column)})"
+                )
+            if parent not in user_scoped and child in user_scoped and child in READABLE_TABLES:
+                referenced_by.setdefault(parent, []).append(
+                    f"EXISTS (SELECT 1 FROM public.{quote_ident(child)} c "
+                    f"WHERE c.{quote_ident(column)} = "
+                    f"public.{quote_ident(parent)}.{quote_ident(parent_column)})"
                 )
 
         granted, secured = [], []
@@ -152,6 +160,8 @@ def bootstrap() -> BootstrapResult:
                 using = f"user_id = {CURRENT_TENANT}"
             elif table in owned_through:
                 using = " AND ".join(owned_through[table])
+            elif table in referenced_by:
+                using = " OR ".join(referenced_by[table])
             else:
                 using = None
             if table not in READABLE_TABLES or using is None:

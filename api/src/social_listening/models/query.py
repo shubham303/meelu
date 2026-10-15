@@ -18,9 +18,6 @@ class SocialListeningQuery(EntityMixin, SiteScopedMixin, Base):
     enabled: Mapped[bool] = mapped_column(nullable=False, server_default=sql_text("true"))
     source: Mapped[str] = mapped_column(nullable=False, server_default=sql_text("'user'"))
     keywords: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY)
-    negative_keywords: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default=EMPTY_JSON_ARRAY
-    )
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384))
     embed_model: Mapped[str | None]
     embed_attempts: Mapped[int] = mapped_column(

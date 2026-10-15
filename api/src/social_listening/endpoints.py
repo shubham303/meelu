@@ -5,9 +5,8 @@ from src.auth import AuthContext, require_site
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
-from src.social_listening.service import social_listening_service
 from src.social_listening.schemas import (
-    BulkInsertResponse,
+    CollectRequest,
     ConfigResponse,
     ConfigUpdateRequest,
     DeleteResponse,
@@ -16,7 +15,6 @@ from src.social_listening.schemas import (
     PostFilters,
     PostPatchRequest,
     PostResponse,
-    PostsBulkRequest,
     PostsJudgeRequest,
     QueryPatchRequest,
     QueryResponse,
@@ -26,6 +24,7 @@ from src.social_listening.schemas import (
     SummaryResponse,
     UpsertResponse,
 )
+from src.social_listening.service import social_listening_service
 
 router = APIRouter()
 
@@ -119,13 +118,16 @@ async def patch_run(
     return await social_listening_service.patch_run(db, ctx.site_id, run_id, body)
 
 
-@router.post("/social-listening/posts/bulk")
-async def ingest_posts(
-    body: PostsBulkRequest,
+@router.post("/social-listening/runs/{run_id}/collect")
+async def start_collect(
+    run_id: str,
+    body: CollectRequest,
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
-) -> BulkInsertResponse:
-    return await social_listening_service.ingest_posts(db, ctx.user_id, ctx.site_id, body)
+) -> RunResponse:
+    return await social_listening_service.start_collect(
+        db, ctx.user_id, ctx.site_id, run_id, body.platform
+    )
 
 
 @router.post("/social-listening/posts/gate")
@@ -133,7 +135,7 @@ async def gate_posts(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> GateResponse:
-    return await social_listening_service.gate_posts(db, ctx.user_id, ctx.site_id)
+    return await social_listening_service.gate_posts(db, ctx.site_id)
 
 
 @router.post("/social-listening/posts/judged")
@@ -151,9 +153,7 @@ async def list_posts(
     platform: str | None = Query(None),
     query_id: str | None = Query(None, alias="queryId"),
     run_id: str | None = Query(None, alias="runId"),
-    min_relevance: float | None = Query(None, alias="minRelevance"),
     q: str | None = Query(None),
-    sort: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
     paging: PaginationParams = Depends(get_pagination_params),
@@ -163,9 +163,7 @@ async def list_posts(
         platform=platform,
         query_id=query_id,
         run_id=run_id,
-        min_relevance=min_relevance,
         q=q,
-        sort=sort,
     )
     return await social_listening_service.list_posts(db, ctx.site_id, filters, paging)
 

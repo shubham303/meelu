@@ -56,6 +56,10 @@ export function createRun(siteId, cookieHeader) {
   return api("/social-listening/runs", { method: "POST", body: {}, siteId, cookieHeader });
 }
 
+export function getRun(siteId, runId, cookieHeader) {
+  return api(`/social-listening/runs/${runId}`, { siteId, cookieHeader });
+}
+
 export function patchRun(siteId, runId, patch, cookieHeader) {
   return api(`/social-listening/runs/${runId}`, {
     method: "PATCH",
@@ -65,11 +69,10 @@ export function patchRun(siteId, runId, patch, cookieHeader) {
   });
 }
 
-export function savePosts(siteId, runId, posts, cookieHeader) {
-  if (posts.length === 0) return Promise.resolve({ inserted: 0, known: 0, duplicates: 0 });
-  return api("/social-listening/posts/bulk", {
+export function startCollect(siteId, runId, platform, cookieHeader) {
+  return api(`/social-listening/runs/${runId}/collect`, {
     method: "POST",
-    body: { runId, posts },
+    body: { platform },
     siteId,
     cookieHeader,
   });
@@ -79,8 +82,8 @@ export function gatePosts(siteId, cookieHeader) {
   return api("/social-listening/posts/gate", { method: "POST", body: {}, siteId, cookieHeader });
 }
 
-export function saveJudged(siteId, posts, cookieHeader) {
-  if (posts.length === 0) return Promise.resolve({ updated: 0 });
+export function saveVerdicts(siteId, posts, cookieHeader) {
+  if (posts.length === 0) return Promise.resolve({ kept: 0, removed: 0 });
   return api("/social-listening/posts/judged", {
     method: "POST",
     body: { posts },
@@ -92,52 +95,13 @@ export function saveJudged(siteId, posts, cookieHeader) {
 export async function listMatchedPosts(siteId, cookieHeader) {
   const out = [];
   for (let page = 1; page <= 40; page += 1) {
-    const rows = await api(
-      `/social-listening/posts?status=matched&sort=similarity&page=${page}&page_size=100`,
-      { siteId, cookieHeader },
-    );
+    const rows = await api(`/social-listening/posts?status=matched&page=${page}&page_size=100`, {
+      siteId,
+      cookieHeader,
+    });
     if (!Array.isArray(rows) || rows.length === 0) break;
     out.push(...rows);
     if (rows.length < 100) break;
   }
   return out;
-}
-
-export async function listRejectedTexts(siteId, queryId, cookieHeader, limit = 5) {
-  const rows = await api(
-    `/social-listening/posts?status=rejected&queryId=${encodeURIComponent(queryId)}&sort=newest&page=1&page_size=${limit}`,
-    { siteId, cookieHeader },
-  ).catch(() => []);
-  return (Array.isArray(rows) ? rows : [])
-    .map((r) => [r.title, r.text].filter(Boolean).join(" — "))
-    .filter(Boolean);
-}
-
-export function toIngestPost(p, dropReason = null) {
-  return {
-    url: p.url,
-    platform: p.platform,
-    externalId: p.id != null && String(p.id) !== p.url ? String(p.id) : null,
-    queryId: p.queryId ?? null,
-    title: p.title ?? null,
-    text: p.text ?? null,
-    authorHandle: p.author?.handle ?? null,
-    authorName: p.author?.displayName ?? null,
-    postedAt: p.createdAt ?? null,
-    engagement: p.engagement ?? {},
-    context: p.context ?? {},
-    dropReason,
-  };
-}
-
-export function toVerdict(p, status, dropReason = null) {
-  return {
-    id: p.id,
-    status,
-    dropReason: status === "dropped" ? dropReason : null,
-    relevance: p.relevance ?? null,
-    compositeScore: p.compositeScore ?? null,
-    keepReason: p.why ?? null,
-    suggestedAngle: status === "to_reply" ? p.angle ?? null : null,
-  };
 }

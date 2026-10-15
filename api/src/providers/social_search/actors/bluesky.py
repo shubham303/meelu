@@ -6,7 +6,7 @@ def lexis_input(q: SearchQuery) -> dict:
     day = since_day(q.since)
     return {
         "queries": q.keywords,
-        "limit": min(q.limit, 50),
+        "limit": min(q.per_keyword, 50),
         "sort": "latest",
         "lang": "en",
         **({"since": day} if day else {}),

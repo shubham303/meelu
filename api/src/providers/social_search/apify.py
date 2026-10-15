@@ -1,37 +1,36 @@
+import asyncio
+
 from src.providers import apify
+from src.providers.errors import ProviderRequestError
 from src.providers.registry import VendorResponse
 from src.providers.social_search.actors import (
     ActorSpec,
     SearchQuery,
     bluesky,
-    instagram,
+    facebook,
     linkedin,
     reddit,
-    tiktok,
     x,
-    youtube,
 )
-from src.providers.social_search.adapter import SocialSearchAdapter
+from src.providers.social_search.adapter import SocialSearchAdapter, search_result
 from src.providers.social_search.shape import epoch_seconds
 
-MAX_KEYWORDS = 3
-MAX_LIMIT = 100
+SINGLE_QUERY_CONCURRENCY = 3
 
 ACTORS: list[ActorSpec] = [
     *reddit.ACTORS,
     *x.ACTORS,
     *linkedin.ACTORS,
-    *youtube.ACTORS,
     *bluesky.ACTORS,
-    *instagram.ACTORS,
-    *tiktok.ACTORS,
+    *facebook.ACTORS,
 ]
 
 
 def search_query(query: dict) -> SearchQuery:
     keywords = [str(k).strip() for k in query.get("keywords") or [] if str(k).strip()]
-    limit = max(1, min(int(query.get("limit") or 30), MAX_LIMIT))
-    return SearchQuery(keywords=keywords[:MAX_KEYWORDS], since=query.get("since"), limit=limit)
+    return SearchQuery(
+        keywords=keywords, since=query.get("since"), per_keyword=int(query["per_keyword"])
+    )
 
 
 def posted_since(posts: list[dict], since: str | None) -> list[dict]:
@@ -59,15 +58,47 @@ class ApifyActorAdapter(SocialSearchAdapter):
             raise self.unsupported(f"search.{platform}")
         q = search_query(query)
         if not q.keywords:
-            return VendorResponse([])
+            return VendorResponse(search_result([], []))
+        if self.spec.one_query_per_run:
+            return await self._run_each_keyword(q)
         run = await apify.run_actor(
-            self.id, self.spec.actor_id, self.spec.build_input(q), q.limit, self.spec.charges
+            self.id, self.spec.actor_id, self.spec.build_input(q), q.run_cap(), self.spec.charges
         )
-        posts = [self.spec.normalize(i) for i in run.data if isinstance(i, dict)]
+        return VendorResponse(search_result(self._posts(run.data, q.since), []), run.cost_micros)
+
+    async def _run_each_keyword(self, q: SearchQuery) -> VendorResponse:
+        slots = asyncio.Semaphore(SINGLE_QUERY_CONCURRENCY)
+
+        async def one(keyword: str):
+            single = SearchQuery(keywords=[keyword], since=q.since, per_keyword=q.per_keyword)
+            async with slots:
+                return await apify.run_actor(
+                    self.id,
+                    self.spec.actor_id,
+                    self.spec.build_input(single),
+                    single.run_cap(),
+                    self.spec.charges,
+                )
+
+        outcomes = await asyncio.gather(*(one(k) for k in q.keywords), return_exceptions=True)
+        rows, failed, cost, last_error = [], [], 0, None
+        for keyword, outcome in zip(q.keywords, outcomes):
+            if isinstance(outcome, ProviderRequestError):
+                failed.append(keyword)
+                last_error = outcome
+                continue
+            if isinstance(outcome, BaseException):
+                raise outcome
+            rows.extend(outcome.data)
+            cost += outcome.cost_micros
+        if last_error is not None and len(failed) == len(q.keywords):
+            raise last_error
+        return VendorResponse(search_result(self._posts(rows, q.since), failed), cost)
+
+    def _posts(self, rows: list, since: str | None) -> list[dict]:
+        posts = [self.spec.normalize(i) for i in rows if isinstance(i, dict)]
         unique = {p["id"]: p for p in posts if p}
-        return VendorResponse(
-            posted_since(list(unique.values()), q.since)[: q.limit], run.cost_micros
-        )
+        return posted_since(list(unique.values()), since)
 
 
 def apify_adapters() -> list[ApifyActorAdapter]:

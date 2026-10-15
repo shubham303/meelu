@@ -23,9 +23,6 @@ class SocialListeningConfigRepository:
             user_id=user_id,
             site_id=site_id,
             platforms=[],
-            results_per_keyword=50,
-            strictness="balanced",
-            max_age_days=365,
         )
         db.add(row)
         await db.flush()

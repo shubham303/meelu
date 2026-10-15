@@ -1,46 +1,50 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
-import { claudeExecutable, llmEnv, resolveLlm } from "../agent/runner.js";
+import { resolveLlm } from "../agent/runner.js";
+import { ANTHROPIC_VERSION } from "../integrations/llm/own-key.js";
+import { apiFetch } from "../net.js";
 
-const BILLING_ERROR = /^API Error: 402\s*/;
+const MAX_OUTPUT_TOKENS = 4096;
+const CALL_TIMEOUT_MS = 120_000;
+
 let billingBlocked = () => {};
 
 export function onBillingBlocked(listener) {
   billingBlocked = listener;
 }
 
+export function headersFor(gateway) {
+  const shared = { "content-type": "application/json", "anthropic-version": ANTHROPIC_VERSION };
+  if (gateway.ownKey) return { ...shared, "x-api-key": gateway.apiKey };
+  return { ...shared, authorization: `Bearer ${gateway.apiKey}`, ...gateway.headers };
+}
+
 export async function jsonCall(system, prompt, target) {
   const { gateway, model, limits } = await resolveLlm(target);
-  const q = query({
-    prompt,
-    options: {
+  const res = await apiFetch(`${gateway.baseUrl}/v1/messages`, {
+    method: "POST",
+    headers: headersFor(gateway),
+    body: JSON.stringify({
       model,
-      systemPrompt: system,
-      tools: [],
-      allowedTools: [],
-      permissionMode: "default",
-      settingSources: [],
-      strictMcpConfig: true,
-      maxTurns: 1,
-      ...claudeExecutable(),
-      env: llmEnv(gateway, limits),
-    },
+      max_tokens: Math.min(MAX_OUTPUT_TOKENS, limits?.output ?? MAX_OUTPUT_TOKENS),
+      system,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
   });
-  let output = null;
-  for await (const m of q) {
-    if (m.type === "result") {
-      if (m.subtype !== "success" || m.is_error) {
-        const reason = m.result || m.subtype || "The model call failed.";
-        if (BILLING_ERROR.test(reason)) {
-          const message = reason.replace(BILLING_ERROR, "");
-          billingBlocked(message);
-          throw new Error(message);
-        }
-        throw new Error(reason);
-      }
-      output = m.result;
-    }
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const message = payload?.error?.message || `The model call failed (${res.status}).`;
+    if (res.status === 402) billingBlocked(message);
+    throw new Error(message);
   }
-  const raw = String(output ?? "").trim();
+  return jsonOf(payload);
+}
+
+export function jsonOf(payload) {
+  const raw = (payload?.content ?? [])
+    .filter((block) => block?.type === "text")
+    .map((block) => block.text)
+    .join("")
+    .trim();
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start === -1 || end <= start) throw new Error("The model returned no JSON object.");
