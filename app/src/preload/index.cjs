@@ -25,6 +25,11 @@ const bridge = {
     ipcRenderer.on("site-summary:event", listener);
     return () => ipcRenderer.removeListener("site-summary:event", listener);
   },
+  onBillingBlocked: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on("billing:blocked", listener);
+    return () => ipcRenderer.removeListener("billing:blocked", listener);
+  },
   crawlToken: (domain) => ipcRenderer.invoke("site:crawlToken", { domain }),
   onCrawlEvent: (callback) => {
     const listener = (_event, message) => callback(message);

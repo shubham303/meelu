@@ -47,6 +47,7 @@ export interface AgentBridge {
   abort: (turnId: string) => void;
   describeSite?: (siteId: string) => Promise<{ started?: boolean; error?: string }>;
   onSiteSummaryEvent?: (cb: (m: SiteSummaryEvent) => void) => () => void;
+  onBillingBlocked?: (cb: (m: { message: string }) => void) => () => void;
   crawlToken?: (domain: string) => Promise<{ token?: string | null; error?: string }>;
   respondPermission?: (
     requestId: string,
