@@ -12,6 +12,7 @@ function abs(href, base) {
   try {
     const u = new URL(href, base);
     if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    if (u.pathname.startsWith("/cdn-cgi/")) return undefined;
     u.hash = "";
     if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
     return u.toString();
