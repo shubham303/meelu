@@ -21,6 +21,8 @@ const JUDGE_ATTEMPTS = 2;
 const POLL_MS = 3000;
 const GATE_TIMEOUT_MS = 60 * 60 * 1000;
 
+const PROGRESS_EVENTS = new Set(["stage", "terms", "platform", "saved", "gate", "judged"]);
+
 const running = new Map();
 const runningBySite = new Map();
 
@@ -44,7 +46,7 @@ function newRunState(siteId) {
     halt = () => reject(new Stopped());
   });
   halted.catch(() => {});
-  return { siteId, stopped: false, halted, halt };
+  return { siteId, stopped: false, halted, halt, startedAt: Date.now(), progress: [] };
 }
 
 export function startSignalsSearch(payload, emit, { cookieHeader = "" }) {
@@ -77,7 +79,13 @@ export function stopSignalsSearch(jobId) {
 
 export function activeSignalsSearch(siteId) {
   const jobId = runningBySite.get(siteId) ?? null;
-  return { jobId, stopping: jobId ? running.get(jobId)?.stopped === true : false };
+  const state = jobId ? running.get(jobId) : null;
+  return {
+    jobId,
+    stopping: state?.stopped === true,
+    startedAt: state?.startedAt ?? null,
+    progress: state?.progress ?? [],
+  };
 }
 
 function guard(state) {
@@ -241,7 +249,10 @@ async function judgeStage(lines, siteContext, ctx) {
 }
 
 async function drive(jobId, input, state, emit, { cookieHeader, release }) {
-  const send = (event, data) => emit({ jobId, event, data });
+  const send = (event, data) => {
+    if (PROGRESS_EVENTS.has(event)) state.progress.push({ event, data });
+    emit({ jobId, event, data });
+  };
   const finish = (event, data) => {
     release();
     send(event, data);
