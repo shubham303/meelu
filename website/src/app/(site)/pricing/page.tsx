@@ -4,7 +4,7 @@ import { site } from "@/lib/site";
 
 const title = "Meelu pricing: pay per website, plus what you use";
 const description =
-  "Meelu has one plan. 1 credit is 1 US dollar. Each website costs 0.4 credits a day, and external data and AI services are charged per use. No subscription, no tiers.";
+  "Meelu has one plan. 1 credit is 1 US dollar. Each of your first five websites costs 0.4 credits a day, and every website after that 0.2. External data and AI services are charged per use. No subscription.";
 
 export const metadata: Metadata = {
   title,
@@ -28,10 +28,33 @@ const services = [
   },
 ];
 
+const byoKeySteps = [
+  {
+    title: "Create a key.",
+    body: "Sign in to the Anthropic Console, open Settings, then API keys, and create a new key. Add a payment method or credits to your Anthropic account.",
+  },
+  {
+    title: "Open Connections.",
+    body: "In the Meelu app, go to Connections and find the Your Anthropic key card.",
+  },
+  {
+    title: "Save it.",
+    body: "Paste the key and choose Save key. Meelu checks it with Anthropic before saving.",
+  },
+  {
+    title: "Pick a default model.",
+    body: "Choose which Claude model your tasks use. From then on, tasks run on your key by default.",
+  },
+];
+
 const faqs = [
   {
     q: "Is there a monthly plan or a free tier?",
     a: "No. There is one way to pay: credits. You never pick a plan, a tier or a seat count.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "Yes. The first website you add is free for the first three days of your account. External data and AI services still need credits, or you can run the agent on your own LLM key, set up in Connections.",
   },
   {
     q: "When is the daily website fee taken?",
@@ -84,7 +107,10 @@ export default function PricingPage() {
             <p className="mt-4 font-display text-4xl tracking-tight text-ink">
               0.4 <span className="text-lg text-sub">credits / day</span>
             </p>
-            <p className="mt-1 text-sm text-faint">About 12 credits a month per website</p>
+            <p className="mt-1 text-sm text-faint">
+              About 12 credits a month for each of your first five websites, then 0.2 credits a
+              day (about 6 a month) for every website after that
+            </p>
             <p className="mt-4 text-sm text-sub text-pretty">
               Taken automatically every day for each website you add. It covers
               keeping the website in Meelu: its pages, crawls, history and the
@@ -131,12 +157,16 @@ export default function PricingPage() {
             Example
           </p>
           <h2 className="mt-3 font-display text-2xl tracking-tight text-ink">
-            Two websites for 30 days
+            Seven websites for 30 days
           </h2>
           <div className="mt-6 rounded-2xl border border-edge bg-panel p-6 text-sm">
             <div className="flex justify-between gap-4 py-2 text-sub">
-              <span>2 websites × 0.4 credits × 30 days</span>
-              <span className="shrink-0 whitespace-nowrap font-mono text-ink">24 credits</span>
+              <span>First 5 websites × 0.4 credits × 30 days</span>
+              <span className="shrink-0 whitespace-nowrap font-mono text-ink">60 credits</span>
+            </div>
+            <div className="flex justify-between gap-4 py-2 text-sub">
+              <span>2 more websites × 0.2 credits × 30 days</span>
+              <span className="shrink-0 whitespace-nowrap font-mono text-ink">12 credits</span>
             </div>
             <div className="flex justify-between gap-4 py-2 text-sub">
               <span>External service calls that month</span>
@@ -144,13 +174,64 @@ export default function PricingPage() {
             </div>
             <div className="mt-2 flex justify-between gap-4 border-t border-edge pt-4 text-ink">
               <span>Total</span>
-              <span className="shrink-0 whitespace-nowrap font-mono">$24 + usage</span>
+              <span className="shrink-0 whitespace-nowrap font-mono">$72 + usage</span>
             </div>
           </div>
           <p className="mt-6 text-sm text-sub text-pretty">
-            New accounts start with <span className="text-ink">1 free credit</span>,
-            enough to try Meelu on one website for two days.
+            Your first website is <span className="text-ink">free for three days</span>.
+            External services need credits, or you can run the agent on your own LLM key.
           </p>
+        </div>
+      </section>
+
+      <section className="border-t border-edge">
+        <div className="mx-auto w-full max-w-4xl px-6 py-16">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-faint">
+            Your own key
+          </p>
+          <h2 className="mt-3 font-display text-2xl tracking-tight text-ink">
+            Bring your own Anthropic key
+          </h2>
+          <p className="mt-4 text-sm text-sub text-pretty">
+            The agent can run on your own Anthropic API key. Its model calls then go straight
+            from your device to Anthropic and are billed to your Anthropic account, not to your
+            Meelu credits.
+          </p>
+          <ol className="mt-6 space-y-4 rounded-2xl border border-edge bg-panel p-6 text-sm text-sub">
+            {byoKeySteps.map((step, i) => (
+              <li key={step.title} className="flex gap-4">
+                <span className="shrink-0 font-mono text-ink">{i + 1}</span>
+                <span className="text-pretty">
+                  <span className="text-ink">{step.title}</span> {step.body}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <ul className="mt-6 space-y-2 text-sm text-sub text-pretty">
+            <li>
+              The key is encrypted on your device and never sent to Meelu.
+            </li>
+            <li>
+              You can still pick a Meelu model for a single task in the chat. That task is
+              charged to your credits.
+            </li>
+            <li>
+              Search data, social search and page classification still use credits, because
+              they run on Meelu&apos;s servers.
+            </li>
+            <li>
+              On a Claude Max or Team plan? You can{" "}
+              <a
+                href="https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans"
+                target="_blank"
+                rel="noreferrer"
+                className="text-ink underline underline-offset-4 hover:text-accent"
+              >
+                claim monthly API credits
+              </a>{" "}
+              for your key.
+            </li>
+          </ul>
         </div>
       </section>
 

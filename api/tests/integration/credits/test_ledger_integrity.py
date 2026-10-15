@@ -83,11 +83,8 @@ async def test_every_ledger_entry_explains_itself(client, email):
         assert entry["deltaUsd"] != 0
 
 
-async def test_amounts_are_exact_in_micros(client, email, monkeypatch):
-    from src.settings import settings
-
-    monkeypatch.setattr(settings, "credits_signup_grant_usd", 5.0)
-    await signup(client, email)
+async def test_amounts_are_exact_in_micros(client, email):
+    await signup(client, email, credits=5.0)
     user_id = await user_id_of(client)
 
     for _ in range(10):
@@ -101,4 +98,4 @@ async def test_amounts_are_exact_in_micros(client, email, monkeypatch):
             ),
             {"u": user_id},
         )
-        assert int(row.scalar_one()) == -4_000_000
+        assert int(row.scalar_one()) == -3_000_000

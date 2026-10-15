@@ -57,8 +57,10 @@ class Settings(EnvSettings):
     llm_catalog_ttl_seconds: int = 6 * 60 * 60
     llm_stream_timeout_seconds: float = 600.0
     llm_stream_max_seconds: float = 1200.0
-    credits_signup_grant_usd: float = 1.0
+    credits_trial_days: int = 3
     credits_site_daily_usd: float = 0.4
+    credits_site_daily_discounted_usd: float = 0.2
+    credits_full_price_sites: int = 5
     credits_minimum_balance_usd: float = 0.2
     credits_parallel_calls_per_user: int = 10
     credits_slot_wait_seconds: float = 60.0
