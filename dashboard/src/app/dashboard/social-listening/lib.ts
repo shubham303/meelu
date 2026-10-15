@@ -56,6 +56,35 @@ export const EMPTY_LIVE: LiveRun = {
   error: null,
 };
 
+const STEPS: RunStep[] = ["terms", "searching", "meaning", "judging"];
+
+export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknown>): LiveRun {
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  if (event === "stage") {
+    const step = String(d.stage) as RunStep;
+    return STEPS.includes(step) ? { ...prev, step } : prev;
+  }
+  if (event === "terms") return { ...prev, lines: n(d.lines), phrases: n(d.phrases) };
+  if (event === "platform") {
+    return {
+      ...prev,
+      platforms: {
+        ...prev.platforms,
+        [String(d.platform)]: {
+          status: d.status as "fetching" | "done" | "error",
+          fromVendor: d.fromVendor as number | undefined,
+          fromDatabase: d.fromDatabase as number | undefined,
+          error: d.error as string | undefined,
+        },
+      },
+    };
+  }
+  if (event === "saved") return { ...prev, fetched: n(d.fetched), inserted: n(d.inserted) };
+  if (event === "gate") return { ...prev, gate: { pending: n(d.pending), kept: n(d.kept), dropped: n(d.dropped) } };
+  if (event === "judged") return { ...prev, judged: { judged: n(d.judged), total: n(d.total), kept: n(d.kept) } };
+  return prev;
+}
+
 export function postsPath(params: Record<string, string | number | null | undefined>): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
