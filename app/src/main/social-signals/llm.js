@@ -1,6 +1,13 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutable, llmEnv, resolveLlm } from "../agent/runner.js";
 
+const BILLING_ERROR = /^API Error: 402\s*/;
+let billingBlocked = () => {};
+
+export function onBillingBlocked(listener) {
+  billingBlocked = listener;
+}
+
 export async function jsonCall(system, prompt, target) {
   const { gateway, model, limits } = await resolveLlm(target);
   const q = query({
@@ -22,7 +29,13 @@ export async function jsonCall(system, prompt, target) {
   for await (const m of q) {
     if (m.type === "result") {
       if (m.subtype !== "success" || m.is_error) {
-        throw new Error(m.result || m.subtype || "The model call failed.");
+        const reason = m.result || m.subtype || "The model call failed.";
+        if (BILLING_ERROR.test(reason)) {
+          const message = reason.replace(BILLING_ERROR, "");
+          billingBlocked(message);
+          throw new Error(message);
+        }
+        throw new Error(reason);
       }
       output = m.result;
     }
