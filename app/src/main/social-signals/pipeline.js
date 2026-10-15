@@ -50,7 +50,7 @@ function newRunState(siteId) {
   return { siteId, stopped: false, halted, halt };
 }
 
-export function startSignalsSearch(payload, emit, { providers, llm, cookieHeader = "" }) {
+export function startSignalsSearch(payload, emit, { providers, cookieHeader = "" }) {
   const { siteId = null, platforms = [] } = payload;
   if (!siteId) return { error: "Pick a website first." };
   const active = runningBySite.get(siteId);
@@ -64,7 +64,7 @@ export function startSignalsSearch(payload, emit, { providers, llm, cookieHeader
     running.delete(jobId);
     if (runningBySite.get(siteId) === jobId) runningBySite.delete(siteId);
   };
-  void drive(jobId, input, state, emit, { providers, llm, cookieHeader, release }).finally(release);
+  void drive(jobId, input, state, emit, { providers, cookieHeader, release }).finally(release);
   return { jobId };
 }
 
@@ -264,13 +264,13 @@ async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) 
   return kept;
 }
 
-async function drive(jobId, input, state, emit, { providers, llm, cookieHeader, release }) {
+async function drive(jobId, input, state, emit, { providers, cookieHeader, release }) {
   const send = (event, data) => emit({ jobId, event, data });
   const finish = (event, data) => {
     release();
     send(event, data);
   };
-  const target = { llm, cookieHeader, siteId: input.siteId, purpose: "social_listening" };
+  const target = { cookieHeader, siteId: input.siteId, purpose: "social_listening" };
   const ctx = { state, send, llm: target, providers, cookieHeader, siteId: input.siteId };
   let runId = null;
   const platformStats = {};

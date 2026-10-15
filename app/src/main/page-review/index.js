@@ -1,9 +1,8 @@
 import { ENV_DEFAULTS, meeluAuthHeaders } from "../config.js";
 import { apiFetch } from "../net.js";
 import { resolveLlm } from "../agent/runner.js";
+import { ownModelId } from "../integrations/llm/own-key.js";
 import { jsonCall } from "../social-signals/llm.js";
-
-export const LLM_PAGE_EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
 
 const ENABLED = process.env.MEELU_PAGE_REVIEW !== "0";
 const TICK_MS = Number(process.env.MEELU_PAGE_REVIEW_TICK_MS ?? 10 * 60 * 1000);
@@ -36,16 +35,10 @@ function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
   });
 }
 
-export async function pageExtractionLlm(llm, cookieHeader) {
-  const target = { llm, cookieHeader, purpose: "page_review" };
-  if (llm?.provider === "anthropic") {
-    return {
-      target: { ...target, llm: { ...llm, model: LLM_PAGE_EXTRACTION_MODEL } },
-      model: LLM_PAGE_EXTRACTION_MODEL,
-    };
-  }
-  const { model } = await resolveLlm(target);
-  return { target: { ...target, model }, model };
+async function pageExtractionLlm(cookieHeader) {
+  const target = { cookieHeader, purpose: "page_review" };
+  const { gateway, model } = await resolveLlm(target);
+  return { target: { ...target, model: gateway.ownKey ? ownModelId(model) : model }, model };
 }
 
 function reviewPrompt(page, questions) {
@@ -100,7 +93,7 @@ async function reviewSite(site, cookie, target, log) {
   if (pages.length) log(`page-review ${site.domain}: ${reviewed}/${pages.length} page(s) reviewed`);
 }
 
-async function tick({ cookieHeader, llm, log }) {
+async function tick({ cookieHeader, log }) {
   if (running) return;
   const cookie = await cookieHeader().catch(() => "");
   if (!cookie && !ENV_DEFAULTS.meeluApiKey) return;
@@ -108,7 +101,7 @@ async function tick({ cookieHeader, llm, log }) {
   try {
     const sites = await api("/sites?page_size=100", { cookieHeader: cookie });
     if (!Array.isArray(sites) || !sites.length) return;
-    const target = await pageExtractionLlm(llm(), cookie);
+    const target = await pageExtractionLlm(cookie);
     for (const site of sites) {
       if (!site?.id) continue;
       try {

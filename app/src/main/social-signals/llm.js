@@ -2,7 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { claudeExecutable, llmEnv, resolveLlm } from "../agent/runner.js";
 
 export async function jsonCall(system, prompt, target) {
-  const { gateway, model, anthropicKey, limits } = await resolveLlm(target);
+  const { gateway, model, limits } = await resolveLlm(target);
   const q = query({
     prompt,
     options: {
@@ -15,7 +15,7 @@ export async function jsonCall(system, prompt, target) {
       strictMcpConfig: true,
       maxTurns: 1,
       ...claudeExecutable(),
-      env: llmEnv(gateway, anthropicKey, limits),
+      env: llmEnv(gateway, limits),
     },
   });
   let output = null;
