@@ -3,7 +3,7 @@
   "version": "0.1.6",
   "description": "Meelu desktop — the web dashboard in a window, plus the agent harness. One Next.js codebase renders web and app; the agent chrome self-gates on app mode, so the web stays a plain CRUD site.",
   "private": true,
-  "license": "AGPL-3.0-only",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "productName": "Meelu",
   "main": "src/main/index.js",
