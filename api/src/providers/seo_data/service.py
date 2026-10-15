@@ -2,8 +2,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.providers.errors import ConflictError
 from src.providers.registry import Caller, ProviderFacade
 from src.providers.seo_data.adapter import SeoDataAdapter
@@ -44,17 +42,15 @@ class SeoDataProvider(ProviderFacade):
 
     async def _fetch(
         self,
-        db: AsyncSession,
         caller: Caller,
         capability: str,
         build: Callable[[SeoDataAdapter], dict],
         ttl: timedelta | None = TTL,
     ) -> dict:
-        return await self.fetch(db, caller, capability, build, lambda a: a.send(build(a)), ttl)
+        return await self.fetch(caller, capability, build, lambda a: a.send(build(a)), ttl)
 
     async def _keyword_items(
         self,
-        db: AsyncSession,
         caller: Caller,
         capability: str,
         keywords: list[str],
@@ -64,16 +60,15 @@ class SeoDataProvider(ProviderFacade):
         items: list[dict] = []
         for part in chunk(keywords, per_request):
             envelope = await self._fetch(
-                db, caller, capability, lambda a, part=part: build(a, part), ttl=None
+                caller, capability, lambda a, part=part: build(a, part), ttl=None
             )
             items.extend(i for i in bundle_items(envelope) if i and i.get("keyword"))
         return items
 
     async def keyword_overview(
-        self, db: AsyncSession, caller: Caller, keywords: list[str], locale: dict
+        self, caller: Caller, keywords: list[str], locale: dict
     ) -> list[dict]:
         return await self._keyword_items(
-            db,
             caller,
             "keywords.overview",
             keywords,
@@ -82,10 +77,9 @@ class SeoDataProvider(ProviderFacade):
         )
 
     async def keyword_history(
-        self, db: AsyncSession, caller: Caller, keywords: list[str], locale: dict
+        self, caller: Caller, keywords: list[str], locale: dict
     ) -> list[dict]:
         return await self._keyword_items(
-            db,
             caller,
             "keywords.history",
             keywords,
@@ -94,18 +88,17 @@ class SeoDataProvider(ProviderFacade):
         )
 
     async def discover_keywords(
-        self, db: AsyncSession, caller: Caller, seeds: list[str], limit: int, locale: dict
+        self, caller: Caller, seeds: list[str], limit: int, locale: dict
     ) -> list[str]:
         found: dict[str, None] = {}
         ideas = await self._fetch(
-            db, caller, "keywords.ideas", lambda a: a.keyword_ideas(seeds, locale, limit)
+            caller, "keywords.ideas", lambda a: a.keyword_ideas(seeds, locale, limit)
         )
         found.update(
             dict.fromkeys(i["keyword"] for i in bundle_items(ideas) if i and i.get("keyword"))
         )
         for seed in seeds:
             suggested = await self._fetch(
-                db,
                 caller,
                 "keywords.suggestions",
                 lambda a, seed=seed: a.keyword_suggestions(seed, locale, limit),
@@ -116,7 +109,6 @@ class SeoDataProvider(ProviderFacade):
                 )
             )
             related = await self._fetch(
-                db,
                 caller,
                 "keywords.related",
                 lambda a, seed=seed: a.related_keywords(seed, locale, limit),
@@ -130,13 +122,10 @@ class SeoDataProvider(ProviderFacade):
             )
         return list(found)
 
-    async def pages_summary(
-        self, db: AsyncSession, caller: Caller, targets: list[str]
-    ) -> dict[str, dict]:
+    async def pages_summary(self, caller: Caller, targets: list[str]) -> dict[str, dict]:
         if not targets:
             return {}
         envelope = await self._fetch(
-            db,
             caller,
             "backlinks.pages_summary",
             lambda a: a.bulk_pages_summary(sorted(set(targets))),
@@ -146,7 +135,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def ranked_keywords(
         self,
-        db: AsyncSession,
         caller: Caller,
         domain: str,
         limit: int = 100,
@@ -167,7 +155,6 @@ class SeoDataProvider(ProviderFacade):
         filters = brand_filters(exclude) if exclude else None
         items = bundle_items(
             await self._fetch(
-                db,
                 caller,
                 "domains.ranked_keywords",
                 lambda a: a.ranked_keywords(target, locale, limit, filters),
@@ -179,7 +166,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def rival_domains(
         self,
-        db: AsyncSession,
         caller: Caller,
         domain: str,
         limit: int = 10,
@@ -192,7 +178,6 @@ class SeoDataProvider(ProviderFacade):
             return {"rivals": []}
         items = bundle_items(
             await self._fetch(
-                db,
                 caller,
                 "domains.competitors",
                 lambda a: a.competitors_domain(target, locale, limit),
@@ -211,7 +196,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def serp_organic(
         self,
-        db: AsyncSession,
         caller: Caller,
         keyword: str,
         device: str,
@@ -220,7 +204,6 @@ class SeoDataProvider(ProviderFacade):
         ttl: timedelta | None = None,
     ) -> dict | None:
         envelope = await self._fetch(
-            db,
             caller,
             "serp.organic",
             lambda a: a.serp_organic(keyword, locale, device, depth),
@@ -229,10 +212,9 @@ class SeoDataProvider(ProviderFacade):
         return first_result(envelope)
 
     async def referring_domains_gap(
-        self, db: AsyncSession, caller: Caller, target: str, exclude: list[str], limit: int
+        self, caller: Caller, target: str, exclude: list[str], limit: int
     ) -> list[dict]:
         envelope = await self._fetch(
-            db,
             caller,
             "backlinks.domain_intersection",
             lambda a: a.backlinks_domain_intersection([target], exclude, limit),
@@ -243,10 +225,9 @@ class SeoDataProvider(ProviderFacade):
         return [f for f in found if f and f.get("target")]
 
     async def historical_serps(
-        self, db: AsyncSession, caller: Caller, keyword: str, locale: dict, date_from: str
+        self, caller: Caller, keyword: str, locale: dict, date_from: str
     ) -> list[dict]:
         envelope = await self._fetch(
-            db,
             caller,
             "serp.history",
             lambda a: a.historical_serps(keyword, locale, date_from),
@@ -257,7 +238,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def trend(
         self,
-        db: AsyncSession,
         caller: Caller,
         keywords: list[str],
         location_code: int | None = None,
@@ -274,7 +254,6 @@ class SeoDataProvider(ProviderFacade):
         for part in chunk(wanted, TRENDS_PER_REQUEST):
             items = bundle_items(
                 await self._fetch(
-                    db,
                     caller,
                     "keywords.trends",
                     lambda a, part=part: a.trends_explore(part, locale),
@@ -289,7 +268,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def serp_competitors(
         self,
-        db: AsyncSession,
         caller: Caller,
         keywords: list[str],
         limit: int = 10,
@@ -302,7 +280,6 @@ class SeoDataProvider(ProviderFacade):
             raise ConflictError("Pass at least one keyword to sample the results pages with.")
         items = bundle_items(
             await self._fetch(
-                db,
                 caller,
                 "serp.competitors",
                 lambda a: a.serp_competitors(sampled, locale, limit),
@@ -325,7 +302,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def relevant_pages(
         self,
-        db: AsyncSession,
         caller: Caller,
         domain: str,
         limit: int = 100,
@@ -336,7 +312,6 @@ class SeoDataProvider(ProviderFacade):
         target = own_domain(domain)
         items = bundle_items(
             await self._fetch(
-                db,
                 caller,
                 "domains.relevant_pages",
                 lambda a: a.relevant_pages(target, locale, limit),
@@ -356,12 +331,9 @@ class SeoDataProvider(ProviderFacade):
         pages.sort(key=lambda p: -(p["organicEtv"] or 0))
         return {"domain": target, "pages": pages}
 
-    async def lighthouse(
-        self, db: AsyncSession, caller: Caller, url: str, strategy: str = "mobile"
-    ) -> dict:
+    async def lighthouse(self, caller: Caller, url: str, strategy: str = "mobile") -> dict:
         report = first_result(
             await self._fetch(
-                db,
                 caller,
                 "pages.lighthouse",
                 lambda a: a.lighthouse(url, strategy == "mobile"),
@@ -371,7 +343,6 @@ class SeoDataProvider(ProviderFacade):
 
     async def llm_mentions(
         self,
-        db: AsyncSession,
         caller: Caller,
         targets: list[dict[str, Any]],
         platform: str = "google",
@@ -393,7 +364,6 @@ class SeoDataProvider(ProviderFacade):
             )
         items = bundle_items(
             await self._fetch(
-                db,
                 caller,
                 "llm.mentions",
                 lambda a: a.llm_mentions(clean, platform, locale, limit),

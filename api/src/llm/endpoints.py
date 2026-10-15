@@ -8,6 +8,7 @@ from src.auth import current_user_id
 from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
+from src.llm import request as llm_request
 from src.llm.schemas import (
     LlmCallResponse,
     LlmModelResponse,
@@ -16,6 +17,7 @@ from src.llm.schemas import (
     Purpose,
 )
 from src.llm.service import anthropic_error, llm_service
+from src.settings import settings
 from src.sites.repository import sites
 
 router = APIRouter()
@@ -67,8 +69,16 @@ async def create_message(
     purpose = request.headers.get("x-meelu-purpose") or "agent"
     if purpose not in PURPOSES:
         return anthropic_error(400, "invalid_request_error", f"Unknown purpose {purpose}.")
+    limit = round(settings.llm_max_request_mb * 1024 * 1024)
+    raw = await llm_request.read_limited(request, limit)
+    if raw is None:
+        return anthropic_error(
+            413,
+            "request_too_large",
+            f"The request is larger than {settings.llm_max_request_mb:g} MB.",
+        )
     try:
-        body = json.loads(await request.body())
+        body = json.loads(raw)
     except ValueError:
         return anthropic_error(400, "invalid_request_error", "The body must be JSON.")
     if not isinstance(body, dict):

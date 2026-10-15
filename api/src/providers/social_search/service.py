@@ -1,7 +1,5 @@
 from datetime import timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.providers.registry import Caller, ProviderFacade
 from src.providers.social_search.apify import apify_adapters
 from src.providers.social_search.meelu_public import MeeluPublicAdapter
@@ -27,7 +25,6 @@ class SocialSearchProvider(ProviderFacade):
 
     async def search_platform(
         self,
-        db: AsyncSession,
         caller: Caller,
         platform: str,
         keywords: list[str],
@@ -36,7 +33,6 @@ class SocialSearchProvider(ProviderFacade):
     ) -> list[dict]:
         query = {"keywords": keywords, "since": since, "limit": limit}
         return await self.fetch(
-            db,
             caller,
             f"search.{platform}",
             lambda a: a.vendor_query(platform, query),

@@ -44,9 +44,8 @@ class ThingFacade(ProviderFacade):
     domain = "things"
     label = "things"
 
-    async def get(self, db, caller, key):
+    async def get(self, caller, key):
         return await self.fetch(
-            db,
             caller,
             "thing.get",
             lambda _: {"key": key},
@@ -84,10 +83,8 @@ async def test_facade_falls_back_caches_and_charges(client, email):
     facade = ThingFacade([flaky, stable])
     caller = Caller(user_id=user_id)
 
-    async with unit_of_work() as db:
-        first = await facade.get(db, caller, "a")
-    async with unit_of_work() as db:
-        second = await facade.get(db, caller, "a")
+    first = await facade.get(caller, "a")
+    second = await facade.get(caller, "a")
     assert first == second == {"key": "a", "n": 1}
     assert flaky.calls == 1 and stable.calls == 1
 
@@ -121,8 +118,7 @@ async def test_facade_refuses_without_credits(client, email):
             {"u": user_id},
         )
     with pytest.raises(InsufficientCreditsError):
-        async with unit_of_work() as db:
-            await facade.get(db, caller, "b")
+        await facade.get(caller, "b")
     assert stable.calls == 0
 
 
@@ -130,8 +126,7 @@ async def test_raises_when_every_adapter_fails(client, email):
     user_id = await user_id_of(client, email)
     facade = ThingFacade([FlakyAdapter()])
     with pytest.raises(ProviderRequestError):
-        async with unit_of_work() as db:
-            await facade.get(db, Caller(user_id=user_id), "c")
+        await facade.get(Caller(user_id=user_id), "c")
     r = await client.get("/api/v1/providers/calls?domain=things")
     assert r.json()["data"][0]["status"] == "error"
 
@@ -162,9 +157,8 @@ async def test_status_and_platform_listing(client, email):
 
 async def test_seo_tool_shapes_without_vendor(client, email):
     user_id = await user_id_of(client, email)
-    async with unit_of_work() as db:
-        caller = Caller(user_id=user_id)
-        assert await seo_data.keyword_overview(db, caller, [], DEFAULT_LOCALE) == []
+    caller = Caller(user_id=user_id)
+    assert await seo_data.keyword_overview(caller, [], DEFAULT_LOCALE) == []
 
 
 async def test_social_search_falls_back_to_second_actor(client, email, monkeypatch):

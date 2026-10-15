@@ -693,9 +693,9 @@ class LinkSuggestionService:
             "to_hash": item.to_content_hash,
             "question": question,
         }
+        await db.commit()
         try:
             answer = await json_data_extractor.decide(
-                db,
                 caller,
                 subject,
                 screening.item_state(item),

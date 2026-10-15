@@ -8,6 +8,7 @@ from src.credits import pricing
 from src.credits.service import InsufficientCreditsError
 from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderAdapter, ProviderFacade, VendorResponse
+from src.settings import settings
 from tests.conftest import signup
 from tests.integration.credits.test_site_billing import balance_usd, set_balance, user_id_of
 
@@ -54,9 +55,8 @@ class ThingFacade(ProviderFacade):
     domain = "things-credit"
     label = "things"
 
-    async def get(self, db, caller, key):
+    async def get(self, caller, key):
         return await self.fetch(
-            db,
             caller,
             "thing.get",
             lambda _: {"key": key},
@@ -66,8 +66,7 @@ class ThingFacade(ProviderFacade):
 
 
 async def fetch(facade, user_id, key):
-    async with unit_of_work() as db:
-        return await facade.get(db, Caller(user_id=user_id), key)
+    return await facade.get(Caller(user_id=user_id), key)
 
 
 async def test_a_free_adapter_is_never_charged_even_with_a_price_set(client, email, monkeypatch):
@@ -152,26 +151,52 @@ async def test_overdrawing_disables_the_websites_instead_of_billing_on_silently(
     assert [s["status"] for s in r.json()["data"]] == ["disabled"]
 
 
-class SlowPaidAdapter(PaidAdapter):
+class GatedPaidAdapter(PaidAdapter):
+    def __init__(self, cost=10_000):
+        super().__init__(cost)
+        self.running = 0
+        self.peak = 0
+        self.gate = asyncio.Event()
+
     async def get(self, key):
-        await asyncio.sleep(0.2)
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        await self.gate.wait()
+        self.running -= 1
         return await super().get(key)
 
 
-async def test_concurrent_paid_calls_cannot_both_pass_the_floor(client, email):
+async def test_a_user_runs_at_most_ten_paid_calls_at_once(client, email):
     await signup(client, email)
     user_id = await user_id_of(client)
-    await set_balance(user_id, 0.3)
+    await set_balance(user_id, 5.0)
 
-    adapter = SlowPaidAdapter(cost=250_000)
+    adapter = GatedPaidAdapter()
     facade = ThingFacade([adapter])
-    results = await asyncio.gather(
-        fetch(facade, user_id, "race-a"), fetch(facade, user_id, "race-b"), return_exceptions=True
-    )
+    calls = [asyncio.create_task(fetch(facade, user_id, f"slot-{i}")) for i in range(12)]
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+    assert adapter.running == 10
 
-    assert adapter.calls == 1
-    assert sum(isinstance(r, InsufficientCreditsError) for r in results) == 1
-    assert await balance_usd(client) == pytest.approx(0.05)
+    adapter.gate.set()
+    await asyncio.gather(*calls)
+
+    assert adapter.peak == 10
+    assert adapter.calls == 12
+    assert await balance_usd(client) == pytest.approx(5.0 - 0.12)
+
+
+async def test_a_failed_vendor_call_frees_its_slot(client, email, monkeypatch):
+    monkeypatch.setattr(settings, "credits_parallel_calls_per_user", 1)
+    await signup(client, email)
+    user_id = await user_id_of(client)
+    await set_balance(user_id, 1.0)
+
+    with pytest.raises(ProviderRequestError):
+        await fetch(ThingFacade([BrokenAdapter()]), user_id, "down")
+    await asyncio.wait_for(fetch(ThingFacade([PaidAdapter()]), user_id, "after"), 2)
+
+    assert await balance_usd(client) == pytest.approx(0.75)
 
 
 async def test_a_paid_call_stays_charged_when_the_caller_rolls_back(client, email):
@@ -181,8 +206,8 @@ async def test_a_paid_call_stays_charged_when_the_caller_rolls_back(client, emai
 
     facade = ThingFacade([PaidAdapter(cost=250_000)])
     with pytest.raises(RuntimeError):
-        async with unit_of_work() as db:
-            await facade.get(db, Caller(user_id=user_id), "rolled-back")
+        async with unit_of_work():
+            await facade.get(Caller(user_id=user_id), "rolled-back")
             raise RuntimeError("request failed after the vendor answered")
 
     assert await balance_usd(client) == pytest.approx(before - 0.25)
