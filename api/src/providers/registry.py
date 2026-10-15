@@ -2,6 +2,7 @@ import hashlib
 import json
 import time
 from collections.abc import Awaitable, Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import unit_of_work
+from src.credits.limiter import paid_calls
 from src.credits.service import InsufficientCreditsError, credit_service
 from src.providers.errors import (
     NoProviderError,
@@ -97,7 +99,6 @@ class ProviderFacade:
 
     async def fetch(
         self,
-        db: AsyncSession,
         caller: Caller,
         capability: str,
         request: Callable[[Any], dict[str, Any]],
@@ -106,21 +107,23 @@ class ProviderFacade:
     ) -> Any:
         started = time.monotonic()
         if ttl is not None:
-            hit = await self._cached(db, capability, request)
+            async with unit_of_work() as db:
+                hit = await self._cached(db, capability, request)
+                if hit is not None:
+                    await self._log(
+                        db,
+                        caller,
+                        capability,
+                        hit.provider,
+                        hit.cache_key,
+                        True,
+                        0,
+                        0,
+                        "ok",
+                        None,
+                        started,
+                    )
             if hit is not None:
-                await self._log(
-                    db,
-                    caller,
-                    capability,
-                    hit.provider,
-                    hit.cache_key,
-                    True,
-                    0,
-                    0,
-                    "ok",
-                    None,
-                    started,
-                )
                 if caller.spend is not None:
                     caller.spend.cache_hits += 1
                 return hit.response
@@ -135,20 +138,15 @@ class ProviderFacade:
             key = cache_key(self.domain, capability, query)
             if adapter.charges and caller.spend is not None:
                 caller.spend.check()
-            async with unit_of_work() as ledger:
+            async with paid_calls.slot(caller.user_id) if adapter.charges else nullcontext():
                 if adapter.charges:
-                    try:
-                        await credit_service.hold_spend(ledger, caller.user_id)
-                    except InsufficientCreditsError as exc:
-                        await self._log_failure(
-                            caller, capability, adapter.id, key, str(exc), started
-                        )
-                        raise
+                    await self._require_balance(caller, capability, adapter.id, key, started)
                 try:
                     result = await call(adapter)
                 except ProviderRequestError as exc:
                     last = exc
                     continue
+            async with unit_of_work() as ledger:
                 charged = await self._settle(
                     ledger, caller, capability, adapter, key, query, result, ttl, started
                 )
@@ -160,6 +158,16 @@ class ProviderFacade:
         assert last is not None
         await self._log_failure(caller, capability, last.provider_id, key, str(last), started)
         raise last
+
+    async def _require_balance(
+        self, caller: Caller, capability: str, provider: str, key: str, started: float
+    ) -> None:
+        try:
+            async with unit_of_work() as ledger:
+                await credit_service.require_balance(ledger, caller.user_id)
+        except InsufficientCreditsError as exc:
+            await self._log_failure(caller, capability, provider, key, str(exc), started)
+            raise
 
     async def _settle(
         self,

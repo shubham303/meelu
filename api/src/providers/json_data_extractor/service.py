@@ -1,8 +1,6 @@
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.providers.json_data_extractor.adapter import DECIDE, Question
 from src.providers.json_data_extractor.openrouter_deepseek import OpenRouterDeepSeekAdapter
 from src.providers.registry import Caller, ProviderFacade
@@ -16,14 +14,12 @@ class JsonDataExtractor(ProviderFacade):
 
     async def decide(
         self,
-        db: AsyncSession,
         caller: Caller,
         subject: dict[str, Any],
         state: Any,
         questions: dict[str, Question],
     ) -> dict[str, Any]:
         return await self.fetch(
-            db,
             caller,
             DECIDE,
             lambda _: {"subject": subject, "questions": questions},

@@ -475,9 +475,9 @@ class PillarPageSuggestionService:
         self, db: AsyncSession, site_id: str, caller: Caller, item: PillarReviewInput
     ) -> SuggestionState | None:
         subject = {"pillar_id": item.id, "members": sorted(m["url"] for m in item.members)}
+        await db.commit()
         try:
             answer = await json_data_extractor.decide(
-                db,
                 caller,
                 subject,
                 screening.item_state(item),
