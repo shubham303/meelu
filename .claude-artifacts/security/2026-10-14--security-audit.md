@@ -85,7 +85,14 @@ urgent problems are money (LLM gateway) and server-side fetches (website).
   `connect.lookup` that rejects private results (keeps Host/SNI). Extend the
   IPv6 ranges.
 
-### H4. Website pins `next@16.3.4` with critical advisories — verified
+### H4. Website pins `next@16.3.4` with critical advisories — verified — FIXED 2026-10-15
+- Fixed: `next` and `eslint-config-next` pinned to 16.4.0, `shadcn` moved to
+  devDependencies (only `globals.css` imports it at build time; the Dockerfile's
+  `npm ci` still installs it). `npm audit --omit=dev` shows no `next` advisory
+  and no critical. Build and tests pass; lint output is unchanged from 16.3.4.
+  Left over, outside H4: high/moderate advisories in `@huggingface/transformers`
+  (onnxruntime-node → adm-zip, global-agent), `image-size`, `sharp` (libvips),
+  `source-map-js` and `gray-matter` (js-yaml).
 - `website/package.json`. npm audit: SSG/ISR cache poisoning on self-hosted
   (GHSA-4jqv-mc3x-m676, GHSA-mcj8-r9mp-w47p — likely reachable, standalone
   build with SSG blog), Image Optimization SSRF (GHSA-cjq9-62q9-8jv4 —
