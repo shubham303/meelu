@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, KeyRound, Trash2 } from "lucide-react";
+import { Check, ExternalLink, KeyRound, Trash2 } from "lucide-react";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
 import type { OwnKeysView, OwnModel } from "@/app/dashboard/agent-tasks";
 
@@ -62,6 +62,17 @@ export function OwnKeyCard() {
         and are billed to your Anthropic account, not your Meelu credits. With a key saved, tasks
         use it by default; you can still pick a Meelu model for a task in the chat. The key is
         encrypted on this device and never sent to Meelu.
+      </p>
+      <p className="text-sm text-sub mt-2">
+        On a Claude Max or Team plan? You can claim monthly API credits for your key.{" "}
+        <a
+          href="https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-accent hover:underline"
+        >
+          Claim credits <ExternalLink size={11} />
+        </a>
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
