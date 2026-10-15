@@ -106,19 +106,18 @@ class KeywordTrackingService:
                 market["language_code"],
                 RankSource.HISTORY,
             )
+            await db.commit()
             for keyword in body.keywords:
                 if keyword not in backfilled_before:
                     since = (today - BACKFILL_LOOKBACK).isoformat()
-                    for snapshot in await seo_data.historical_serps(
-                        db, caller, keyword, market, since
-                    ):
+                    for snapshot in await seo_data.historical_serps(caller, keyword, market, since):
                         rows += rank_rows(
                             keyword, snapshot, market, RankSource.HISTORY, site, today
                         )
                         snapshots += 1
                     backfilled.add(keyword)
                 live = await seo_data.serp_organic(
-                    db, caller, keyword, TRACKED_DEVICE, TRACKED_DEPTH, market
+                    caller, keyword, TRACKED_DEVICE, TRACKED_DEPTH, market
                 )
                 if live is not None:
                     rows += rank_rows(keyword, live, market, RankSource.LIVE, site, today)
@@ -144,10 +143,11 @@ class KeywordTrackingService:
         targets: list[dict],
     ) -> VolumesTracked:
         rows: list[VolumeRow] = []
+        await db.commit()
         for market in targets:
-            for item in await seo_data.keyword_history(db, caller, body.keywords, market):
+            for item in await seo_data.keyword_history(caller, body.keywords, market):
                 rows += history_volume_rows(item, market)
-            for item in await seo_data.keyword_overview(db, caller, body.keywords, market):
+            for item in await seo_data.keyword_overview(caller, body.keywords, market):
                 rows += clickstream_volume_rows(item, market)
         merged = [r for r in merged_volumes(rows) if r.keyword]
         saved = await seo_volume_history.upsert_many(db, user_id, site_id, merged)

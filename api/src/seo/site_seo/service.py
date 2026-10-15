@@ -112,17 +112,18 @@ class SiteSeoService:
             for t in sorted(totals, key=lambda t: -t.impressions_28d)
             if t.impressions_28d > 0
         ][:COMPETITOR_SAMPLE_QUERIES]
+        await db.commit()
 
         for market in targets:
             code, language = market["location_code"], market["language_code"]
-            rivals = await seo_data.rival_domains(db, caller, own, limit, code, language)
+            rivals = await seo_data.rival_domains(caller, own, limit, code, language)
             for rival in rivals["rivals"]:
                 if (row := entry(rival["domain"])) is not None:
                     add_source(row, "shared_keywords")
                     row.shared_keywords = (row.shared_keywords or 0) + (rival["intersections"] or 0)
                     row.avg_position = best(row.avg_position, rival["avgPosition"])
             if queries:
-                serp = await seo_data.serp_competitors(db, caller, queries, limit, code, language)
+                serp = await seo_data.serp_competitors(caller, queries, limit, code, language)
                 for competitor in serp["competitors"]:
                     if (row := entry(competitor["domain"])) is not None:
                         add_source(row, "search_console_serps")
@@ -155,9 +156,10 @@ class SiteSeoService:
             raise HTTPException(409, NO_COMPETITORS)
         saved = set(record.backlink_opportunities)
         found: dict[str, BacklinkOpportunity] = {}
+        await db.commit()
         for target in targets:
             for referrer in await seo_data.referring_domains_gap(
-                db, caller, target, [own], GAP_DOMAINS_PER_COMPETITOR
+                caller, target, [own], GAP_DOMAINS_PER_COMPETITOR
             ):
                 key = own_domain(referrer["target"])
                 if not key or key == own or key in targets:

@@ -22,10 +22,10 @@ class SitePageClassifier:
         caller = Caller(user_id=user_id, site_id=site_id)
         subject = {"page_id": page.id, "content_hash": page.content_hash}
         state = page_state(page.url, page.title, page.h1, page.meta_description, page.body_text)
-        async with unit_of_work() as db:
-            try:
-                result = await json_data_extractor.decide(db, caller, subject, state, QUESTIONS)
-            except ProviderRequestError as exc:
+        try:
+            result = await json_data_extractor.decide(caller, subject, state, QUESTIONS)
+        except ProviderRequestError as exc:
+            async with unit_of_work() as db:
                 await site_page_llm_extractions.upsert(
                     db,
                     user_id,
@@ -34,7 +34,8 @@ class SitePageClassifier:
                         page_id=page.id, extracted_from_hash=page.content_hash, error=str(exc)
                     ),
                 )
-                return False
+            return False
+        async with unit_of_work() as db:
             await site_page_llm_extractions.upsert(
                 db,
                 user_id,
@@ -46,7 +47,7 @@ class SitePageClassifier:
                     **read_answers(result["answers"]),
                 ),
             )
-            return True
+        return True
 
     async def classify_site_batch(self, user_id: str, site_id: str) -> int:
         async with unit_of_work() as db:

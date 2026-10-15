@@ -1,7 +1,6 @@
 import asyncio
 from typing import Any
 
-from src.core.database import unit_of_work
 from src.providers.json_data_extractor.adapter import Question, choice
 from src.providers.json_data_extractor.service import json_data_extractor
 from src.providers.registry import Caller
@@ -31,8 +30,7 @@ def batches(items: list[Any]) -> list[list[Any]]:
 async def ask(
     caller: Caller, subject: dict[str, Any], state: Any, questions: dict[str, Question]
 ) -> dict[str, Any]:
-    async with unit_of_work() as db:
-        result = await json_data_extractor.decide(db, caller, subject, state, questions)
+    result = await json_data_extractor.decide(caller, subject, state, questions)
     return result["answers"]
 
 

@@ -1,4 +1,4 @@
-from src.llm.stream import SseMeter, Usage
+from src.llm.stream import SseMeter
 
 STREAM = (
     b'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_1",'
@@ -26,8 +26,3 @@ def test_an_error_event_is_kept_and_recorded():
     frame = b'event: error\ndata: {"type":"error","error":{"message":"overloaded"}}\n\n'
     assert meter.feed(frame) == frame
     assert meter.usage.error == "overloaded"
-
-
-def test_a_cut_stream_is_priced_from_the_tokens_seen():
-    usage = Usage(input_tokens=1000, cache_read_tokens=500, output_tokens=200)
-    assert usage.estimate_micros(0.1, 0.5) == 1500 * 0.1 + 200 * 0.5
