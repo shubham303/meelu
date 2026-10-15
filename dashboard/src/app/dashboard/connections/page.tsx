@@ -1,138 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Cable, Check, Cpu, ExternalLink, Plug, Trash2 } from "lucide-react";
+import { Cable, ExternalLink, Plug, Trash2 } from "lucide-react";
 import { PageEnter, Stagger } from "@/components/animate";
-import {
-  Badge,
-  Button,
-  Card,
-  ConfirmDelete,
-  Field,
-  Input,
-  PageHeader,
-  Select,
-  Spinner,
-} from "@/components/ui";
+import { Badge, Button, Card, ConfirmDelete, PageHeader, Spinner } from "@/components/ui";
 import { CATEGORY_LABEL, isInstallable, MCP_CATALOG, type CatalogEntry } from "@/lib/mcp-catalog";
 import { formatRelative } from "@/lib/utils";
 import { ModelPricingCard } from "@/features/llm-models/model-pricing-card";
-import type { ConnectorsView, LlmConfigView, LlmProvider } from "../agent-tasks";
-
-const CLAUDE_MODELS = [
-  { id: "", label: "Claude Haiku 4.5 (default)" },
-  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
-  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5" },
-  { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
-  { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
-];
-
-function ModelProviderCard() {
-  const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
-  const [view, setView] = useState<LlmConfigView | null>(null);
-  const [provider, setProvider] = useState<LlmProvider>("meelu");
-  const [model, setModel] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    bridge?.getLlmConfig?.().then((res) => {
-      if ("error" in res) return;
-      setView(res);
-      setProvider(res.provider);
-      setModel(res.model);
-    });
-  }, [bridge]);
-
-  if (!bridge) return null;
-
-  const apply = async (key: string | undefined) => {
-    if (!bridge.setLlmConfig) return;
-    setBusy(true);
-    setErr(null);
-    setSaved(false);
-    const res = await bridge.setLlmConfig({ provider, model, apiKey: key });
-    setBusy(false);
-    if ("error" in res) {
-      setErr(res.error);
-      return;
-    }
-    setView(res);
-    setApiKey("");
-    setSaved(true);
-  };
-
-  return (
-    <Card className="mb-6">
-      <div className="flex items-center gap-2.5">
-        <Cpu size={15} className="text-accent shrink-0" />
-        <p className="font-medium text-ink">Who runs the model</p>
-      </div>
-      <p className="text-sm text-sub mt-1">
-        Meelu runs the model you pick below and charges your credits what it costs. Or run tasks
-        on your own Claude login or Anthropic API key from this device.
-      </p>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Field label="Provider">
-          <Select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as LlmProvider)}
-            aria-label="LLM provider"
-          >
-            <option value="meelu">Meelu credits</option>
-            <option value="anthropic">My Claude (this machine&apos;s login or an API key)</option>
-          </Select>
-        </Field>
-        {provider === "anthropic" && (
-          <>
-            <Field label="Model">
-              <Select value={model} onChange={(e) => setModel(e.target.value)} aria-label="Model">
-                {CLAUDE_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-                {!CLAUDE_MODELS.some((m) => m.id === model) && <option value={model}>{model}</option>}
-              </Select>
-            </Field>
-            <Field label="Anthropic API key">
-              <Input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={
-                  view?.hasApiKey
-                    ? "•••• key saved — type to replace"
-                    : "sk-ant-… (blank = this machine's Claude login)"
-                }
-              />
-            </Field>
-          </>
-        )}
-      </div>
-
-      <div className="mt-4 flex items-center gap-2">
-        <Button onClick={() => void apply(apiKey ? apiKey : undefined)} disabled={busy}>
-          <Plug size={14} /> Save
-        </Button>
-        {provider === "anthropic" && view?.hasApiKey && (
-          <Button variant="outline" onClick={() => void apply("")} disabled={busy}>
-            <Trash2 size={14} /> Remove key
-          </Button>
-        )}
-        {saved && (
-          <span className="flex items-center gap-1.5 text-sm text-good">
-            <Check size={14} /> Saved — applies to the next task
-          </span>
-        )}
-      </div>
-      {err && <p className="text-sm text-bad mt-2">{err}</p>}
-    </Card>
-  );
-}
+import { OwnKeyCard } from "@/features/llm-models/own-key-card";
+import type { ConnectorsView } from "../agent-tasks";
 
 export default function ConnectionsPage() {
   const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
@@ -176,7 +52,7 @@ export default function ConnectionsPage() {
         description="The hands. Meelu is the memory; each platform you connect here is something the agent can act through — publishing, code, data. Keys are encrypted into this device's keychain and never touch Meelu's servers."
       />
 
-      <ModelProviderCard />
+      <OwnKeyCard />
       <ModelPricingCard />
 
       {!canConnect && (

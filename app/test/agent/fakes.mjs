@@ -231,12 +231,26 @@ function textResponse(text) {
   ]);
 }
 
+export const OWN_ANTHROPIC_KEY = "sk-ant-test-good";
+export const OWN_ANTHROPIC_MODELS = [
+  { id: "claude-sonnet-test", display_name: "Claude Sonnet Test" },
+  { id: "claude-haiku-test", display_name: "Claude Haiku Test" },
+];
+
 export async function startLlm() {
   const requests = [];
   const script = [];
   const judge = { answer: () => '{"verdict": "reviewed", "reason": "ok", "suggestion": "Do it."}' };
   const judgeRequests = [];
+  const headers = [];
   const server = http.createServer(async (req, res) => {
+    if (req.method === "GET" && req.url.startsWith("/v1/models")) {
+      const good = req.headers["x-api-key"] === OWN_ANTHROPIC_KEY;
+      res.writeHead(good ? 200 : 401, { "content-type": "application/json" });
+      res.end(JSON.stringify(good ? { data: OWN_ANTHROPIC_MODELS } : { type: "error" }));
+      return;
+    }
+    headers.push(req.headers);
     let body = "";
     for await (const c of req) body += c;
     let parsed = null;
@@ -282,6 +296,7 @@ export async function startLlm() {
     script,
     judge,
     judgeRequests,
+    headers,
     close: () => server.close(),
   };
 }

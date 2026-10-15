@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { api } from "@/lib/use-api";
+import type { OwnModel } from "@/app/dashboard/agent-tasks";
 
 export type LlmTier = "featured" | "well_known" | "other";
 
@@ -45,6 +46,27 @@ export async function setDefaultModel(id: string): Promise<string> {
     body: { defaultModel: id },
   });
   return res.defaultModel;
+}
+
+const OWN_ANTHROPIC_PREFIX = "own:anthropic/";
+
+export function ownModelId(id: string): string {
+  return `${OWN_ANTHROPIC_PREFIX}${id}`;
+}
+
+export interface OwnModels {
+  models: OwnModel[];
+  defaultModel: string;
+}
+
+export async function listOwnModels(): Promise<OwnModels | null> {
+  const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;
+  if (!bridge?.getOwnKeys || !bridge.ownModels) return null;
+  const keys = await bridge.getOwnKeys();
+  if ("error" in keys || !keys.anthropic.saved) return null;
+  const listed = await bridge.ownModels();
+  if ("error" in listed) return null;
+  return { models: listed.models, defaultModel: keys.anthropic.defaultModel };
 }
 
 export function price(usdPerMillion: number): string {
