@@ -1,5 +1,6 @@
 import dns from "node:dns/promises";
 import net from "node:net";
+import { Agent, fetch, type Response } from "undici";
 import { normalise } from "./url";
 
 export const USER_AGENT =
@@ -16,34 +17,99 @@ export const MAX_HTML_BYTES = 3_000_000;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 const MAX_HOPS = 5;
 
+function isPrivateIpv4(ip: string): boolean {
+  const [a, b, c] = ip.split(".").map(Number);
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  // Only the /24s RFC 6890 reserves, not the whole of 192.0.0.0/16 —
+  // 192.0.78.0/24 is WordPress.com and very much on the public internet.
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  if (a === 198 && b === 51 && c === 100) return true;
+  if (a === 203 && b === 0 && c === 113) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+function ipv6Hextets(ip: string): number[] | null {
+  let text = ip.toLowerCase().split("%")[0];
+  const tail = text.match(/(\d+\.\d+\.\d+\.\d+)$/);
+  if (tail) {
+    const [a, b, c, d] = tail[1].split(".").map(Number);
+    text = `${text.slice(0, -tail[1].length)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head, rest] = text.split("::");
+  const left = head ? head.split(":") : [];
+  const right = rest === undefined ? [] : rest ? rest.split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if (rest === undefined ? left.length !== 8 : missing < 0) return null;
+  const words = [...left, ...Array(rest === undefined ? 0 : missing).fill("0"), ...right];
+  const parsed = words.map((w) => parseInt(w, 16));
+  return parsed.length === 8 && parsed.every((n) => n >= 0 && n <= 0xffff) ? parsed : null;
+}
+
+function embeddedIpv4(words: number[]): string {
+  return [words[6] >> 8, words[6] & 0xff, words[7] >> 8, words[7] & 0xff].join(".");
+}
+
+function isPrivateIpv6(ip: string): boolean {
+  const w = ipv6Hextets(ip);
+  if (!w) return true;
+  const zeroUntil = (n: number) => w.slice(0, n).every((x) => x === 0);
+  if (zeroUntil(5) && w[5] === 0xffff) return isPrivateIpv4(embeddedIpv4(w));
+  if (zeroUntil(6)) return true;
+  if ((w[0] & 0xffc0) === 0xfe80 || (w[0] & 0xffc0) === 0xfec0) return true;
+  if ((w[0] & 0xfe00) === 0xfc00) return true;
+  if ((w[0] & 0xff00) === 0xff00) return true;
+  if (w[0] === 0x64 && w[1] === 0xff9b) return true;
+  if (w[0] === 0x2002) return true;
+  if (w[0] === 0x2001 && (w[1] === 0 || w[1] === 0xdb8)) return true;
+  if (w[0] === 0x100 && w[1] === 0 && w[2] === 0 && w[3] === 0) return true;
+  return false;
+}
+
 /** Ranges no public website lives on, and that a server must never be talked into fetching. */
-function isPrivateAddress(ip: string): boolean {
+export function isPrivateAddress(ip: string): boolean {
   const version = net.isIP(ip);
-  if (version === 4) {
-    const [a, b, c] = ip.split(".").map(Number);
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    // Only the /24s RFC 6890 reserves, not the whole of 192.0.0.0/16 —
-    // 192.0.78.0/24 is WordPress.com and very much on the public internet.
-    if (a === 192 && b === 0 && (c === 0 || c === 2)) return true;
-    if (a === 198 && (b === 18 || b === 19)) return true;
-    if (a === 198 && b === 51 && c === 100) return true;
-    if (a === 203 && b === 0 && c === 113) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-    if (a >= 224) return true;
-    return false;
-  }
-  if (version === 6) {
-    const low = ip.toLowerCase();
-    if (low === "::" || low === "::1") return true;
-    if (low.startsWith("fe80") || low.startsWith("fec0")) return true;
-    if (/^f[cd]/.test(low)) return true;
-    if (low.startsWith("::ffff:")) return isPrivateAddress(low.slice(7));
-    return false;
-  }
+  if (version === 4) return isPrivateIpv4(ip);
+  if (version === 6) return isPrivateIpv6(ip);
   return true;
+}
+
+const PRIVATE_TARGET = "EPRIVATETARGET";
+
+type LookupCallback = (
+  err: NodeJS.ErrnoException | null,
+  address: string | Array<{ address: string; family: number }>,
+  family?: number,
+) => void;
+
+function publicOnlyLookup(hostname: string, options: { all?: boolean }, callback: LookupCallback) {
+  dns.lookup(hostname, { all: true }).then(
+    (records) => {
+      if (records.length === 0 || records.some((r) => isPrivateAddress(r.address))) {
+        const err: NodeJS.ErrnoException = new Error(`${hostname} points at a private network address.`);
+        err.code = PRIVATE_TARGET;
+        callback(err, "");
+        return;
+      }
+      if (options.all) callback(null, records);
+      else callback(null, records[0].address, records[0].family);
+    },
+    (err: NodeJS.ErrnoException) => callback(err, ""),
+  );
+}
+
+const publicAgent = new Agent({ connect: { lookup: publicOnlyLookup } });
+
+function blockedByLookup(error: unknown): boolean {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if ((e as NodeJS.ErrnoException).code === PRIVATE_TARGET) return true;
+  }
+  return false;
 }
 
 const BLOCKED_HOSTS = /(^|\.)(localhost|local|internal|intranet|lan|home|test|invalid|example)$/i;
@@ -175,6 +241,7 @@ export async function fetchUrl(
     let res: Response;
     try {
       res = await fetch(current, {
+        dispatcher: publicAgent,
         method,
         headers: { "user-agent": userAgent, accept },
         redirect: "manual",
@@ -183,6 +250,9 @@ export async function fetchUrl(
           : AbortSignal.timeout(timeoutMs),
       });
     } catch (e) {
+      if (blockedByLookup(e)) {
+        return { url, chain, ...EMPTY, blockedReason: "That host points at a private network address." };
+      }
       const message = e instanceof Error ? e.message : String(e);
       return { url, chain, ...EMPTY, error: message };
     }
