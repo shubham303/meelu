@@ -1,225 +1,503 @@
-import type { ContentPiece, SiteChannel } from "@demo/lib/types";
+import type { ContentPiece, PieceCheck } from "@demo/lib/types";
 import type { PieceIssue } from "@/app/demo/dashboard/content/types";
 import { ago, DAY, HOUR } from "../rand";
 import { pageId, SITE_ID } from "./site";
 
-const LINKEDIN_RULES = [
-  "Open with one concrete sentence that could only be written by someone who did the thing. No throat-clearing, no \"In today's fast-paced world\".",
-  "The first two lines are all anyone sees before \"…more\". Earn the click there or nowhere.",
-  "Short paragraphs, one idea each, blank line between. Walls of text lose.",
-  "800–1,600 characters is the sweet spot. The limit is 3,000; needing it is usually a sign the post is two posts.",
-  "Close with a real question or a clear takeaway — not \"Thoughts? 👇\".",
-  "First person, past tense, specific. \"We cut onboarding from 6 steps to 2\" beats \"Streamlining onboarding is critical\".",
-  "Numbers, names and dates wherever they're true. Vagueness reads as bluffing.",
-  "Say the uncomfortable part. The posts that land admit a cost, a mistake, or a tradeoff.",
-  "Avoid: Engagement bait: \"Agree?\", \"Who else?\", \"Save this for later\", follow-for-follow, fake polls.",
-  "Avoid: The broetry format — one. line. per. paragraph. for. drama.",
-  "Avoid: Emoji bullets and emoji section headers. At most one emoji, if any.",
-  "Avoid: Hashtag stuffing. Three at the end, or none.",
-  "Avoid: Anything that reads as if it were written by a language model: \"delve\", \"leverage\", \"in today's landscape\", \"game-changer\", \"unlock\", \"supercharge\".",
-  "Avoid: External links in the body when it can be avoided — LinkedIn suppresses reach on them. Put the link in the first comment and say so.",
-  "3,000 character hard limit.",
-  "No markdown. Bold and italics do not render; asterisks show up literally.",
-  "Never open a post with a question — a habit we are trying to break.",
-];
+const MINUTE = 60_000;
+const TITLE_MAX = 60;
+const META_MIN = 70;
+const META_MAX = 160;
 
-const X_RULES = [
-  "One idea per post. If it needs a second sentence to make sense, it is a thread.",
-  "Lead with the claim, then the evidence. Nobody reads to the end for the point.",
-  "Numbers beat adjectives. \"38% of invoices paid late\" beats \"lots of late invoices\".",
-  "No hashtags unless it is an event tag. They read as spam.",
-  "Links cost reach. Put the link in a reply and say \"link below\".",
-  "280 character hard limit; a thread is many posts, each under the limit.",
-];
-
-const INSTAGRAM_RULES = [
-  "The image does the work; the caption explains, sharpens or undercuts it. Write the caption to the picture.",
-  "Say what the image is, for anyone who can't see it well. Then say why it's here.",
-  "First line is the hook; the rest folds behind \"more\".",
-  "Links in captions are dead text. Say \"link in bio\" only if the bio link actually goes there.",
-  "Up to five hashtags, at the end, all relevant. No hashtag walls.",
-  "A caption with no picture cannot post. Instagram takes the image first, the words second.",
-];
-
-const WEBSITE_RULES = [
-  "Plain, slightly dry, explains rather than sells. The reader is a freelancer with twenty minutes.",
-  "Lead with the answer. Background goes after, if at all.",
-  "One H1, matching the title. H2s every 250–400 words; the H2 should make sense in a table of contents on its own.",
-  "Short paragraphs. Bullet lists for steps, not for prose.",
-  "Link to the product feature once where it is genuinely the answer, never in the first paragraph.",
-  "Every number has a source or is ours. If it is ours, say how we counted.",
-  "No \"in this article we will\". No \"conclusion\" heading.",
-  "Meta description under 155 characters, written as a sentence, not a keyword list.",
-];
-
-function channel(key: string, label: string, enabled: boolean, rules: string[], composeUrl: string, characterLimit: number, requiresMedia: boolean, maxLinks: number | null, maxHashtags: number | null, maxMedia: number): SiteChannel {
-  return {
-    id: `ch_${key}`,
-    createdAt: ago(41 * DAY),
-    updatedAt: ago(9 * DAY),
-    siteId: SITE_ID,
-    channelKey: key,
-    enabled,
-    rules,
-    label,
-    composeUrl,
-    characterLimit,
-    requiresMedia,
-    maxLinks,
-    maxHashtags,
-    maxMedia,
-  };
+export interface PageFieldsInput {
+  title: string;
+  h1: string;
+  metaDescription: string;
+  targetKeyword?: string | null;
+  bodyMarkdown: string;
 }
 
-export const CHANNELS: SiteChannel[] = [
-  channel("website", "Website", true, WEBSITE_RULES, "https://ledgerly.app/admin/posts/new", 100000, false, null, null, 20),
-  channel("linkedin", "LinkedIn", true, LINKEDIN_RULES, "https://www.linkedin.com/feed/?shareActive=true", 3000, false, 1, 3, 9),
-  channel("twitter", "X", true, X_RULES, "https://x.com/compose/post", 280, false, 1, 2, 4),
-  channel("instagram", "Instagram", true, INSTAGRAM_RULES, "https://www.instagram.com/", 2200, true, 0, 5, 10),
-  channel("threads", "Threads", false, ["One thought, plainly. Threads rewards replies, so end where a reply is easy."], "https://www.threads.net/", 500, false, 1, 1, 10),
-  channel("bluesky", "Bluesky", false, ["Short, wry, no hashtags. Bluesky reads like early Twitter."], "https://bsky.app/", 300, false, 1, 2, 4),
-  channel("facebook", "Facebook", false, ["Longer is fine. Pictures do most of the work."], "https://www.facebook.com/", 63206, false, 1, 2, 10),
-  channel("tiktok", "TikTok", false, ["The caption is a hook for the video, not a summary of it."], "https://www.tiktok.com/upload", 2200, true, 0, 4, 1),
-  channel("pinterest", "Pinterest", false, ["Title like a search result; description like alt text."], "https://www.pinterest.com/pin-builder/", 500, true, 1, 3, 1),
-  channel("telegram", "Telegram", false, ["Plain text, one link, no hashtags."], "https://web.telegram.org/", 4096, false, 2, 0, 10),
-  channel("google_business", "Google Business", false, ["Local, factual, current. Opening hours beat slogans."], "https://business.google.com/", 1500, false, 1, 0, 10),
-];
+export function wordCount(markdown: string): number {
+  return (markdown.match(/\S+/g) ?? []).length;
+}
 
-const PIECE_BODIES: Record<string, string> = {
-  invoicing_guide: `## The short version
+function firstParagraph(markdown: string): string {
+  for (const block of markdown.split(/\n\s*\n/)) {
+    const text = block.trim();
+    if (text && !/^\s{0,3}#{1,6}\s/.test(text) && !/^\s*!\[/.test(text)) return text;
+  }
+  return "";
+}
 
-Send the invoice the day the work ships. Make the due date a real date, not "net 30". Remind on day one after it, not day thirty.
+function contains(haystack: string, keyword: string): boolean {
+  return haystack.toLowerCase().split(/\s+/).join(" ").includes(keyword);
+}
 
-That is the whole method. The rest of this piece is why each part matters and how to set it up so you never think about it again.
+function warn(code: string, message: string): PieceCheck {
+  return { code, level: "warn", message };
+}
+
+export function runChecks(page: PageFieldsInput): PieceCheck[] {
+  const checks: PieceCheck[] = [];
+  if (page.title.length > TITLE_MAX) {
+    checks.push(warn("title_length", `Search results cut titles past about ${TITLE_MAX} characters; this is ${page.title.length}.`));
+  }
+  if (!page.h1) checks.push(warn("h1_missing", "The page has no H1."));
+  const meta = page.metaDescription;
+  if (!meta) {
+    checks.push(warn("meta_description_missing", "The page has no meta description."));
+  } else if (meta.length < META_MIN || meta.length > META_MAX) {
+    checks.push(warn("meta_description_length", `A meta description reads best at ${META_MIN}–${META_MAX} characters; this is ${meta.length}.`));
+  }
+  if (/^#\s+\S/m.test(page.bodyMarkdown)) {
+    checks.push(warn("body_h1", "The body has its own H1. The page's H1 is its own field; start the body's headings at H2."));
+  }
+  const keyword = page.targetKeyword;
+  if (keyword) {
+    const places: Array<[string, string]> = [
+      ["title", page.title],
+      ["H1", page.h1],
+      ["meta description", meta],
+      ["first paragraph", firstParagraph(page.bodyMarkdown)],
+    ];
+    const missing = places.filter(([, text]) => !contains(text, keyword)).map(([name]) => name);
+    if (missing.length) {
+      checks.push(warn("keyword_placement", `The target keyword "${keyword}" is missing from the ${missing.join(", ")}.`));
+    }
+  }
+  return checks;
+}
+
+const BODY = {
+  pillar: `Invoicing for freelancers comes down to three habits: send the invoice the day the work ships, put a real date on it, and remind the client the day after that date passes. Everything else on this page is detail that makes those three habits easier.
+
+We looked at 4,100 invoices sent through Ledgerly in the last twelve months. Invoices sent within 24 hours of delivery were paid a median of 9 days sooner than invoices sent a week later. Nothing else we measured came close.
+
+## What an invoice must include
+
+A client's finance team pays invoices that look like invoices. Leave something off and it goes back to you with a question, and the clock restarts.
+
+- Your name or business name, address and tax number if you have one
+- The client's legal name, not the name of the person you work with
+- A unique invoice number (see [how to number invoices](/blog/invoice-numbering))
+- The issue date and a due date written as a date
+- What you did, in lines a stranger could check against the contract
+- The total, the currency, and how to pay
+
+## Choose payment terms you will enforce
+
+Net 30 is a habit, not a law. For a new client, 14 days is normal and nobody will blink. For a large company with a fixed payment run, ask which day the run happens and set your due date the day before it.
+
+Our guide to [invoice payment terms](/blog/invoice-payment-terms) covers deposits, milestones and what to write when a client asks for net 60.
 
 ## Send it the day the work ships
 
-Every day between delivery and invoice is a day the client's finance team does not know you exist. We looked at 4,100 invoices sent through Ledgerly last year: invoices sent within 24 hours of delivery were paid a median of 9 days sooner than invoices sent a week later.
-
-## Make the due date a date
-
-"Net 30" means "thirty days from whenever they decide to open this". A date on the invoice — 14 October — is something a person can put in a calendar and a bookkeeper can sort by.
+Every day between delivery and invoice is a day the client's accounts team does not know you exist. Make sending the invoice part of delivering the work: the same email, or the next one.
 
 ## Remind once, early, and kindly
 
 The first reminder should go out the day after the due date. Not because the client is late — they may not have seen it — but because a reminder a day late reads as organised, and a reminder a month late reads as desperate.
 
-Ledgerly sends that reminder for you if you turn it on. Most people do not, which is the point of this paragraph.`,
-  linkedin_late: `We looked at 4,100 invoices sent through Ledgerly last year to answer one question: what actually gets a freelancer paid faster?
+If a client is properly late, [what to do about late-paying clients](/blog/late-paying-clients) walks through the second and third messages, and when a [late fee](/blog/late-fee-invoice) is worth adding.
 
-Not the payment terms. Not the late fee. Not the polite tone.
+## Recurring and multi-currency work
 
-The single biggest factor was how quickly the invoice went out after the work was delivered. Same-day invoices were paid a median of 9 days sooner than invoices sent a week later.
+Retainers should be [recurring invoices](/blog/recurring-invoices) that go out on the same day every month without you touching them. If you bill clients abroad, invoice in their currency and record the payout in yours; [multi-currency invoicing](/blog/multi-currency-invoicing) explains how to handle the gap.
 
-Nine days. For doing the boring part on the day instead of on Friday.
+## Keep the records your accountant will ask for
 
-We built the reminder feature because people asked for it. But if we had to pick one thing to tell every new customer, it would be this: invoice before you close the laptop.
+Every invoice you send is income you will have to report. Keep the PDF, mark it paid on the day the money lands, and match it to the bank deposit. Ledgerly does that matching for you when your bank feed is connected, which is most of what [invoicing in Ledgerly](/features/invoicing) is for.`,
 
-What is the thing you keep putting off until Friday?`,
-  x_late: `4,100 invoices, one finding: same-day invoicing gets you paid a median of 9 days sooner than invoicing a week later.
+  freshbooks: `Ledgerly and FreshBooks both send invoices, track expenses and get you ready for tax season. The difference is who they are built for: FreshBooks grew into a small-business suite with payroll and team seats, while Ledgerly stays a one-person tool and charges like one.
 
-Not the terms. Not the late fee. Just sending it.`,
-  ig_receipts: `The receipt drawer, before and after.
+## The short answer
 
-Left: eleven months of paper, a coffee ring, and one receipt from a café that closed in 2023.
+Pick FreshBooks if you employ people or plan to this year. Pick Ledgerly if you work alone, bill a handful of clients and want your books done in ten minutes a week.
 
-Right: the same receipts, attached to the transactions they belong to, in the time it took the coffee to go cold.
+## Pricing
 
-If your drawer looks like the left, the fix is thirty seconds per receipt, done on the day. Not a Sunday. Never a Sunday.
+| | Ledgerly | FreshBooks Lite |
+|---|---|---|
+| Monthly price | $12 | $19 |
+| Billable clients | Unlimited | 5 |
+| Bank feeds | Included | Included |
+| Payment reminders | Included | Included |
+| Mileage tracking | Included | Plus plan only |
 
-#bookkeeping #freelancelife #receipts`,
-  quarterly_taxes: `## Why estimated taxes exist
+FreshBooks discounts the first months heavily, so compare the price you will pay in month seven, not month one.
 
-If nobody withholds tax from your income, the IRS wants it in four instalments through the year rather than one payment in April. Miss the instalments and you owe a penalty even if you pay in full at the end.
+## Invoicing
 
-## When they are due
+Both send branded invoices, accept card payments through Stripe and send reminders. FreshBooks lets a client log in to a portal and see every invoice; Ledgerly sends a plain link per invoice. If your clients are agencies that want a portal, that matters. If they are people, it does not.
 
-15 April, 15 June, 15 September and 15 January. The gaps are uneven; that is not a typo.
+## Expenses and receipts
+
+Ledgerly matches a receipt photo to the bank transaction it belongs to, which is the part of bookkeeping most freelancers skip. FreshBooks does the same on its Plus plan.
+
+## Taxes
+
+Ledgerly shows a quarterly estimate based on what you actually earned. FreshBooks leaves estimates to your accountant. Neither files for you.
+
+## Moving from FreshBooks
+
+Export your clients and invoices as CSV from FreshBooks, then import both on the [Ledgerly import page](/docs/create-an-invoice). Open invoices keep their numbers, so nothing changes for your clients.`,
+
+  reminders: `Automatic payment reminders let Ledgerly email a client when an invoice is due and again when it is overdue. You choose when each reminder goes, and you can switch them off for any one client.
+
+## Turn reminders on
+
+1. Open **Settings → Invoicing**.
+2. Under **Payment reminders**, switch on **Send reminders**.
+3. Pick when the first reminder goes: on the due date, or one, three or seven days after it.
+4. Add up to two follow-ups if you want them.
+5. Save.
+
+Reminders apply to every invoice sent after you save. Invoices you sent before keep the setting they were sent with.
+
+## Edit the wording
+
+Each reminder uses a template you can change under **Settings → Email templates**. Keep the invoice number and the amount in the first line; that is what a finance inbox searches for.
+
+## Turn reminders off for one client
+
+Open the client, choose **Edit**, and untick **Send payment reminders**. Useful for a client who pays on a fixed run and finds reminders noisy.
+
+## What the client sees
+
+A short email from your business name with the invoice number, the amount due, the due date and a link to pay. Ledgerly's name does not appear unless you are on the free plan.
+
+## Troubleshooting
+
+If a reminder did not go out, check that the invoice was **sent** rather than downloaded, and that the client has an email address. Reminders never go to invoices marked paid, even partly.`,
+
+  quarterly: `Quarterly estimated taxes are how freelancers pay income tax during the year when nobody withholds it from their pay. If you expect to owe $1,000 or more for the year, the IRS wants four payments instead of one in April.
+
+## The 2027 due dates
+
+| Covers income earned | Due |
+|---|---|
+| 1 January – 31 March | 15 April 2027 |
+| 1 April – 31 May | 15 June 2027 |
+| 1 June – 31 August | 15 September 2027 |
+| 1 September – 31 December | 18 January 2028 |
+
+The periods are uneven on purpose. When a date falls on a weekend or holiday, it moves to the next working day.
 
 ## How much to pay
 
-The safe harbour rule: pay at least 100% of last year's tax (110% if you earned over $150k) split into four, and you cannot be penalised however this year turns out.
+The simplest safe route is the safe harbour rule: pay at least 100% of last year's total tax, split into four. If your adjusted gross income last year was over $150,000, make it 110%. Do that and you owe no penalty, however this year turns out.
 
-## What Ledgerly does with this
+If your income dropped this year, pay based on this year instead. It is more work, because you have to estimate, but it keeps the cash in your account.
 
-Every quarter it looks at your actual income and expenses, applies your bracket, and shows the number. You still write the cheque.`,
-  wave_x_thread: `Wave cut its free plan this month. If you are on it, here is what changed and what it costs now. A thread.`,
-  ig_blocked: `Month-end, done by 9:14am on the first.
+## What happens if you miss one
 
-Three clients invoiced, two reconciliations, one coffee.`,
+You owe a penalty that works like interest, currently around 8% a year on the amount you were short, for the days you were short. It is not a disaster, but it is avoidable.
+
+## Paying
+
+Pay through IRS Direct Pay or EFTPS. Keep the confirmation number; you will need the total on your annual return.
+
+## Where Ledgerly helps
+
+Every quarter Ledgerly looks at your income and [deductible expenses](/blog/deductible-expenses-freelancers), applies your bracket and shows the number to pay. You still make the payment yourself. See [taxes in Ledgerly](/features/tax).`,
+
+  lateFees: `# Late fees: what is allowed and what works
+
+A late fee is only worth adding if it is in your contract before the work starts and on the invoice before it is overdue. Added afterwards, it reads as a threat, and most clients will simply not pay it.
+
+## Is a late fee legal?
+
+In most US states, yes, if the client agreed to it in advance. Many states cap the rate; 1.5% a month is common and safe almost everywhere. In the UK, the Late Payment of Commercial Debts Act lets you charge 8% above the Bank of England base rate on business-to-business invoices, even without a clause.
+
+## Fixed fee or interest?
+
+A fixed fee — $25, say — is easier to explain and easier to waive. Monthly interest scales with the invoice, which matters on a $9,000 project and looks petty on a $300 one.
+
+## Does it get you paid faster?
+
+Barely. In our data, invoices with a late-fee line were paid a median of two days sooner than those without. A reminder the day after the due date did more than four times as much.
+
+## How to word it
+
+Put one line under the total: "Payments received after 14 November 2026 incur a fee of 1.5% per month." Keep it plain and it does its job without sounding hostile.
+
+If a client is already late, read [what to do about late-paying clients](/blog/late-paying-clients) before you reach for the fee.`,
+
+  photographers: `Photographers bill in a way most accounting tools were not built for: a deposit to hold the date, a balance after the shoot, a print order three weeks later, and mileage to a venue two hours away.
+
+## Deposits that hold the date
+
+Send a deposit invoice from the booking itself. When the shoot is done, Ledgerly turns the rest into the balance invoice and shows the deposit already paid, so the client never sees the full amount twice.
+
+## Mileage without a logbook
+
+Turn on [mileage tracking](/features/mileage) and Ledgerly records drives to client locations from your phone. At tax time the total is already in your deductible expenses.
+
+## Gear is an expense, not a mystery
+
+Lenses, bodies and lighting go in as equipment, so your accountant can depreciate them properly instead of you guessing.`,
+
+  mileage: `A mileage log is a record of every business drive: the date, where you went, why, and how far. The IRS asks for one if you claim vehicle costs, and "about 400 miles a month" is not a log.
+
+## What to record
+
+- Date of the drive
+- Start and end point
+- Business purpose
+- Miles driven
+
+TODO: add the template download and the 2027 standard rate once it is announced.`,
 };
 
-function piece(id: string, title: string, channelKey: string, body: string, opts: Partial<ContentPiece> = {}): ContentPiece {
-  const checks = opts.checks ?? [];
-  return {
-    id,
-    createdAt: ago(6 * DAY),
-    updatedAt: ago(3 * HOUR),
-    siteId: SITE_ID,
-    title,
-    channelKey,
-    status: checks.some((c) => c.level === "block") ? "blocked" : "draft",
-    wordCount: body.split(/\s+/).filter(Boolean).length,
-    checks,
-    mediaSource: "none",
-    mediaUrl: null,
-    mediaAlt: null,
-    mediaWidth: null,
-    mediaHeight: null,
-    mediaCreditName: null,
-    mediaCreditUrl: null,
-    mediaUploadId: null,
-    parentPieceId: null,
-    bodyMarkdown: body,
-    createdBy: "agent",
-    sourcePageId: null,
-    ...opts,
-  };
-}
-
-export const PIECES: ContentPiece[] = [
-  piece("pc_1", "How to get paid faster: what 4,100 invoices told us", "website", PIECE_BODIES.invoicing_guide, { createdAt: ago(2 * DAY), updatedAt: ago(40 * 60_000), sourcePageId: pageId("/blog/late-paying-clients") }),
-  piece("pc_2", "Same-day invoicing gets you paid 9 days sooner", "linkedin", PIECE_BODIES.linkedin_late, { createdAt: ago(2 * DAY), updatedAt: ago(2 * HOUR), parentPieceId: "pc_1" }),
-  piece("pc_3", "4,100 invoices, one finding", "twitter", PIECE_BODIES.x_late, { createdAt: ago(2 * DAY), updatedAt: ago(2 * HOUR), parentPieceId: "pc_1" }),
-  piece("pc_4", "The receipt drawer, before and after", "instagram", PIECE_BODIES.ig_receipts, {
-    createdAt: ago(4 * DAY),
-    updatedAt: ago(DAY),
-    mediaSource: "unsplash",
+const UNSPLASH = {
+  desk: {
     mediaUrl: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=1200&q=80",
-    mediaAlt: "A wooden desk with a stack of paper receipts beside a laptop",
+    mediaAlt: "A wooden desk with a laptop, a calculator and a stack of paper invoices",
     mediaWidth: 1200,
     mediaHeight: 800,
     mediaCreditName: "Kelly Sikkema",
     mediaCreditUrl: "https://unsplash.com/@kellysikkema",
+  },
+  camera: {
+    mediaUrl: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=1200&q=80",
+    mediaAlt: "A photographer holding a mirrorless camera at a shoot",
+    mediaWidth: 1200,
+    mediaHeight: 800,
+    mediaCreditName: "Alexander Andrews",
+    mediaCreditUrl: "https://unsplash.com/@alex_andrews",
+  },
+};
+
+interface Seed {
+  id: string;
+  title: string;
+  h1: string;
+  metaDescription: string;
+  slug: string | null;
+  targetKeyword: string | null;
+  bodyMarkdown: string;
+  createdBy: "agent" | "user";
+  createdAt: string;
+  updatedAt: string;
+  sourcePageId?: string | null;
+  media?: (typeof UNSPLASH)["desk"];
+}
+
+export function buildPiece(seed: Seed): ContentPiece {
+  return {
+    id: seed.id,
+    siteId: SITE_ID,
+    createdAt: seed.createdAt,
+    updatedAt: seed.updatedAt,
+    title: seed.title,
+    h1: seed.h1,
+    metaDescription: seed.metaDescription,
+    slug: seed.slug,
+    targetKeyword: seed.targetKeyword,
+    bodyMarkdown: seed.bodyMarkdown,
+    wordCount: wordCount(seed.bodyMarkdown),
+    checks: runChecks(seed),
+    createdBy: seed.createdBy,
+    sourcePageId: seed.sourcePageId ?? null,
+    mediaSource: seed.media ? "unsplash" : "none",
+    mediaUrl: seed.media?.mediaUrl ?? null,
+    mediaAlt: seed.media?.mediaAlt ?? null,
+    mediaWidth: seed.media?.mediaWidth ?? null,
+    mediaHeight: seed.media?.mediaHeight ?? null,
+    mediaCreditName: seed.media?.mediaCreditName ?? null,
+    mediaCreditUrl: seed.media?.mediaCreditUrl ?? null,
+    mediaUploadId: null,
+  };
+}
+
+export const PIECES: ContentPiece[] = [
+  buildPiece({
+    id: "pc_pillar",
+    title: "Invoicing for freelancers: the complete guide",
+    h1: "Invoicing for freelancers: how to get paid on time",
+    metaDescription: "Invoicing for freelancers in three habits: send it the day the work ships, put a real date on it, and remind the day after. What 4,100 invoices showed.",
+    slug: "/guides/invoicing-for-freelancers",
+    targetKeyword: "invoicing for freelancers",
+    bodyMarkdown: BODY.pillar,
+    createdBy: "agent",
+    createdAt: ago(3 * DAY),
+    updatedAt: ago(38 * MINUTE),
+    sourcePageId: pageId("/blog/how-to-invoice-as-a-freelancer"),
+    media: UNSPLASH.desk,
   }),
-  piece("pc_5", "Quarterly estimated taxes: the 2026 dates and the safe-harbour rule", "website", PIECE_BODIES.quarterly_taxes, { createdAt: ago(8 * DAY), updatedAt: ago(5 * DAY), createdBy: "user" }),
-  piece("pc_6", "Wave cut its free plan — what changed", "twitter", PIECE_BODIES.wave_x_thread, { createdAt: ago(9 * DAY), updatedAt: ago(9 * DAY) }),
-  piece("pc_7", "Month-end, done by 9:14am", "instagram", PIECE_BODIES.ig_blocked, {
+  buildPiece({
+    id: "pc_freshbooks",
+    title: "Ledgerly vs FreshBooks: which is better for a one-person business in 2027?",
+    h1: "Ledgerly vs FreshBooks",
+    metaDescription: "Ledgerly vs FreshBooks for freelancers: pricing, invoicing, expenses and taxes compared, and which one fits a one-person business.",
+    slug: "/compare/freshbooks",
+    targetKeyword: "ledgerly vs freshbooks",
+    bodyMarkdown: BODY.freshbooks,
+    createdBy: "agent",
+    createdAt: ago(5 * DAY),
+    updatedAt: ago(4 * HOUR),
+    sourcePageId: pageId("/compare/freshbooks"),
+  }),
+  buildPiece({
+    id: "pc_reminders",
+    title: "Set up automatic payment reminders | Ledgerly Help",
+    h1: "Set up automatic payment reminders",
+    metaDescription: "Turn on automatic payment reminders in Ledgerly, choose when they go out, edit the wording and switch them off for one client.",
+    slug: "/docs/payment-reminders",
+    targetKeyword: "automatic payment reminders",
+    bodyMarkdown: BODY.reminders,
+    createdBy: "user",
+    createdAt: ago(9 * DAY),
+    updatedAt: ago(DAY + 3 * HOUR),
+    sourcePageId: pageId("/docs/payment-reminders"),
+  }),
+  buildPiece({
+    id: "pc_quarterly",
+    title: "Quarterly estimated taxes: 2027 due dates",
+    h1: "Quarterly estimated taxes for freelancers: 2027 dates and how much to pay",
+    metaDescription: "The 2027 quarterly estimated tax dates.",
+    slug: "/blog/quarterly-estimated-taxes-2027",
+    targetKeyword: "quarterly estimated taxes",
+    bodyMarkdown: BODY.quarterly,
+    createdBy: "agent",
+    createdAt: ago(2 * DAY),
+    updatedAt: ago(6 * HOUR),
+    sourcePageId: pageId("/blog/quarterly-estimated-taxes-explained"),
+  }),
+  buildPiece({
+    id: "pc_late_fees",
+    title: "Late fees on invoices: what is legal and what works",
+    h1: "Late fees on invoices",
+    metaDescription: "Can a freelancer charge a late fee? What US and UK rules allow, fixed fee or interest, how to word it, and whether it actually gets you paid sooner.",
+    slug: "/blog/late-fee-on-invoices",
+    targetKeyword: "late fees on invoices",
+    bodyMarkdown: BODY.lateFees,
+    createdBy: "agent",
+    createdAt: ago(6 * DAY),
+    updatedAt: ago(2 * DAY),
+    sourcePageId: pageId("/blog/late-fee-invoice"),
+  }),
+  buildPiece({
+    id: "pc_photographers",
+    title: "Bookkeeping for photographers | Ledgerly",
+    h1: "Bookkeeping for photographers",
+    metaDescription: "",
+    slug: "/for/photographers",
+    targetKeyword: "bookkeeping for photographers",
+    bodyMarkdown: BODY.photographers,
+    createdBy: "agent",
     createdAt: ago(DAY),
-    updatedAt: ago(5 * HOUR),
-    checks: [{ code: "media_required", level: "block", message: "Instagram needs a picture. Add one and this piece unblocks." }],
+    updatedAt: ago(19 * HOUR),
+    media: UNSPLASH.camera,
   }),
-  piece("pc_8", "Nine people, two time zones, one ledger: how we run Ledgerly's own books", "linkedin", "We run Ledgerly's books in Ledgerly. Obviously. But the interesting part is what broke when the team went from four people to nine across Portland and Lisbon.\n\nThe short list: expense reimbursements in two currencies, a contractor in a third, and a CFO who is also the person writing this post.\n\nHere is what we changed.", { createdAt: ago(12 * DAY), updatedAt: ago(11 * DAY), createdBy: "user" }),
+  buildPiece({
+    id: "pc_mileage",
+    title: "Mileage log template",
+    h1: "",
+    metaDescription: "",
+    slug: null,
+    targetKeyword: null,
+    bodyMarkdown: BODY.mileage,
+    createdBy: "user",
+    createdAt: ago(12 * DAY),
+    updatedAt: ago(11 * DAY),
+  }),
 ];
+
+let issueSeq = 0;
+export function nextIssueId(): string {
+  issueSeq += 1;
+  return `cpi_${(1000 + issueSeq).toString(36)}`;
+}
+
+function issue(
+  pieceId: string,
+  runId: string,
+  at: string,
+  tool: string,
+  code: string,
+  title: string,
+  rest: Partial<Pick<PieceIssue, "detail" | "anchorText" | "suggestion" | "state">> = {},
+): PieceIssue {
+  return {
+    id: nextIssueId(),
+    pieceId,
+    tool,
+    code,
+    title,
+    detail: rest.detail ?? null,
+    anchorText: rest.anchorText ?? null,
+    suggestion: rest.suggestion ?? null,
+    state: rest.state ?? "open",
+    runId,
+    createdAt: at,
+    updatedAt: rest.state && rest.state !== "open" ? ago(20 * MINUTE) : at,
+  };
+}
+
+const PILLAR_RUN = ago(52 * MINUTE);
+const FRESHBOOKS_RUN = ago(5 * HOUR);
+const QUARTERLY_RUN = ago(7 * HOUR);
+const LATE_RUN = ago(2 * DAY + HOUR);
 
 export const ISSUES: PieceIssue[] = [
-  {
-    id: "is_1", pieceId: "pc_1", tool: "seo", code: "meta_missing", title: "No meta description yet", detail: "The piece has a title but nothing for the snippet. Google will pick a sentence from the body.", anchorText: null, suggestion: "Send the invoice the day the work ships and remind the day after it is due — what 4,100 invoices told us about getting paid faster.", state: "open", runId: "run_1", createdAt: ago(35 * 60_000), updatedAt: ago(35 * 60_000),
-  },
-  {
-    id: "is_2", pieceId: "pc_1", tool: "readability", code: "long_sentence", title: "One sentence runs to 41 words", detail: "Readers skim; a 41-word sentence in the second section will be skipped.", anchorText: "Not because the client is late — they may not have seen it — but because a reminder a day late reads as organised, and a reminder a month late reads as desperate.", suggestion: "Not because the client is late — they may not have seen it. A reminder a day late reads as organised. A reminder a month late reads as desperate.", state: "open", runId: "run_1", createdAt: ago(35 * 60_000), updatedAt: ago(35 * 60_000),
-  },
-  {
-    id: "is_3", pieceId: "pc_1", tool: "similarity", code: "overlaps_page", title: "Overlaps an existing page", detail: "The section on reminders repeats /blog/late-paying-clients closely enough that the two may compete. Link to it instead, or fold the two together.", anchorText: "The first reminder should go out the day after the due date.", suggestion: null, state: "open", runId: "run_1", createdAt: ago(35 * 60_000), updatedAt: ago(35 * 60_000),
-  },
-  {
-    id: "is_4", pieceId: "pc_1", tool: "ai_detector", code: "ai_likelihood", title: "Reads as human-written", detail: "Score 0.12 — well under the threshold. Nothing to do.", anchorText: null, suggestion: null, state: "fixed", runId: "run_1", createdAt: ago(35 * 60_000), updatedAt: ago(35 * 60_000),
-  },
-  {
-    id: "is_5", pieceId: "pc_2", tool: "channel_rules", code: "closing_question", title: "Ends on a question — the LinkedIn rules ask for a takeaway or a real question", detail: "\"What is the thing you keep putting off until Friday?\" is close to engagement bait. Make it specific or replace it with the takeaway.", anchorText: "What is the thing you keep putting off until Friday?", suggestion: "Invoice before you close the laptop. That is the whole finding.", state: "open", runId: "run_2", createdAt: ago(2 * HOUR), updatedAt: ago(2 * HOUR),
-  },
-];
+  issue("pc_pillar", "run_pillar_read", PILLAR_RUN, "readability", "long_sentence", "Long sentence, 35 words", {
+    detail: "Over 25 words. Splitting it costs nothing.",
+    anchorText: "Not because the client is late — they may not have seen it — but because a reminder a day late reads as organised, and a reminder a month late reads as desperate.",
+  }),
+  issue("pc_pillar", "run_pillar_read", PILLAR_RUN, "readability", "passive_voice", "Passive voice", {
+    detail: "\"were paid\" hides who did the thing. Check it — this detection is a pattern match, not a parser.",
+    anchorText: "Invoices sent within 24 hours of delivery were paid a median of 9 days sooner than invoices sent a week later.",
+    state: "dismissed",
+  }),
+  issue("pc_pillar", "run_pillar_sim", PILLAR_RUN, "similarity", "similar_paragraph", "Paragraph overlaps 64% with Late-paying clients: what to do", {
+    detail: "Shared wording: \"The first reminder should go out the day after the due date\". Found on Late-paying clients: what to do (https://ledgerly.app/blog/late-paying-clients). Rephrase the shared sentences or fold in a point that page does not make.",
+    anchorText: "The first reminder should go out the day after the due date. Not because the client is late — they may not have seen it — but because a reminder a day late reads as organised, and a reminder a month late reads as desperate.",
+  }),
+  issue("pc_pillar", "run_pillar_sim", PILLAR_RUN, "similarity", "duplicate_paragraph", "83% of this paragraph already lives on Invoice payment terms", {
+    detail: "Shared wording: \"For a new client, 14 days is normal and nobody will blink\". Found on Invoice payment terms (https://ledgerly.app/blog/invoice-payment-terms). Two pages saying the same thing split the ranking between them — rewrite this so it adds something, or link to that page instead.",
+    anchorText: "Net 30 is a habit, not a law. For a new client, 14 days is normal and nobody will blink. For a large company with a fixed payment run, ask which day the run happens and set your due date the day before it.",
+    state: "fixed",
+  }),
 
-export function nextIssueId(): string {
-  return `is_${Math.random().toString(36).slice(2, 8)}`;
-}
+  issue("pc_freshbooks", "run_fb_read", FRESHBOOKS_RUN, "readability", "complex_words", "3 long words in one sentence", {
+    detail: "FreshBooks, discounts, heavily — most three-syllable words have a shorter twin. This sentence reads at grade 11.",
+    anchorText: "FreshBooks discounts the first months heavily, so compare the price you will pay in month seven, not month one.",
+    state: "dismissed",
+  }),
+  issue("pc_freshbooks", "run_fb_rules", FRESHBOOKS_RUN, "page_rules", "marketing_cadence", "Marketing cadence: \"in ten minutes a week\"", {
+    detail: "Advertising copy reads as filler on an article. Plain and specific wins.",
+    anchorText: "in ten minutes a week",
+  }),
+  issue("pc_freshbooks", "run_fb_ai", FRESHBOOKS_RUN, "ai_detector", "ai_mixed", "Mixed — 46% (medium confidence)", {
+    detail: "Parts read as written by a person and parts as generated. Read the flagged passages back and rewrite the ones that sound like nobody in particular.",
+  }),
+  issue("pc_freshbooks", "run_fb_ai", FRESHBOOKS_RUN, "ai_detector", "ai_passage", "Passage reads 71% machine-written", {
+    detail: "Window 2 of 5, 118 words. The classifier is right about four times in five, so read it back: if it is yours, break the rhythm — a shorter sentence, a concrete detail, an opinion.",
+    anchorText: "Both send branded invoices, accept card payments through Stripe and send reminders. FreshBooks lets a client log in to a portal and see every invoice; Ledgerly sends a plain link per invoice.",
+  }),
+
+  issue("pc_quarterly", "run_q_read", QUARTERLY_RUN, "readability", "long_sentence", "Long sentence, 26 words", {
+    detail: "Over 25 words. Splitting it costs nothing.",
+    anchorText: "You owe a penalty that works like interest, currently around 8% a year on the amount you were short, for the days you were short.",
+  }),
+  issue("pc_quarterly", "run_q_sim", QUARTERLY_RUN, "similarity", "duplicate_paragraph", "88% of this paragraph already lives on Quarterly estimated taxes, explained", {
+    detail: "Shared wording: \"pay at least 100% of last year's total tax, split into four\". Found on Quarterly estimated taxes, explained (https://ledgerly.app/blog/quarterly-estimated-taxes-explained). Two pages saying the same thing split the ranking between them — rewrite this so it adds something, or link to that page instead.",
+    anchorText: "The simplest safe route is the safe harbour rule: pay at least 100% of last year's total tax, split into four. If your adjusted gross income last year was over $150,000, make it 110%. Do that and you owe no penalty, however this year turns out.",
+  }),
+  issue("pc_quarterly", "run_q_rules", QUARTERLY_RUN, "page_rules", "llm_tells", "Reads as machine-written: \"It is not a disaster, but it is avoidable\"", {
+    detail: "These phrases are the tells readers have learned to skip. Say the specific thing instead.",
+    anchorText: "It is not a disaster, but it is avoidable.",
+    state: "fixed",
+  }),
+
+  issue("pc_late_fees", "run_lf_read", LATE_RUN, "readability", "long_sentence", "Long sentence, 26 words", {
+    detail: "Over 25 words. Splitting it costs nothing.",
+    anchorText: "A late fee is only worth adding if it is in your contract before the work starts and on the invoice before it is overdue.",
+    state: "fixed",
+  }),
+  issue("pc_late_fees", "run_lf_rules", LATE_RUN, "page_rules", "wall_of_text", "A paragraph runs 236 characters", {
+    detail: "Short paragraphs, one idea each. Break this one up.",
+    anchorText: "In most US states, yes, if the client agreed to it in advance. Many states cap the rate; 1.5% a month is common and safe almost everywhere. In the UK, the Late Payment of Commercial Debts Act lets you charge 8% above the Bank of England base rate on business-to-business invoices, even without a clause.",
+    state: "dismissed",
+  }),
+];

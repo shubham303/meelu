@@ -1,7 +1,5 @@
 import { cn } from "@demo/lib/utils";
 
-// Mirrors @/components/logo — the demo app is a self-contained tree with its
-// own alias, so the brand mark is duplicated rather than imported across it.
 export function Logo({ size = 22, withWordmark = true, className }: { size?: number; withWordmark?: boolean; className?: string }) {
   const small = size < 32;
   return (

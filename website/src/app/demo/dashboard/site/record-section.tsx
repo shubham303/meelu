@@ -11,7 +11,8 @@ import type { SiteProfile, SiteSocialLink } from "@demo/lib/types";
 const EMPTY_FORM = {
   domain: "",
   name: "",
-  country: "",
+  markets: "",
+  language: "",
   repoUrl: "",
   sitemapUrls: "",
 };
@@ -23,7 +24,8 @@ function formOf(site: SiteProfile | null): Form {
     ...EMPTY_FORM,
     domain: site?.domain ?? "",
     name: site?.name ?? "",
-    country: site?.country ?? "",
+    markets: (site?.markets ?? []).join(", "),
+    language: site?.language ?? "",
     repoUrl: site?.repoUrl ?? "",
     sitemapUrls: (site?.sitemapUrls ?? []).join("\n"),
   };
@@ -52,7 +54,7 @@ export function SiteRecordSection() {
       ) : (
         <>
           {error && <p className="mb-3 text-sm text-bad">{error}</p>}
-          <Details site={site ?? null} />
+          <Details site={site ?? null} onDescribed={refresh} />
           {site?.domain && <CrawlToken domain={site.domain} />}
           <RecordForm
             key={site?.updatedAt ?? "new"}
@@ -65,14 +67,50 @@ export function SiteRecordSection() {
   );
 }
 
-function Details({ site }: { site: SiteProfile | null }) {
+function useSummaryJob(siteId: string | null, onDescribed: () => Promise<void>) {
+  const inApp = useAgentEnabled();
+  const [writing, setWriting] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!inApp || !siteId) return;
+    return bridge()?.onSiteSummaryEvent?.(({ event, data }) => {
+      if (data.siteId !== siteId) return;
+      if (event === "summary:start") {
+        setWriting(true);
+        setFailure(null);
+        return;
+      }
+      setWriting(false);
+      if (data.ok) void onDescribed();
+      else setFailure(data.error ?? "The description could not be written.");
+    });
+  }, [inApp, siteId, onDescribed]);
+
+  const retry = () => {
+    if (!siteId) return;
+    setFailure(null);
+    void bridge()?.describeSite?.(siteId);
+  };
+
+  return { inApp, writing, failure, retry };
+}
+
+function Details({
+  site,
+  onDescribed,
+}: {
+  site: SiteProfile | null;
+  onDescribed: () => Promise<void>;
+}) {
+  const job = useSummaryJob(site?.id ?? null, onDescribed);
   if (!site) return null;
 
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Badge tone={site.summary ? "good" : "warn"}>
-          {site.summary ? "Described" : "Not described yet"}
+          {site.summary ? "Described" : job.writing ? "Writing it up…" : "Not described yet"}
         </Badge>
         <span className="text-xs text-faint">
           {site.lastCrawledAt
@@ -84,9 +122,22 @@ function Details({ site }: { site: SiteProfile | null }) {
 
       {site.summary ? (
         <p className="max-w-2xl text-sm leading-relaxed text-sub">{site.summary}</p>
+      ) : job.writing ? (
+        <p className="text-sm text-faint">
+          Your coworker is reading the homepage and writing up what the site is.
+        </p>
+      ) : job.inApp ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className={job.failure ? "text-sm text-bad" : "text-sm text-faint"}>
+            {job.failure ?? "Your coworker writes this up from the homepage in the background."}
+          </p>
+          <Button variant="outline" onClick={job.retry}>
+            {job.failure ? "Try again" : "Write it now"}
+          </Button>
+        </div>
       ) : (
         <p className="text-sm text-faint">
-          Crawl the site, then ask your coworker to write up what it is.
+          Open this site in the Meelu app and your coworker writes up what it is.
         </p>
       )}
     </div>
@@ -188,10 +239,8 @@ function CrawlToken({ domain }: { domain: string }) {
         it as a bot. This token is made here and never leaves the machine. Every request carries
         it as{" "}
         <code className="font-mono text-accent">X-Meelu-Crawl</code> — allow that header and the
-        crawl gets through.{" "}
-        <a href="/" target="_top" className="text-accent hover:underline">
-          How to set the rule
-        </a>
+        crawl gets through. On Cloudflare, add a WAF custom rule that matches the header and
+        skips the remaining custom rules and Bot Fight Mode.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <code className="min-w-0 flex-1 truncate rounded-lg border border-edge bg-panel2 px-3 py-2 font-mono text-xs text-sub">
@@ -237,7 +286,11 @@ function RecordForm({ site, onSaved }: { site: SiteProfile | null; onSaved: () =
         body: {
           domain: form.domain.trim(),
           name: form.name.trim(),
-          country: form.country.trim(),
+          markets: form.markets
+            .split(/[\s,]+/)
+            .map((c) => c.trim())
+            .filter(Boolean),
+          language: form.language.trim(),
           repoUrl: form.repoUrl.trim(),
           sitemapUrls: form.sitemapUrls
             .split("\n")
@@ -271,11 +324,21 @@ function RecordForm({ site, onSaved }: { site: SiteProfile | null; onSaved: () =
             placeholder="e.g. Ledgerly"
           />
         </Field>
-        <Field label="Country">
+        <Field
+          label="Markets"
+          hint="Countries the site sells to, as two-letter codes. Blank means English-speaking searchers worldwide."
+        >
           <Input
-            value={form.country}
-            onChange={(e) => set("country")(e.target.value)}
-            placeholder="US"
+            value={form.markets}
+            onChange={(e) => set("markets")(e.target.value)}
+            placeholder="US, GB, CA"
+          />
+        </Field>
+        <Field label="Language" hint="What its searchers type in. Blank means English.">
+          <Input
+            value={form.language}
+            onChange={(e) => set("language")(e.target.value)}
+            placeholder="en"
           />
         </Field>
         <div className="sm:col-span-2">

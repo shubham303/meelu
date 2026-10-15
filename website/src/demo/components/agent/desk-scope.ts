@@ -1,13 +1,5 @@
 import { WEBSITE_DESKS } from "@demo/components/desks";
 
-export type DeskId =
-  | "overview"
-  | "site"
-  | "pages"
-  | "content"
-  | "leads"
-  | "analytics";
-
 export function deskLabel(deskId: string): string {
   return WEBSITE_DESKS.find((d) => d.id === deskId)?.label ?? deskId;
 }
