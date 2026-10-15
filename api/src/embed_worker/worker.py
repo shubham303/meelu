@@ -18,7 +18,7 @@ def request_stop(signum, frame):
     stopping = True
 
 
-async def run_passes(settings: WorkerSettings, embedder: Embedder) -> int:
+async def run_embed_passes(settings: WorkerSettings, embedder: Embedder) -> int:
     model = settings.meelu_embed_model
     pages, chunks = await embed_worker_service.run_chunk_pass(settings.meelu_chunk_page_batch)
     if pages > 0:
@@ -26,13 +26,37 @@ async def run_passes(settings: WorkerSettings, embedder: Embedder) -> int:
     embedded = await embed_worker_service.run_embed_pass(embedder, model)
     if embedded > 0:
         print(f"embed-worker: embedded {embedded} chunk(s)")
+    listening = await embed_worker_service.run_listening_pass(
+        embedder,
+        model,
+        settings.meelu_listening_batch,
+        settings.meelu_listening_max_batches,
+    )
+    if listening > 0:
+        print(f"embed-worker: embedded {listening} listening row(s)")
+    return pages + embedded + listening
+
+
+async def run_extraction_passes() -> int:
     extracted = await site_page_classifier.run_extraction_pass()
     if extracted > 0:
         print(f"embed-worker: extracted {extracted} page(s)")
-    listening = await embed_worker_service.run_listening_pass(embedder, model)
-    if listening > 0:
-        print(f"embed-worker: embedded {listening} listening row(s)")
-    return pages + embedded + extracted + listening
+    return extracted
+
+
+async def loop(name: str, passes, interval: float, once: bool) -> None:
+    while not stopping:
+        try:
+            worked = await passes()
+            if once:
+                return
+            if worked == 0:
+                await asyncio.sleep(interval)
+        except Exception as e:
+            print(f"embed-worker: {name} pass failed — {e}", file=sys.stderr)
+            if once:
+                return
+            await asyncio.sleep(interval)
 
 
 async def run(settings: WorkerSettings) -> None:
@@ -44,18 +68,10 @@ async def run(settings: WorkerSettings) -> None:
     )
     once = settings.meelu_embed_once == "1"
     try:
-        while not stopping:
-            try:
-                worked = await run_passes(settings, embedder)
-                if once:
-                    break
-                if worked == 0:
-                    await asyncio.sleep(interval)
-            except Exception as e:
-                print(f"embed-worker: pass failed — {e}", file=sys.stderr)
-                if once:
-                    break
-                await asyncio.sleep(interval)
+        await asyncio.gather(
+            loop("embed", lambda: run_embed_passes(settings, embedder), interval, once),
+            loop("extraction", run_extraction_passes, interval, once),
+        )
     finally:
         await engine.dispose()
 

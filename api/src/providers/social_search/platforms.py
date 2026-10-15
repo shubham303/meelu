@@ -6,8 +6,6 @@ PLATFORMS = [
     {"id": "reddit", "label": "Reddit", "access": "apify"},
     {"id": "x", "label": "X (Twitter)", "access": "apify"},
     {"id": "linkedin", "label": "LinkedIn", "access": "apify"},
-    {"id": "youtube", "label": "YouTube", "access": "apify"},
     {"id": "bluesky", "label": "Bluesky", "access": "apify"},
-    {"id": "instagram", "label": "Instagram", "access": "apify"},
-    {"id": "tiktok", "label": "TikTok", "access": "apify"},
+    {"id": "facebook", "label": "Facebook", "access": "apify"},
 ]

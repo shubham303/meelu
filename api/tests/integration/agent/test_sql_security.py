@@ -280,3 +280,23 @@ async def test_workspace_reads_are_capped(pair, monkeypatch):
         await workspace_tables.rows(a.user_id, a.site_id, "big")
     with pytest.raises(ValueError, match="Could not read"):
         await workspace_tables.rows(a.user_id, a.site_id, "missing")
+
+
+async def test_shared_social_posts_show_only_through_the_site(pair):
+    a, b = pair
+    run = uuid.uuid4().hex[:8]
+    with engine.begin() as conn:
+        for name in ("mine", "theirs", "loose"):
+            conn.exec_driver_sql(
+                "INSERT INTO social_post (id, post_key, platform, url, text) "
+                "VALUES (%s, %s, 'hackernews', 'https://news.ycombinator.com', 'post')",
+                (f"sp_{name}_{run}", f"hackernews:{name}-{run}"),
+            )
+        for ctx, name in ((a, "mine"), (b, "theirs")):
+            conn.exec_driver_sql(
+                "INSERT INTO social_listening_post (id, user_id, site_id, post_id, status) "
+                "VALUES (%s, %s, %s, %s, 'to_reply')",
+                (f"slp_{name}_{run}", ctx.user_id, ctx.site_id, f"sp_{name}_{run}"),
+            )
+    seen = await sql(a, f"select id from social_post where id like '%{run}' order by id")
+    assert seen.rows == [[f"sp_mine_{run}"]]

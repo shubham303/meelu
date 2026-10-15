@@ -11,7 +11,10 @@ from src.providers.social_search.shape import epoch_seconds
 class SearchQuery:
     keywords: list[str]
     since: str | None
-    limit: int
+    per_keyword: int
+
+    def run_cap(self) -> int:
+        return self.per_keyword * max(len(self.keywords), 1)
 
     def age_days(self) -> float | None:
         start = epoch_seconds(self.since)
@@ -27,6 +30,7 @@ class ActorSpec:
     build_input: Callable[[SearchQuery], dict[str, Any]]
     normalize: Callable[[dict[str, Any]], dict | None]
     charges: ChargeEvents = ChargeEvents()
+    one_query_per_run: bool = False
 
 
 def window(query: SearchQuery, steps: list[tuple[float, str]], beyond: str) -> str:

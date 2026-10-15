@@ -201,7 +201,7 @@ async def test_chunk_and_extraction_queries(seeded):
         ]
         assert await site_chunks.phrase_hits(db, site_id, [("t1", "alpha")], [("t1", a)], 5) == []
         assert await site_chunks.page_ids_with_unembedded(db, [a, home]) == {a}
-        pending = await site_chunks.list_pending_embeddings(db, 3, 10_000)
+        pending = await site_chunks.claim_pending_embeddings(db, 3, 10_000)
         assert {c.id for c in pending} >= {c.id for c in chunks}
         await site_chunks.write_embedding(db, first, "ha", [0.1] * 384, "m")
         await site_chunks.write_embedding(db, chunks[1].id, "ha", [0.2] * 384, "m")
@@ -226,7 +226,7 @@ async def test_chunk_and_extraction_queries(seeded):
         await site_pages.mark_embed_failed(db, a, "boom")
         assert await site_pages.clear_embed_state(db, [a]) == 1
         assert gone_id(ids) in await site_pages.unserved_page_ids(db)
-        sources = await site_pages.list_needing_chunks(db, 50)
+        sources = await site_pages.claim_needing_chunks(db, 50)
         assert home in {s.id for s in sources}
         assert a not in {s.id for s in sources}
 

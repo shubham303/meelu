@@ -436,7 +436,7 @@ class SiteChunkRepository:
         )
         return len(result.scalars().all())
 
-    async def list_pending_embeddings(
+    async def claim_pending_embeddings(
         self, db: AsyncSession, max_attempts: int, limit: int
     ) -> list[SiteChunkRecord]:
         rows = await db.execute(
@@ -444,6 +444,7 @@ class SiteChunkRepository:
             .where(SiteChunk.embedding.is_(None), SiteChunk.embed_attempts < max_attempts)
             .order_by(SiteChunk.embed_attempts.asc(), SiteChunk.seq.asc())
             .limit(limit)
+            .with_for_update(skip_locked=True, of=SiteChunk)
         )
         return [SiteChunkRecord.model_validate(r) for r in rows.mappings()]
 

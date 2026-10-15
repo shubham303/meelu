@@ -146,13 +146,17 @@ async def test_status_and_platform_listing(client, email):
     platforms = {p["id"]: p for p in r.json()["data"]["platforms"]}
     assert platforms["hackernews"]["available"] is True
     assert platforms["reddit"]["available"] == social_search.supports("search.reddit")
-
-    r = await client.post(
-        "/api/v1/providers/social-listening/search",
-        json={"platform": "nowhere", "keywords": ["x"]},
-    )
-    assert r.status_code == 400
-    assert r.json()["error"]["code"] == "no_provider"
+    assert set(platforms) == {
+        "hackernews",
+        "stackexchange",
+        "devto",
+        "github",
+        "reddit",
+        "x",
+        "linkedin",
+        "bluesky",
+        "facebook",
+    }
 
 
 async def test_seo_tool_shapes_without_vendor(client, email):
@@ -169,7 +173,7 @@ async def test_social_search_falls_back_to_second_actor(client, email, monkeypat
     calls = []
 
     async def run_actor(provider_id, actor_id, actor_input, max_items, charges):
-        calls.append(actor_id)
+        calls.append((actor_id, max_items, actor_input.get("maxPosts")))
         if actor_id == "harshmaur~reddit-scraper-pro":
             raise ProviderRequestError(provider_id, 502, "down")
         return VendorResponse(
@@ -189,20 +193,88 @@ async def test_social_search_falls_back_to_second_actor(client, email, monkeypat
         )
 
     monkeypatch.setattr(apify, "run_actor", run_actor)
-    await signup(client, email)
+    user_id = await user_id_of(client, email)
     before = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
 
-    body = {"platform": "reddit", "keywords": [f"kw-{email}"], "limit": 5}
-    for _ in range(2):
-        r = await client.post("/api/v1/providers/social-listening/search", json=body)
-        assert r.status_code == 200, r.text
-        posts = r.json()["data"]["posts"]
-        assert [p["id"] for p in posts] == ["abc"]
+    keywords = [f"kw-{email}", "second", "third", "fourth"]
+    result = await social_search.search_platform(
+        Caller(user_id=user_id), "reddit", keywords, None, 25
+    )
+    assert [p["id"] for p in result["posts"]] == ["abc"]
+    assert result["failedKeywords"] == []
 
-    assert calls == ["harshmaur~reddit-scraper-pro", "fatihtahta~reddit-scraper-search-fast"]
+    assert calls == [
+        ("harshmaur~reddit-scraper-pro", 100, None),
+        ("fatihtahta~reddit-scraper-search-fast", 100, 25),
+    ]
     after = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
     assert before - after == 12_000
 
     r = await client.get("/api/v1/providers/calls?domain=social-listening")
     providers = {c["provider"] for c in r.json()["data"]}
     assert "apify/fatihtahta~reddit-scraper-search-fast" in providers
+
+
+async def test_facebook_runs_once_per_keyword(client, email, monkeypatch):
+    from src.providers import apify
+    from src.settings import settings
+
+    monkeypatch.setattr(settings, "apify_api_key", "test-key")
+    queries = []
+
+    async def run_actor(provider_id, actor_id, actor_input, max_items, charges):
+        queries.append((actor_input["query"], max_items))
+        if actor_input["query"] == "broken":
+            raise ProviderRequestError(provider_id, 502, "down")
+        return VendorResponse(
+            [
+                {
+                    "postId": f"{actor_input['query']}-1",
+                    "url": f"https://www.facebook.com/x/posts/{actor_input['query']}",
+                    "postText": actor_input["query"],
+                    "timestamp": 4070908800000,
+                    "author": {"name": "A"},
+                }
+            ],
+            1_000,
+        )
+
+    monkeypatch.setattr(apify, "run_actor", run_actor)
+    user_id = await user_id_of(client, email)
+    result = await social_search.search_platform(
+        Caller(user_id=user_id), "facebook", ["one", "broken", "two"], None, 25
+    )
+    assert sorted(queries) == [("broken", 25), ("one", 25), ("two", 25)]
+    assert sorted(p["id"] for p in result["posts"]) == ["one-1", "two-1"]
+    assert result["failedKeywords"] == ["broken"]
+
+
+async def test_public_api_reports_failed_keywords(client, email, monkeypatch):
+    from src.providers.social_search import meelu_public
+
+    async def vendor_request(provider_id, url, *, query=None, **kwargs):
+        if query["query"] == "broken":
+            raise ProviderRequestError(provider_id, 502, "down")
+        return {
+            "hits": [
+                {
+                    "objectID": f"{query['query']}-{query['tags']}",
+                    "title": query["query"],
+                    "created_at": "2099-01-01T00:00:00Z",
+                    "author": "pg",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(meelu_public, "vendor_request", vendor_request)
+    user_id = await user_id_of(client, email)
+    result = await social_search.search_platform(
+        Caller(user_id=user_id), "hackernews", ["fine", "broken"], None, 25
+    )
+    assert len(result["posts"]) == 2
+    assert result["failedKeywords"] == ["broken"]
+
+    with pytest.raises(ProviderRequestError):
+        await social_search.search_platform(
+            Caller(user_id=user_id), "hackernews", ["broken"], None, 25
+        )

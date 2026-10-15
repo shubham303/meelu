@@ -17,7 +17,7 @@ MAESTRO_PAGE = 50
 def harvest_input(q: SearchQuery) -> dict:
     return {
         "searchQueries": q.keywords,
-        "maxPosts": q.limit,
+        "maxPosts": q.per_keyword,
         "sortBy": "date",
         "postedLimit": window(q, HARVEST_WINDOWS, "any") if q.since else "month",
         "profileScraperMode": "short",
@@ -54,8 +54,8 @@ def maestro_input(q: SearchQuery) -> dict:
         "keyword": " OR ".join(f'"{k}"' if " " in k else k for k in q.keywords),
         "sort_type": "date_posted",
         "date_filter": window(q, MAESTRO_WINDOWS, "") if q.since else "past-month",
-        "limit": min(q.limit, MAESTRO_PAGE),
-        "total_posts": q.limit,
+        "limit": min(q.run_cap(), MAESTRO_PAGE),
+        "total_posts": q.run_cap(),
     }
 
 

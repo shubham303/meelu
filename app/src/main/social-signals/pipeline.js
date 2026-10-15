@@ -1,28 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { BATCH_SIZE, judgeBatch } from "./classify.js";
-import { expandLine } from "./expand.js";
-import { dropDead, withinAge } from "./filters.js";
-import { withScores } from "./rank.js";
+import { expandLines } from "./expand.js";
+import { deadIds } from "./filters.js";
 import {
   createRun,
   fetchListeningSetup,
   gatePosts,
+  getRun,
   listMatchedPosts,
-  listRejectedTexts,
   patchQuery,
   patchRun,
-  saveJudged,
-  savePosts,
+  saveVerdicts,
   siteContextOf,
-  toIngestPost,
-  toVerdict,
+  startCollect,
 } from "./store.js";
 
-const DEFAULT_MIN_RELEVANCE = 0.6;
+const KEYWORDS_PER_LINE = 2;
 const JUDGE_CONCURRENCY = 5;
-const GATE_POLL_MS = 3000;
-const GATE_TIMEOUT_MS = 10 * 60 * 1000;
-const MAX_PER_LINE = 100;
+const JUDGE_ATTEMPTS = 2;
+const POLL_MS = 3000;
+const GATE_TIMEOUT_MS = 60 * 60 * 1000;
 
 const running = new Map();
 const runningBySite = new Map();
@@ -50,7 +47,7 @@ function newRunState(siteId) {
   return { siteId, stopped: false, halted, halt };
 }
 
-export function startSignalsSearch(payload, emit, { providers, cookieHeader = "" }) {
+export function startSignalsSearch(payload, emit, { cookieHeader = "" }) {
   const { siteId = null, platforms = [] } = payload;
   if (!siteId) return { error: "Pick a website first." };
   const active = runningBySite.get(siteId);
@@ -64,7 +61,7 @@ export function startSignalsSearch(payload, emit, { providers, cookieHeader = ""
     running.delete(jobId);
     if (runningBySite.get(siteId) === jobId) runningBySite.delete(siteId);
   };
-  void drive(jobId, input, state, emit, { providers, cookieHeader, release }).finally(release);
+  void drive(jobId, input, state, emit, { cookieHeader, release }).finally(release);
   return { jobId };
 }
 
@@ -95,129 +92,110 @@ function until(state, promise) {
 async function searchTerms(lines, siteContext, ctx) {
   const { state, send, llm, siteId, cookieHeader } = ctx;
   send("stage", { stage: "terms" });
+  const missing = lines.filter((l) => (l.keywords ?? []).length !== KEYWORDS_PER_LINE);
+  const expanded = await until(
+    state,
+    expandLines({ lines: missing.map((l) => ({ id: l.id, text: l.text })), siteContext }, llm),
+  );
   const out = [];
   for (const line of lines) {
-    const keywords = Array.isArray(line.keywords) ? line.keywords.filter(Boolean) : [];
-    if (keywords.length > 0) {
-      out.push({ ...line, keywords, negativeKeywords: line.negativeKeywords ?? [] });
-      continue;
+    const keywords = expanded.get(line.id);
+    if (keywords) {
+      out.push(await until(state, patchQuery(siteId, line.id, { keywords }, cookieHeader)));
+    } else if ((line.keywords ?? []).length === KEYWORDS_PER_LINE) {
+      out.push(line);
     }
-    guard(state);
-    const terms = await until(state, expandLine({ line: line.text, siteContext }, llm));
-    const patched = await until(state, patchQuery(siteId, line.id, terms, cookieHeader));
-    out.push({ ...line, ...patched });
   }
-  send("terms", { lines: out.length, phrases: out.reduce((n, l) => n + l.keywords.length, 0) });
+  send("terms", { lines: out.length, phrases: new Set(out.flatMap((l) => l.keywords)).size });
+  if (out.length === 0) throw new Error("No line could be turned into search terms.");
   return out;
 }
 
-async function searchPlatforms(input, lines, perLine, since, ctx, platformStats) {
-  const { state, send, providers } = ctx;
+function platformEvent(platform, stats) {
+  if (stats.status === "running") return { platform, status: "fetching" };
+  const failed = stats.status === "error" || (stats.error && !stats.candidates);
+  return {
+    platform,
+    status: failed ? "error" : "done",
+    count: (stats.fromVendor ?? 0) + (stats.fromDatabase ?? 0),
+    fromVendor: stats.fromVendor ?? 0,
+    fromDatabase: stats.fromDatabase ?? 0,
+    candidates: stats.candidates ?? 0,
+    failedKeywords: stats.failedKeywords ?? [],
+    error: stats.error ?? null,
+  };
+}
+
+async function collectStage(input, runId, ctx) {
+  const { state, send, siteId, cookieHeader } = ctx;
   send("stage", { stage: "searching" });
-  const fetched = [];
-  await Promise.allSettled(
-    input.platforms.map(async (platform) => {
-      send("platform", { platform, status: "fetching" });
-      const stat = { fetched: 0, kept: 0 };
-      platformStats[platform] = stat;
-      let lastError = null;
-      for (const line of lines) {
-        try {
-          const posts = await until(
-            state,
-            providers.listening.searchPlatform({
-              platform,
-              keywords: line.keywords,
-              since,
-              limit: perLine(line),
-              siteId: input.siteId,
-            }),
-          );
-          for (const p of posts) fetched.push({ ...p, queryId: line.id });
-          stat.fetched += posts.length;
-        } catch (err) {
-          if (err instanceof Stopped) throw err;
-          lastError = err instanceof Error ? err.message : String(err);
-        }
-      }
-      if (lastError) stat.error = lastError;
-      if (lastError && stat.fetched === 0) {
-        send("platform", { platform, status: "error", error: lastError });
-      } else {
-        send("platform", { platform, status: "done", count: stat.fetched });
-      }
-    }),
-  );
-  return fetched;
-}
-
-function excludedWord(post, line) {
-  const hay = `${post.title ?? ""} ${post.text ?? ""}`.toLowerCase();
-  return (line?.negativeKeywords ?? []).find((k) => hay.includes(String(k).toLowerCase())) ?? null;
-}
-
-async function fetchStage(input, setup, lines, ctx, platformStats, runId) {
-  const { state, send, cookieHeader } = ctx;
-  const config = setup.config;
-  const lookbackDays = Number(config.maxAgeDays) > 0 ? Number(config.maxAgeDays) : null;
-  const since = lookbackDays
-    ? new Date(Date.now() - lookbackDays * 86_400_000).toISOString()
-    : null;
-
-  const perKeyword = Math.max(5, Number(config.resultsPerKeyword) || 50);
-  const perLine = (line) => Math.min(perKeyword * line.keywords.length, MAX_PER_LINE);
-  const fetched = await searchPlatforms(input, lines, perLine, since, ctx, platformStats);
-  guard(state);
-
-  const linesById = new Map(lines.map((l) => [l.id, l]));
-  const fresh = new Set(withinAge(fetched, config.maxAgeDays));
-  const payload = fetched.map((p) => {
-    if (!fresh.has(p)) return toIngestPost(p, "too_old");
-    if (excludedWord(p, linesById.get(p.queryId))) return toIngestPost(p, "excluded_word");
-    return toIngestPost(p);
-  });
-  const totals = { inserted: 0, known: 0, duplicates: 0 };
-  for (const batch of chunk(payload, 200)) {
-    const res = await until(state, savePosts(input.siteId, runId, batch, cookieHeader));
-    totals.inserted += res?.inserted ?? 0;
-    totals.known += res?.known ?? 0;
-    totals.duplicates += res?.duplicates ?? 0;
-    guard(state);
+  for (const platform of input.platforms) {
+    await until(state, startCollect(siteId, runId, platform, cookieHeader));
+    send("platform", { platform, status: "fetching" });
   }
-  send("saved", { fetched: fetched.length, ...totals });
-  return { fetched: fetched.length, inserted: totals.inserted, lookbackDays };
+  const reported = new Set();
+  let run = null;
+  while (true) {
+    run = await until(state, getRun(siteId, runId, cookieHeader));
+    const stats = run?.platformStats ?? {};
+    for (const platform of input.platforms) {
+      const own = stats[platform];
+      if (!own || own.status === "running" || reported.has(platform)) continue;
+      reported.add(platform);
+      send("platform", platformEvent(platform, own));
+    }
+    if (reported.size === input.platforms.length) break;
+    await until(state, sleep(POLL_MS));
+  }
+  const candidates = input.platforms.reduce(
+    (n, p) => n + (run?.platformStats?.[p]?.candidates ?? 0),
+    0,
+  );
+  send("saved", { fetched: run?.fetchedCount ?? 0, inserted: candidates });
+  return { fetched: run?.fetchedCount ?? 0, inserted: candidates, platforms: run?.platformStats };
 }
 
-async function gateStage(input, ctx) {
-  const { state, send, cookieHeader } = ctx;
+async function gateStage(ctx) {
+  const { state, send, siteId, cookieHeader } = ctx;
   send("stage", { stage: "meaning" });
   const startedAt = Date.now();
   const totals = { kept: 0, dropped: 0 };
   const poll = async () => {
-    const res = await until(state, gatePosts(input.siteId, cookieHeader));
-    totals.kept += res?.kept ?? 0;
-    totals.dropped += res?.dropped ?? 0;
+    const res = await until(state, gatePosts(siteId, cookieHeader));
+    totals.kept += res?.matched ?? 0;
+    totals.dropped += res?.removed ?? 0;
     send("gate", { pending: res?.pending ?? 0, ...totals });
     return res;
   };
   let result = await poll();
   while ((result?.pending ?? 0) > 0 && Date.now() - startedAt < GATE_TIMEOUT_MS) {
-    await until(state, sleep(GATE_POLL_MS));
+    await until(state, sleep(POLL_MS));
     result = await poll();
   }
   return totals.kept;
 }
 
-async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) {
-  const { state, send, llm, cookieHeader } = ctx;
-  const posts = await until(state, listMatchedPosts(input.siteId, cookieHeader));
+async function judgeWithRetry(posts, judgeCtx, ctx) {
+  let lastError = null;
+  for (let attempt = 0; attempt < JUDGE_ATTEMPTS; attempt += 1) {
+    try {
+      return await until(ctx.state, judgeBatch(posts, judgeCtx, ctx.llm));
+    } catch (err) {
+      if (err instanceof Stopped) throw err;
+      lastError = err;
+    }
+  }
+  ctx.send("judge-error", { message: lastError instanceof Error ? lastError.message : String(lastError) });
+  return null;
+}
+
+async function judgeStage(lines, siteContext, ctx) {
+  const { state, send, siteId, cookieHeader } = ctx;
+  const posts = await until(state, listMatchedPosts(siteId, cookieHeader));
   send("stage", { stage: "judging" });
   send("judged", { judged: 0, total: posts.length, kept: 0 });
   if (posts.length === 0) return 0;
 
-  const minRelevance = Number.isFinite(Number(setup.config.minRelevance))
-    ? Number(setup.config.minRelevance)
-    : DEFAULT_MIN_RELEVANCE;
   const linesById = new Map(lines.map((l) => [l.id, l]));
   const byLine = new Map();
   for (const p of posts) {
@@ -226,12 +204,8 @@ async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) 
   }
   const batches = [];
   for (const [queryId, own] of byLine) {
-    const rejected = queryId
-      ? await until(state, listRejectedTexts(input.siteId, queryId, cookieHeader))
-      : [];
     const line = linesById.get(queryId)?.text ?? "the conversations the marketer listens for";
-    const judgeCtx = { line, siteContext, rejected };
-    for (const b of chunk(own, BATCH_SIZE)) batches.push({ judgeCtx, posts: b });
+    for (const b of chunk(own, BATCH_SIZE)) batches.push({ judgeCtx: { line, siteContext }, posts: b });
   }
 
   let judged = 0;
@@ -242,21 +216,23 @@ async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) 
       guard(state);
       const batch = batches[cursor];
       cursor += 1;
-      const results = withScores(await until(state, judgeBatch(batch.posts, batch.judgeCtx, llm)));
-      const fitting = results.filter((p) => p.fits && p.relevance >= minRelevance);
-      const alive = new Set(await until(state, dropDead(fitting)));
-      const verdicts = results.map((p) => {
-        if (!fitting.includes(p)) return toVerdict(p, "dropped", "judged_off_topic");
-        if (!alive.has(p)) return toVerdict(p, "dropped", "dead");
-        return toVerdict(p, "to_reply");
+      const results = await judgeWithRetry(batch.posts, batch.judgeCtx, ctx);
+      if (!results) continue;
+      const answered = results.filter((r) => r.verdict);
+      const fitting = answered.filter((r) => r.verdict.fits).map((r) => r.post);
+      const dead = await until(state, deadIds(fitting));
+      const verdicts = answered.map(({ post, verdict }) => {
+        const keep = verdict.fits && !dead.has(post.id);
+        return {
+          id: post.id,
+          keep,
+          keepReason: keep ? verdict.why : null,
+          suggestedAngle: keep ? verdict.angle : null,
+        };
       });
-      await until(state, saveJudged(input.siteId, verdicts, cookieHeader));
-      judged += results.length;
-      kept += alive.size;
-      for (const p of alive) {
-        const stat = platformStats[p.platform];
-        if (stat) stat.kept += 1;
-      }
+      const saved = await until(state, saveVerdicts(siteId, verdicts, cookieHeader));
+      judged += answered.length;
+      kept += saved?.kept ?? 0;
       send("judged", { judged, total: posts.length, kept });
     }
   };
@@ -264,31 +240,26 @@ async function judgeStage(input, setup, lines, siteContext, ctx, platformStats) 
   return kept;
 }
 
-async function drive(jobId, input, state, emit, { providers, cookieHeader, release }) {
+async function drive(jobId, input, state, emit, { cookieHeader, release }) {
   const send = (event, data) => emit({ jobId, event, data });
   const finish = (event, data) => {
     release();
     send(event, data);
   };
-  const target = { cookieHeader, siteId: input.siteId, purpose: "social_listening" };
-  const ctx = { state, send, llm: target, providers, cookieHeader, siteId: input.siteId };
+  const llm = { cookieHeader, siteId: input.siteId, purpose: "social_listening" };
+  const ctx = { state, send, llm, cookieHeader, siteId: input.siteId };
   let runId = null;
-  const platformStats = {};
-  const counts = { fetchedCount: 0, matchedCount: 0, keptCount: 0 };
+  const counts = { matchedCount: 0, keptCount: 0 };
 
   const finishPatch = (status, extra = {}) => {
     if (!runId) return Promise.resolve();
-    return patchRun(
-      input.siteId,
-      runId,
-      { status, finishedAt: new Date().toISOString(), ...counts, platformStats, ...extra },
-      cookieHeader,
-    ).catch(() => {});
+    return patchRun(input.siteId, runId, { status, ...counts, ...extra }, cookieHeader).catch(
+      () => {},
+    );
   };
 
   try {
     const setup = await until(state, fetchListeningSetup(input.siteId, cookieHeader));
-    guard(state);
     if (!input.platforms.length) {
       input.platforms = Array.isArray(setup.config.platforms) ? setup.config.platforms : [];
     }
@@ -296,28 +267,22 @@ async function drive(jobId, input, state, emit, { providers, cookieHeader, relea
     const enabledLines = setup.queries.filter((q) => q?.enabled !== false);
     if (enabledLines.length === 0) throw new Error("Add a line to listen for first.");
     const siteContext = siteContextOf(setup.site);
-    const run = await createRun(input.siteId, cookieHeader);
+    const run = await until(state, createRun(input.siteId, cookieHeader));
     runId = run?.id ?? null;
-    guard(state);
 
     const lines = await searchTerms(enabledLines, siteContext, ctx);
-    guard(state);
-    const fetchResult = await fetchStage(input, setup, lines, ctx, platformStats, runId);
-    counts.fetchedCount = fetchResult.fetched;
-    guard(state);
-    counts.matchedCount = await gateStage(input, ctx);
-    guard(state);
-    counts.keptCount = await judgeStage(input, setup, lines, siteContext, ctx, platformStats);
+    const collected = await collectStage(input, runId, ctx);
+    counts.matchedCount = await gateStage(ctx);
+    counts.keptCount = await judgeStage(lines, siteContext, ctx);
     guard(state);
 
     await finishPatch("done");
     finish("done", {
-      fetched: counts.fetchedCount,
-      inserted: fetchResult.inserted,
+      fetched: collected.fetched,
+      inserted: collected.inserted,
       matched: counts.matchedCount,
       kept: counts.keptCount,
-      lookbackDays: fetchResult.lookbackDays,
-      platforms: platformStats,
+      platforms: collected.platforms ?? {},
     });
   } catch (err) {
     if (err instanceof Stopped) {

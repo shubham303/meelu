@@ -1,3 +1,6 @@
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 import psycopg
 import pytest
 
@@ -5,24 +8,26 @@ from tests.conftest import TEST_URL, signup
 
 PG_URL = TEST_URL.replace("postgresql+psycopg://", "postgresql://")
 
-LONG_TEXT = (
-    "Running a forty page site for a local bakery and I just want to see where we rank "
-    "for about thirty keywords with an email every week."
-)
 
-
-def unit(axis):
+def unit(axis, lean=0.0):
     v = [0.0] * 384
     v[axis] = 1.0
+    if lean:
+        v[(axis + 1) % 384] = lean
     return "[" + ",".join(repr(x) for x in v) + "]"
 
 
-def set_embedding(table, id, axis):
+def sql(statement, params=()):
     with psycopg.connect(PG_URL, autocommit=True) as conn:
-        conn.execute(
-            f"update {table} set embedding = %s::vector, embed_model = 'test' where id = %s",
-            (unit(axis), id),
-        )
+        cur = conn.execute(statement, params)
+        return cur.fetchall() if cur.description else None
+
+
+def set_embedding(table, id, axis, lean=0.0):
+    sql(
+        f"update {table} set embedding = %s::vector, embed_model = 'test' where id = %s",
+        (unit(axis, lean), id),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -36,458 +41,421 @@ def mount_routers():
         app.include_router(router, prefix="/api/v1")
 
 
-async def prepare(client, email):
-    await signup(client, email)
-    r = await client.post(
-        "/api/v1/sites", json={"domain": "listen.example.com", "name": "Listen Example"}
-    )
+@pytest.fixture
+def vendor(monkeypatch):
+    from src.providers.social_search.service import social_search
+
+    calls = []
+    replies = {}
+
+    async def search_platform(caller, platform, keywords, since, per_keyword):
+        calls.append(
+            {"platform": platform, "keywords": keywords, "since": since, "perKeyword": per_keyword}
+        )
+        reply = replies.get(platform, {"posts": [], "failedKeywords": []})
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(social_search, "search_platform", search_platform)
+    return {"calls": calls, "replies": replies}
+
+
+async def prepare(client, email, credits=10.0, domain="listen.example.com"):
+    await signup(client, email, credits=credits)
+    return await add_site(client, domain)
+
+
+async def add_site(client, domain):
+    r = await client.post("/api/v1/sites", json={"domain": domain, "name": domain})
     assert r.status_code == 201, r.text
-    return r.json()["data"]
+    site = r.json()["data"]
+    client.headers["x-meelu-site"] = site["id"]
+    return site
 
 
-async def add_query(client, text="people asking about rank tracking"):
+async def add_line(client, text, keywords):
     r = await client.post("/api/v1/social-listening/queries", json=[{"text": text}])
     assert r.status_code == 200, r.text
     r = await client.get("/api/v1/social-listening/queries")
-    return next(q["id"] for q in r.json()["data"] if q["text"] == text)
-
-
-async def ingest(client, *posts, run_id=None):
-    r = await client.post(
-        "/api/v1/social-listening/posts/bulk", json={"runId": run_id, "posts": list(posts)}
+    line = next(q for q in r.json()["data"] if q["text"] == text)
+    r = await client.patch(
+        f"/api/v1/social-listening/queries/{line['id']}", json={"keywords": keywords}
     )
     assert r.status_code == 200, r.text
     return r.json()["data"]
 
 
-async def all_posts(client, status=None):
+def vendor_post(post_id, text, platform="hackernews", hours_ago=1, title=None):
+    return {
+        "id": post_id,
+        "url": f"https://news.ycombinator.com/item?id={post_id}",
+        "platform": platform,
+        "author": {"handle": "pg", "displayName": None},
+        "title": title,
+        "text": text,
+        "createdAt": (datetime.now(UTC) - timedelta(hours=hours_ago)).isoformat(),
+        "engagement": {"score": 3, "comments": 1, "views": None},
+        "context": {"subreddit": None, "tags": None},
+    }
+
+
+async def grant(email, usd):
+    from sqlalchemy import text
+
+    from src.core.database import unit_of_work
+    from src.credits.ledger import credit_ledger_service
+
+    async with unit_of_work() as db:
+        user_id = (
+            await db.execute(text('SELECT id FROM "user" WHERE email = :e'), {"e": email})
+        ).scalar_one()
+        await credit_ledger_service.apply(db, user_id, usd * 1_000_000, "grant", "Test credits")
+
+
+async def start_run(client):
+    r = await client.post("/api/v1/social-listening/runs")
+    assert r.status_code == 201, r.text
+    return r.json()["data"]
+
+
+async def collect(client, run_id, platform="hackernews"):
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run_id}/collect", json={"platform": platform}
+    )
+    assert r.status_code == 200, r.text
+    for _ in range(200):
+        r = await client.get(f"/api/v1/social-listening/runs/{run_id}")
+        stats = r.json()["data"]["platformStats"].get(platform) or {}
+        if stats.get("status") != "running":
+            return r.json()["data"]
+        await asyncio.sleep(0.02)
+    raise AssertionError("collect never finished")
+
+
+async def posts(client, status=None):
     suffix = f"?status={status}&page_size=100" if status else "?page_size=100"
     r = await client.get(f"/api/v1/social-listening/posts{suffix}")
     assert r.status_code == 200, r.text
-    return {p["url"]: p for p in r.json()["data"]}
-
-
-async def judge(client, post_id, status="to_reply", **fields):
-    r = await client.post(
-        "/api/v1/social-listening/posts/judged",
-        json={"posts": [{"id": post_id, "status": status, **fields}]},
-    )
-    assert r.status_code == 200, r.text
     return r.json()["data"]
 
 
-def post_payload(url, **extra):
-    base = {
-        "url": url,
-        "platform": "reddit",
-        "title": "How do I automate SEO audits?",
-        "text": "Looking for a tool that watches my rankings.",
-        "engagement": {"score": 42, "comments": 10},
-        "context": {"subreddit": "seo"},
-    }
-    base.update(extra)
-    return base
-
-
-async def test_config_lazy_create_and_update(client, email):
+async def test_config_defaults_and_validation(client, email):
     await prepare(client, email)
 
     r = await client.get("/api/v1/social-listening/config")
-    assert r.status_code == 200, r.text
     config = r.json()["data"]
     assert config["platforms"] == []
-    assert config["resultsPerKeyword"] == 50
-    assert config["strictness"] == "balanced"
-    assert config["maxAgeDays"] == 365
-    assert config["minSimilarity"] == pytest.approx(0.8)
-    assert config["minRelevance"] == pytest.approx(0.6)
-    assert "schedule" not in config
+    for gone in ("maxAgeDays", "resultsPerKeyword", "minRelevance", "strictness", "minSimilarity"):
+        assert gone not in config
 
     r = await client.put(
         "/api/v1/social-listening/config",
-        json={"strictness": "strict", "platforms": ["reddit", "hackernews"], "maxAgeDays": 45},
+        json={"platforms": ["reddit", "facebook", "reddit"]},
     )
     assert r.status_code == 200, r.text
-    updated = r.json()["data"]
-    assert updated["id"] == config["id"]
-    assert updated["strictness"] == "strict"
-    assert updated["minSimilarity"] == pytest.approx(0.85)
-    assert updated["minRelevance"] == pytest.approx(0.75)
-    assert updated["platforms"] == ["reddit", "hackernews"]
-    assert updated["maxAgeDays"] == 45
+    assert r.json()["data"]["platforms"] == ["reddit", "facebook"]
 
-    for bad in ({"strictness": "fierce"}, {"maxAgeDays": 0}, {"resultsPerKeyword": 0}):
-        r = await client.put("/api/v1/social-listening/config", json=bad)
-        assert r.status_code == 400, bad
-
-    r = await client.get("/api/v1/social-listening/config")
-    assert r.json()["data"]["maxAgeDays"] == 45
+    r = await client.put("/api/v1/social-listening/config", json={"platforms": ["youtube"]})
+    assert r.status_code == 400
 
 
-async def test_queries_upsert_patch_delete_and_counts(client, email):
+async def test_lines_cap_and_two_keywords(client, email):
     await prepare(client, email)
 
     r = await client.post(
-        "/api/v1/social-listening/queries",
-        json=[
-            {"text": "people asking which tool tracks rankings"},
-            {"text": "someone  frustrated their audit missed  issues", "source": "suggested"},
-        ],
+        "/api/v1/social-listening/queries", json=[{"text": f"line {i}"} for i in range(30)]
     )
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"inserted": 2, "updated": 0}
-
+    assert r.json()["data"] == {"inserted": 30, "updated": 0}
+    r = await client.post("/api/v1/social-listening/queries", json=[{"text": "line 31"}])
+    assert r.status_code == 400
+    assert "at most 30 lines" in r.json()["error"]["message"]
     r = await client.post(
-        "/api/v1/social-listening/queries",
-        json=[
-            {"text": "people asking which tool tracks rankings", "enabled": False},
-            {"text": "people talking about Meelu"},
-        ],
+        "/api/v1/social-listening/queries", json=[{"text": "line 3", "enabled": False}]
     )
-    assert r.json()["data"] == {"inserted": 1, "updated": 1}
+    assert r.json()["data"] == {"inserted": 0, "updated": 1}
 
     r = await client.get("/api/v1/social-listening/queries")
-    queries = r.json()["data"]
-    assert [q["text"] for q in queries] == [
-        "people asking which tool tracks rankings",
-        "someone frustrated their audit missed issues",
-        "people talking about Meelu",
-    ]
-    first = queries[0]
-    assert first["enabled"] is False
-    assert first["embedded"] is False
-    assert first["found"] == 0
-    assert first["kept"] == 0
-
-    await ingest(
-        client,
-        post_payload("https://reddit.com/r/seo/comments/a1/x", queryId=first["id"]),
-        post_payload("https://reddit.com/r/seo/comments/a2/x", queryId=first["id"]),
-        post_payload(
-            "https://reddit.com/r/seo/comments/a3/x", queryId=first["id"], dropReason="too_old"
-        ),
-    )
-    posts = await all_posts(client)
-    set_embedding("social_listening_query", first["id"], 0)
-    for url in ("https://reddit.com/r/seo/comments/a1/x", "https://reddit.com/r/seo/comments/a2/x"):
-        set_embedding("social_listening_post", posts[url]["id"], 0)
-    await client.post("/api/v1/social-listening/posts/gate")
-    await judge(client, posts["https://reddit.com/r/seo/comments/a1/x"]["id"])
-
-    r = await client.get("/api/v1/social-listening/queries")
-    counted = r.json()["data"][0]
-    assert counted["found"] == 3
-    assert counted["kept"] == 1
-    assert counted["embedded"] is True
-
-    r = await client.patch(
-        f"/api/v1/social-listening/queries/{first['id']}",
-        json={"enabled": True, "keywords": ["rank tracker"], "negativeKeywords": ["job"]},
-    )
-    assert r.status_code == 200, r.text
-    patched = r.json()["data"]
-    assert patched["enabled"] is True
-    assert patched["keywords"] == ["rank tracker"]
-    assert patched["found"] == 3
-
-    r = await client.patch(
-        f"/api/v1/social-listening/queries/{first['id']}",
-        json={"text": "people asking about rank tracking"},
-    )
-    assert r.json()["data"]["embedded"] is False
+    line = r.json()["data"][0]
+    assert "negativeKeywords" not in line
+    url = f"/api/v1/social-listening/queries/{line['id']}"
+    r = await client.patch(url, json={"keywords": ["only one"]})
+    assert r.status_code == 400
+    r = await client.patch(url, json={"keywords": ["Slow  Site", "slow site"]})
+    assert r.status_code == 400
+    r = await client.patch(url, json={"keywords": ["Slow  Site", "wordpress speed"]})
+    assert r.json()["data"]["keywords"] == ["slow site", "wordpress speed"]
+    r = await client.patch(url, json={"text": "a new wording"})
     assert r.json()["data"]["keywords"] == []
 
-    r = await client.patch(f"/api/v1/social-listening/queries/{first['id']}", json={"text": "  "})
-    assert r.status_code == 400
 
-    r = await client.delete(f"/api/v1/social-listening/queries/{first['id']}")
-    assert r.status_code == 200, r.text
-    r = await client.get("/api/v1/social-listening/queries")
-    assert len(r.json()["data"]) == 2
-    r = await client.patch(
-        f"/api/v1/social-listening/queries/{first['id']}", json={"enabled": True}
-    )
-    assert r.status_code == 404
-
-    kept = await all_posts(client)
-    assert len(kept) == 3
-    assert all(p.get("queryId") is None for p in kept.values())
-
-
-async def test_runs_lifecycle_and_list(client, email):
-    await prepare(client, email)
-
+async def test_run_needs_five_dollars_and_one_at_a_time(client, email):
+    await prepare(client, email, credits=1.0)
     r = await client.post("/api/v1/social-listening/runs")
-    assert r.status_code == 201, r.text
-    run = r.json()["data"]
-    assert run["status"] == "running"
-    assert run["fetchedCount"] == 0
-    assert run["matchedCount"] == 0
-    assert run["platformStats"] == {}
-
-    r = await client.patch(
-        f"/api/v1/social-listening/runs/{run['id']}",
-        json={
-            "status": "done",
-            "fetchedCount": 142,
-            "matchedCount": 38,
-            "keptCount": 20,
-            "platformStats": {"reddit": {"fetched": 142, "kept": 20}},
-        },
+    assert r.status_code == 402
+    assert r.json()["error"]["message"] == (
+        "Social listening needs a credit balance of at least $5."
     )
-    assert r.status_code == 200, r.text
-    done = r.json()["data"]
-    assert done["finishedAt"] is not None
-    assert (done["fetchedCount"], done["matchedCount"], done["keptCount"]) == (142, 38, 20)
 
-    r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "flying"})
-    assert r.status_code == 400
+    await grant(email, 10)
+    run = await start_run(client)
 
+    await add_site(client, "second.example.com")
     r = await client.post("/api/v1/social-listening/runs")
-    second = r.json()["data"]
-    r = await client.get("/api/v1/social-listening/runs")
-    assert [x["id"] for x in r.json()["data"]] == [second["id"], run["id"]]
-
-
-async def test_ingest_never_stores_the_same_post_twice(client, email):
-    await prepare(client, email)
-    query_id = await add_query(client)
-    r = await client.post("/api/v1/social-listening/runs")
-    run_id = r.json()["data"]["id"]
-
-    result = await ingest(
-        client,
-        post_payload(
-            "https://www.reddit.com/r/SEO/comments/abc12/what_do_you_use/?utm_source=share",
-            externalId="t3_abc12",
-            queryId=query_id,
-            text=LONG_TEXT,
-        ),
-        post_payload("https://news.ycombinator.com/item?id=4242", platform="hackernews"),
-        post_payload("https://old.reddit.com/r/seo/comments/ABC12/", queryId=query_id),
-        run_id=run_id,
-    )
-    assert result == {"inserted": 2, "known": 1, "duplicates": 0}
-
-    posts = await all_posts(client)
-    rank = next(p for p in posts.values() if p["platform"] == "reddit")
-    assert rank["externalId"] == "abc12"
-    assert rank["status"] == "fetched"
-    assert rank["runId"] == run_id
-
-    set_embedding("social_listening_query", query_id, 0)
-    set_embedding("social_listening_post", rank["id"], 0)
-    await client.post("/api/v1/social-listening/posts/gate")
-    await judge(client, rank["id"])
-    r = await client.patch(
-        f"/api/v1/social-listening/posts/{rank['id']}", json={"status": "rejected"}
-    )
-    assert r.status_code == 200, r.text
-
-    variants = [
-        post_payload("https://reddit.com/r/SEO/comments/abc12/", externalId="abc12"),
-        post_payload("https://new.reddit.com/r/seo/comments/abc12/what_do_you_use"),
-        post_payload("https://reddit.com/r/SEO/comments/abc12/x", externalId="t3_ABC12"),
-    ]
-    result = await ingest(client, *variants)
-    assert result == {"inserted": 0, "known": 3, "duplicates": 0}
-
-    result = await ingest(
-        client,
-        post_payload(
-            "https://reddit.com/r/smallbusiness/comments/zz9/cross_post",
-            title="How do I automate SEO audits?",
-            text=LONG_TEXT,
-            queryId=query_id,
-        ),
-    )
-    assert result == {"inserted": 1, "known": 0, "duplicates": 1}
-
-    posts = await all_posts(client)
-    assert len(posts) == 3
-    assert posts["https://reddit.com/r/smallbusiness/comments/zz9/cross_post"]["status"] == (
-        "dropped"
-    )
-    assert posts["https://reddit.com/r/smallbusiness/comments/zz9/cross_post"]["dropReason"] == (
-        "duplicate"
-    )
-    assert next(p for p in posts.values() if p["id"] == rank["id"])["status"] == "rejected"
-
-    result = await ingest(
-        client, post_payload("https://x.com/kate/status/77", platform="x", dropReason="too_old")
-    )
-    assert result["inserted"] == 1
-    old = (await all_posts(client, "dropped"))["https://x.com/kate/status/77"]
-    assert old["dropReason"] == "too_old"
-    result = await ingest(
-        client, post_payload("https://twitter.com/kate/status/77?s=20", platform="x")
-    )
-    assert result == {"inserted": 0, "known": 1, "duplicates": 0}
-
-    r = await client.post(
-        "/api/v1/social-listening/posts/bulk",
-        json={"posts": [post_payload("https://a/1", dropReason="judged_off_topic")]},
-    )
-    assert r.status_code == 400
-    r = await client.post(
-        "/api/v1/social-listening/posts/bulk",
-        json={"runId": "slr_missing", "posts": [post_payload("https://a/2")]},
-    )
-    assert r.status_code == 404
-
-
-async def test_gate_and_judge_are_incremental(client, email):
-    await prepare(client, email)
-    query_id = await add_query(client)
-
-    await ingest(
-        client,
-        post_payload("https://a.example/close", queryId=query_id),
-        post_payload("https://a.example/far", queryId=query_id),
-        post_payload("https://a.example/later", queryId=query_id),
-        post_payload("https://a.example/orphan"),
-        post_payload("https://a.example/noise", queryId=query_id, dropReason="excluded_word"),
-    )
-    by_url = await all_posts(client)
-
-    r = await client.post("/api/v1/social-listening/posts/gate")
-    assert r.status_code == 200, r.text
-    assert r.json()["data"] == {"pending": 3, "scored": 1, "kept": 0, "dropped": 1}
-    assert (await all_posts(client, "dropped"))["https://a.example/orphan"]["dropReason"] == (
-        "line_removed"
-    )
-
-    set_embedding("social_listening_query", query_id, 0)
-    set_embedding("social_listening_post", by_url["https://a.example/close"]["id"], 0)
-    set_embedding("social_listening_post", by_url["https://a.example/far"]["id"], 1)
-
-    r = await client.post("/api/v1/social-listening/posts/gate")
-    assert r.json()["data"] == {"pending": 1, "scored": 2, "kept": 1, "dropped": 1}
-
-    matched = await all_posts(client, "matched")
-    assert list(matched) == ["https://a.example/close"]
-    assert matched["https://a.example/close"]["similarity"] == pytest.approx(1.0)
-    dropped = await all_posts(client, "dropped")
-    assert dropped["https://a.example/far"]["dropReason"] == "far_in_meaning"
-    assert dropped["https://a.example/noise"]["dropReason"] == "excluded_word"
-    assert list(await all_posts(client, "fetched")) == ["https://a.example/later"]
-
-    close_id = by_url["https://a.example/close"]["id"]
-    result = await judge(
-        client,
-        close_id,
-        relevance=0.9,
-        compositeScore=0.8,
-        keepReason="Asks for a tracker.",
-        suggestedAngle="Answer with two free options first.",
-    )
-    assert result == {"updated": 1}
-    r = await client.get(f"/api/v1/social-listening/posts/{close_id}")
-    close = r.json()["data"]
-    assert close["status"] == "to_reply"
-    assert close["keepReason"] == "Asks for a tracker."
-    assert close["suggestedAngle"] == "Answer with two free options first."
-    assert close.get("dropReason") is None
-
-    assert await judge(client, close_id, "dropped", dropReason="judged_off_topic") == {"updated": 0}
-    r = await client.get(f"/api/v1/social-listening/posts/{close_id}")
-    assert r.json()["data"]["status"] == "to_reply"
-
-    later_id = by_url["https://a.example/later"]["id"]
-    set_embedding("social_listening_post", later_id, 0)
-    await client.post("/api/v1/social-listening/posts/gate")
-    await judge(client, later_id, "dropped", dropReason="dead")
-    assert (await all_posts(client, "dropped"))["https://a.example/later"]["dropReason"] == "dead"
-
-    for bad in (
-        {"id": close_id, "status": "drafted"},
-        {"id": close_id, "status": "dropped"},
-        {"id": close_id, "status": "dropped", "dropReason": "too_old"},
-    ):
-        r = await client.post("/api/v1/social-listening/posts/judged", json={"posts": [bad]})
-        assert r.status_code == 400, bad
-    r = await client.post(
-        "/api/v1/social-listening/posts/judged",
-        json={"posts": [{"id": "slp_missing", "status": "to_reply"}]},
-    )
-    assert r.status_code == 404
-
-
-async def test_review_statuses_filters_and_summary(client, email):
-    await prepare(client, email)
-    query_id = await add_query(client)
-    urls = [f"https://b.example/{n}" for n in range(5)]
-    await ingest(
-        client,
-        *[post_payload(u, queryId=query_id, engagement={"score": i}) for i, u in enumerate(urls)],
-        post_payload("https://b.example/old", queryId=query_id, dropReason="too_old"),
-    )
-    by_url = await all_posts(client)
-    set_embedding("social_listening_query", query_id, 0)
-    for u in urls:
-        set_embedding("social_listening_post", by_url[u]["id"], 0)
-    await client.post("/api/v1/social-listening/posts/gate")
-    for i, u in enumerate(urls):
-        await judge(client, by_url[u]["id"], compositeScore=i / 10)
-
-    ids = [by_url[u]["id"] for u in urls]
-    r = await client.patch(
-        f"/api/v1/social-listening/posts/{ids[0]}",
-        json={"status": "drafted", "replyText": "Search Console already shows this."},
-    )
-    assert r.status_code == 200, r.text
-    r = await client.patch(f"/api/v1/social-listening/posts/{ids[1]}", json={"status": "replied"})
-    assert r.json()["data"]["repliedAt"] is not None
-    await client.patch(f"/api/v1/social-listening/posts/{ids[2]}", json={"status": "skipped"})
-    await client.patch(f"/api/v1/social-listening/posts/{ids[3]}", json={"status": "rejected"})
-
-    r = await client.patch(f"/api/v1/social-listening/posts/{ids[0]}", json={"status": "dropped"})
-    assert r.status_code == 400
-    r = await client.patch(
-        f"/api/v1/social-listening/posts/{by_url['https://b.example/old']['id']}",
-        json={"status": "to_reply"},
-    )
     assert r.status_code == 409
 
-    r = await client.get("/api/v1/social-listening/posts?status=replied,skipped,rejected&sort=best")
-    assert [p["url"] for p in r.json()["data"]] == [urls[3], urls[2], urls[1]]
-    r = await client.get("/api/v1/social-listening/posts?status=to_reply,replied&sort=engaged")
-    assert [p["url"] for p in r.json()["data"]] == [urls[4], urls[1]]
-    r = await client.get("/api/v1/social-listening/posts?status=nope")
-    assert r.status_code == 400
-
-    r = await client.get("/api/v1/social-listening/summary")
-    summary = r.json()["data"]
-    assert summary["toReply"] == 1
-    assert summary["drafted"] == 1
-    assert summary["replied"] == 1
-    assert summary["skipped"] == 1
-    assert summary["rejected"] == 1
-    assert summary["done"] == 3
-    assert summary["unprocessed"] == 0
-
-    r = await client.patch(f"/api/v1/social-listening/posts/{ids[1]}", json={"status": "to_reply"})
-    assert r.json()["data"].get("repliedAt") is None
-
-    r = await client.delete(f"/api/v1/social-listening/posts/{ids[0]}")
-    assert r.status_code == 405
+    sql(
+        "update social_listening_run set started_at = now() - interval '3 hours' where id = %s",
+        (run["id"],),
+    )
+    second = await start_run(client)
+    assert second["status"] == "running"
+    rows = sql("select status, error from social_listening_run where id = %s", (run["id"],))
+    assert rows[0][0] == "error"
 
 
-async def test_bulk_refuses_another_sites_query(client, email):
+async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
     await prepare(client, email)
-    foreign = await add_query(client)
+    await add_line(client, "people with slow wordpress sites", ["slow wordpress", "site speed"])
+    await add_line(client, "owners asking about site speed", ["site speed", "page cache"])
 
-    await prepare(client, f"other-{email}")
-    own = await add_query(client)
+    sql(
+        "insert into social_post (id, post_key, platform, url, text, posted_at, fetched_at) "
+        "values ('sp_shared', 'hackernews:shared', 'hackernews', "
+        "'https://news.ycombinator.com/item?id=shared', 'my slow wordpress install', now(), now())"
+    )
+    sql(
+        "insert into social_post (id, post_key, platform, url, text, posted_at, fetched_at) "
+        "values ('sp_stale', 'hackernews:stale', 'hackernews', "
+        "'https://news.ycombinator.com/item?id=stale', 'slow wordpress again', now(), "
+        "now() - interval '9 days')"
+    )
+    long_text = "Our page cache plugin broke and the whole site crawls along slowly every day now."
+    vendor["replies"]["hackernews"] = {
+        "posts": [
+            vendor_post("1", "anyone fix site speed on shared hosting?"),
+            vendor_post("2", long_text),
+            vendor_post("3", long_text + " "),
+        ],
+        "failedKeywords": ["page cache"],
+    }
+
+    run = await start_run(client)
+    finished = await collect(client, run["id"])
+    call = vendor["calls"][0]
+    assert sorted(call["keywords"]) == ["page cache", "site speed", "slow wordpress"]
+    assert call["perKeyword"] == 25
+    since = datetime.fromisoformat(call["since"])
+    assert timedelta(days=6, hours=23) < datetime.now(UTC) - since < timedelta(days=7, hours=1)
+
+    stats = finished["platformStats"]["hackernews"]
+    assert stats["status"] == "done"
+    assert stats["fromVendor"] == 3
+    assert stats["fromDatabase"] == 1
+    assert stats["candidates"] == 3
+    assert stats["failedKeywords"] == ["page cache"]
+    assert finished["fetchedCount"] == 4
+
+    found = await posts(client, "candidate")
+    assert {p["postId"] for p in found} >= {"sp_shared"}
+    assert "sp_stale" not in {p["postId"] for p in found}
+
+    cursors = dict(
+        sql(
+            "select keyword, last_fetched_at from social_listening_cursor "
+            "where site_id = %s and platform = 'hackernews'",
+            (client.headers["x-meelu-site"],),
+        )
+    )
+    assert set(cursors) == {"slow wordpress", "site speed"}
+
+    r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
+    assert r.json()["data"]["finishedAt"] is not None
+
+    vendor["replies"]["hackernews"] = {
+        "posts": [vendor_post("1", "anyone fix site speed on shared hosting?")],
+        "failedKeywords": [],
+    }
+    run = await start_run(client)
+    await collect(client, run["id"])
+    assert len(await posts(client, "candidate")) == 3
+    since = datetime.fromisoformat(vendor["calls"][1]["since"])
+    assert datetime.now(UTC) - since < timedelta(minutes=5)
+
+
+async def test_collect_survives_vendor_failure(client, email, vendor):
+    from src.providers.errors import ProviderRequestError
+
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["fail newt", "fail toad"])
+    vendor["replies"]["hackernews"] = ProviderRequestError("meelu-public", 502, "down")
+    run = await start_run(client)
+    finished = await collect(client, run["id"])
+    stats = finished["platformStats"]["hackernews"]
+    assert stats["status"] == "done"
+    assert "down" in stats["error"]
+    assert sorted(stats["failedKeywords"]) == ["fail newt", "fail toad"]
+    rows = sql(
+        "select count(*) from social_listening_cursor where site_id = %s",
+        (client.headers["x-meelu-site"],),
+    )
+    assert rows[0][0] == 0
+
+
+async def test_gate_then_judge(client, email, vendor):
+    await prepare(client, email)
+    near = await add_line(client, "people with slow sites", ["gate zebra", "gate yak"])
+    far = await add_line(client, "people hiring", ["gate okapi", "gate tapir"])
+    vendor["replies"]["hackernews"] = {
+        "posts": [
+            vendor_post("10", "my site is slow", hours_ago=5),
+            vendor_post("11", "who is hiring", hours_ago=1),
+            vendor_post("12", "unrelated cooking", hours_ago=2),
+            vendor_post("13", "not embedded yet", hours_ago=3),
+        ],
+        "failedKeywords": [],
+    }
+    run = await start_run(client)
+    await collect(client, run["id"])
+    by_url = {p["url"]: p for p in await posts(client, "candidate")}
+    post_id = {k.rsplit("=", 1)[1]: v["postId"] for k, v in by_url.items()}
+
+    r = await client.post("/api/v1/social-listening/posts/gate")
+    assert r.json()["data"]["pending"] == 6
+
+    set_embedding("social_listening_query", near["id"], 0)
+    set_embedding("social_listening_query", far["id"], 5)
+    set_embedding("social_post", post_id["10"], 0, lean=0.2)
+    set_embedding("social_post", post_id["11"], 5)
+    set_embedding("social_post", post_id["12"], 9)
+    r = await client.post("/api/v1/social-listening/posts/gate")
+    assert r.json()["data"] == {"pending": 1, "matched": 2, "removed": 1}
+
+    matched = {p["url"].rsplit("=", 1)[1]: p for p in await posts(client, "matched")}
+    assert set(matched) == {"10", "11"}
+    assert matched["10"]["queryId"] == near["id"]
+    assert matched["11"]["queryId"] == far["id"]
+    assert matched["10"]["similarity"] == pytest.approx(0.98, abs=0.01)
+
     r = await client.post(
-        "/api/v1/social-listening/posts/bulk",
+        "/api/v1/social-listening/posts/judged",
         json={
             "posts": [
-                post_payload("https://a.example/mine", queryId=own),
-                post_payload("https://a.example/theirs", queryId=foreign),
+                {
+                    "id": matched["10"]["id"],
+                    "keep": True,
+                    "keepReason": "Asks for help",
+                    "suggestedAngle": "Answer first",
+                },
+                {"id": matched["11"]["id"], "keep": False},
             ]
         },
     )
-    assert r.status_code == 404
-    assert foreign in r.json()["error"]["message"]
-    assert "https://a.example/mine" not in await all_posts(client)
+    assert r.json()["data"] == {"kept": 1, "removed": 1}
+    kept = await posts(client, "to_reply")
+    assert [p["keepReason"] for p in kept] == ["Asks for help"]
+    assert "relevance" not in kept[0] and "compositeScore" not in kept[0]
+
+    r = await client.patch(
+        f"/api/v1/social-listening/posts/{kept[0]['id']}", json={"status": "replied"}
+    )
+    assert r.json()["data"]["repliedAt"] is not None
+    pending = (await posts(client, "candidate"))[0]
+    r = await client.patch(
+        f"/api/v1/social-listening/posts/{pending['id']}", json={"status": "skipped"}
+    )
+    assert r.status_code == 409
+
+    r = await client.get("/api/v1/social-listening/summary")
+    summary = r.json()["data"]
+    assert summary["replied"] == 1
+    assert summary["unprocessed"] == 1
+
+
+async def test_posts_list_newest_first(client, email, vendor):
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["order lynx", "order puma"])
+    vendor["replies"]["hackernews"] = {
+        "posts": [vendor_post(f"o{i}", f"post {i}", hours_ago=i) for i in (5, 1, 3)],
+        "failedKeywords": [],
+    }
+    run = await start_run(client)
+    await collect(client, run["id"])
+    assert [p["url"].rsplit("=", 1)[1] for p in await posts(client)] == ["o1", "o3", "o5"]
+
+
+async def test_purge_drops_old_posts_and_stale_runs(client, email, vendor):
+    from src.core.database import unit_of_work
+    from src.social_listening.service import social_listening_service
+
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["purge heron", "purge ibis"])
+    vendor["replies"]["hackernews"] = {
+        "posts": [vendor_post("old", "old post", hours_ago=24 * 31), vendor_post("new", "new")],
+        "failedKeywords": [],
+    }
+    run = await start_run(client)
+    await collect(client, run["id"])
+    sql(
+        "update social_listening_run set started_at = now() - interval '3 hours' where id = %s",
+        (run["id"],),
+    )
+
+    async with unit_of_work() as db:
+        removed = await social_listening_service.purge(db)
+    assert removed["posts"] >= 1
+    assert removed["runs"] >= 1
+    assert [p["url"].rsplit("=", 1)[1] for p in await posts(client)] == ["new"]
+    r = await client.get(f"/api/v1/social-listening/runs/{run['id']}")
+    assert r.json()["data"]["status"] == "error"
+
+
+async def test_silent_collect_is_closed_and_can_restart(client, email, vendor):
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["beat kudu", "beat gnu"])
+    run = await start_run(client)
+    sql(
+        "update social_listening_run set platform_stats = jsonb_build_object("
+        "'hackernews', jsonb_build_object('status', 'running', 'heartbeatAt', "
+        "(now() - interval '5 minutes')::text)) where id = %s",
+        (run["id"],),
+    )
+    r = await client.get(f"/api/v1/social-listening/runs/{run['id']}")
+    stats = r.json()["data"]["platformStats"]["hackernews"]
+    assert stats["status"] == "error"
+    assert "stopped reporting" in stats["error"]
+
+    finished = await collect(client, run["id"])
+    assert finished["platformStats"]["hackernews"]["status"] == "done"
+
+
+async def test_collect_beats_while_running(client, email, monkeypatch):
+    from src.providers.social_search.service import social_search
+    from src.social_listening import collect as collect_module
+
+    monkeypatch.setattr(collect_module, "HEARTBEAT_SECONDS", 0.05)
+    release = asyncio.Event()
+
+    async def slow_search(caller, platform, keywords, since, per_keyword):
+        await release.wait()
+        return {"posts": [], "failedKeywords": []}
+
+    monkeypatch.setattr(social_search, "search_platform", slow_search)
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["beat eland", "beat oryx"])
+    run = await start_run(client)
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run['id']}/collect", json={"platform": "hackernews"}
+    )
+    first = r.json()["data"]["platformStats"]["hackernews"]["heartbeatAt"]
+    later = first
+    for _ in range(100):
+        await asyncio.sleep(0.02)
+        r = await client.get(f"/api/v1/social-listening/runs/{run['id']}")
+        later = r.json()["data"]["platformStats"]["hackernews"].get("heartbeatAt")
+        if later != first:
+            break
+    assert later != first
+    release.set()
+    finished = await collect(client, run["id"])
+    assert finished["platformStats"]["hackernews"]["status"] == "done"

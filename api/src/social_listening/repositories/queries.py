@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,31 +82,41 @@ class SocialListeningQueryRepository:
         await db.delete(row)
         await db.flush()
 
-    async def embedding_states(self, db: AsyncSession, site_id: str) -> dict[str, tuple[bool, int]]:
+    async def count(self, db: AsyncSession, site_id: str) -> int:
         result = await db.execute(
-            select(
-                SocialListeningQuery.id,
-                SocialListeningQuery.embedding.is_not(None),
-                SocialListeningQuery.embed_attempts,
-            ).where(SocialListeningQuery.site_id == site_id)
+            select(func.count())
+            .select_from(SocialListeningQuery)
+            .where(SocialListeningQuery.site_id == site_id)
         )
-        return {qid: (bool(has), int(attempts)) for qid, has, attempts in result.all()}
+        return int(result.scalar_one())
 
-    async def embeddings_by_ids(
-        self, db: AsyncSession, site_id: str, ids: list[str]
-    ) -> dict[str, list[float]]:
-        if not ids:
-            return {}
+    async def count_waiting_for_embedding(
+        self, db: AsyncSession, site_id: str, max_attempts: int
+    ) -> int:
         result = await db.execute(
-            select(SocialListeningQuery.id, SocialListeningQuery.embedding).where(
+            select(func.count())
+            .select_from(SocialListeningQuery)
+            .where(
                 SocialListeningQuery.site_id == site_id,
-                SocialListeningQuery.id.in_(ids),
-                SocialListeningQuery.embedding.is_not(None),
+                SocialListeningQuery.enabled.is_(True),
+                SocialListeningQuery.embedding.is_(None),
+                SocialListeningQuery.embed_attempts < max_attempts,
             )
         )
-        return {qid: [float(x) for x in vector] for qid, vector in result.all()}
+        return int(result.scalar_one())
 
-    async def list_pending_embeddings(
+    async def list_enabled(self, db: AsyncSession, site_id: str) -> list[SocialListeningQuery]:
+        result = await db.execute(
+            select(SocialListeningQuery)
+            .where(
+                SocialListeningQuery.site_id == site_id,
+                SocialListeningQuery.enabled.is_(True),
+            )
+            .order_by(SocialListeningQuery.seq.asc())
+        )
+        return list(result.scalars().all())
+
+    async def claim_pending_embeddings(
         self, db: AsyncSession, max_attempts: int, limit: int
     ) -> list[QueryEmbeddingInput]:
         result = await db.execute(
@@ -115,8 +125,9 @@ class SocialListeningQueryRepository:
                 SocialListeningQuery.embedding.is_(None),
                 SocialListeningQuery.embed_attempts < max_attempts,
             )
-            .order_by(SocialListeningQuery.embed_attempts.asc(), SocialListeningQuery.seq.asc())
+            .order_by(SocialListeningQuery.seq.asc())
             .limit(limit)
+            .with_for_update(skip_locked=True)
         )
         return [QueryEmbeddingInput(id=qid, text=text) for qid, text in result.all()]
 
@@ -133,7 +144,6 @@ class SocialListeningQueryRepository:
                 updated_at=datetime.now(UTC),
             )
         )
-        await db.flush()
 
     async def mark_embed_failed(self, db: AsyncSession, query_id: str, message: str) -> None:
         await db.execute(

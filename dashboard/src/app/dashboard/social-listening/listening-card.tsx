@@ -7,15 +7,10 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/use-api";
 import type { SocialListeningConfig, SocialListeningQuery } from "@/lib/types";
 import type { PlatformInfo } from "./lib";
-import { SettingsRows } from "./settings-rows";
 
 const SUMMARY_CHIPS = 3;
 const FIND_AFTER = 5;
-const WEAK_FOUND = 20;
-
-function isWeak(q: SocialListeningQuery): boolean {
-  return q.enabled && q.kept === 0 && q.found > WEAK_FOUND;
-}
+const MAX_LINES = 30;
 
 export function ListeningCard({
   queries,
@@ -77,13 +72,6 @@ export function ListeningCard({
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="h-px bg-edge" />
       <PlatformRow config={config} platformInfo={platformInfo} onToggle={togglePlatform} />
-      <SettingsRows
-        key={config?.maxAgeDays ?? "none"}
-        config={config}
-        onSave={(body) =>
-          void guarded(() => api("/api/v1/social-listening/config", { method: "PUT", body }), refreshConfig)
-        }
-      />
     </Card>
   );
 }
@@ -144,11 +132,11 @@ function LineEditor({
   const on = queries.filter((q) => q.enabled).length;
   const needle = find.trim().toLowerCase();
   const visible = needle ? queries.filter((q) => q.text.toLowerCase().includes(needle)) : queries;
-  const anyWeak = queries.some(isWeak);
+  const full = queries.length >= MAX_LINES;
 
   const add = () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || full) return;
     setDraft("");
     void run(() => api("/api/v1/social-listening/queries", { method: "POST", body: [{ text }] }));
   };
@@ -215,7 +203,7 @@ function LineEditor({
                 <span
                   className={cn(
                     "text-right text-[13px] font-semibold tabular-nums",
-                    isWeak(q) ? "text-warn" : q.enabled ? "text-ink" : "text-sub",
+                    q.enabled ? "text-ink" : "text-sub",
                   )}
                 >
                   {q.kept}
@@ -251,13 +239,13 @@ function LineEditor({
           onKeyDown={(e) => e.key === "Enter" && add()}
           className="h-9 min-w-0 flex-1 rounded-lg border border-dashed border-edge2 bg-transparent px-3 text-[13.5px] text-ink placeholder:text-faint focus:border-accent focus:outline-none"
         />
-        <Button size="sm" variant="outline" onClick={add} disabled={!draft.trim()}>
+        <Button size="sm" variant="outline" onClick={add} disabled={!draft.trim() || full}>
           <Plus size={13} /> Add
         </Button>
       </div>
-      {anyWeak && (
+      {full && (
         <p className="pl-2 text-xs text-sub">
-          A line that finds many posts but keeps none is shown in amber. Try rewording it.
+          A website can listen for at most {MAX_LINES} lines. Remove or reword one to add another.
         </p>
       )}
       {canCollapse && (

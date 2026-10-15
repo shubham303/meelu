@@ -11,6 +11,8 @@ class WorkerSettings(EnvSettings):
     meelu_onnx_threads: int = 2
     meelu_embed_interval_ms: int = 15000
     meelu_chunk_page_batch: int = 25
+    meelu_listening_batch: int = 32
+    meelu_listening_max_batches: int = 32
     meelu_embed_disabled: str = "0"
     meelu_embed_once: str = "0"
 

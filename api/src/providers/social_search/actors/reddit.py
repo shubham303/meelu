@@ -18,7 +18,7 @@ def harshmaur_input(q: SearchQuery) -> dict:
         "crawlCommentsPerPost": False,
         "searchSort": "new",
         "searchTime": time_window(q),
-        "maxPostsCount": q.limit,
+        "maxPostsCount": q.per_keyword,
         "maxCommentsCount": 0,
         "maxCommentsPerPost": 0,
         "includeNSFW": False,
@@ -51,7 +51,7 @@ def fatihtahta_input(q: SearchQuery) -> dict:
         "timeframe": time_window(q),
         "scrapeComments": False,
         "includeNsfw": False,
-        "maxPosts": q.limit,
+        "maxPosts": q.per_keyword,
     }
 
 

@@ -1,41 +1,23 @@
-from datetime import datetime
 from typing import Any
-
-from pydantic import Field
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
-PIPELINE_STATUSES = ("fetched", "matched", "dropped")
+PIPELINE_STATUSES = ("candidate", "matched")
 USER_STATUSES = ("to_reply", "drafted", "replied", "skipped", "rejected")
 POST_STATUSES = PIPELINE_STATUSES + USER_STATUSES
 DONE_STATUSES = ("replied", "skipped", "rejected")
-DROP_REASONS = (
-    "too_old",
-    "excluded_word",
-    "far_in_meaning",
-    "judged_off_topic",
-    "dead",
-    "duplicate",
-    "unembeddable",
-    "line_removed",
-)
-INGEST_DROP_REASONS = ("too_old", "excluded_word")
-JUDGE_DROP_REASONS = ("judged_off_topic", "dead")
-JUDGE_STATUSES = ("to_reply", "dropped")
 RUN_STATUSES = ("running", "done", "stopped", "error")
-POST_SORTS = ("best", "newest", "engaged", "similarity")
-STRICTNESS_THRESHOLDS = {
-    "loose": (0.75, 0.45),
-    "balanced": (0.8, 0.6),
-    "strict": (0.85, 0.75),
-}
+COLLECT_STATUSES = ("running", "done", "error")
+MIN_SIMILARITY = 0.8
+KEYWORDS_PER_LINE = 2
+MAX_LINES_PER_SITE = 30
+PER_KEYWORD = 25
+LOOKBACK_DAYS = 7
+MINIMUM_BALANCE_USD = 5
 
 
 class ConfigUpdateRequest(RequestModel):
     platforms: list[str] | None = None
-    results_per_keyword: int | None = None
-    strictness: str | None = None
-    max_age_days: int | None = None
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
@@ -51,7 +33,6 @@ class QueryPatchRequest(RequestModel):
     text: str | None = None
     enabled: bool | None = None
     keywords: list[str] | None = None
-    negative_keywords: list[str] | None = None
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
@@ -59,49 +40,27 @@ class QueryPatchRequest(RequestModel):
 
 class RunUpdateRequest(RequestModel):
     status: str | None = None
-    finished_at: datetime | None = None
-    fetched_count: int | None = None
     matched_count: int | None = None
     kept_count: int | None = None
-    platform_stats: dict[str, Any] | None = None
     error: str | None = None
 
     def changes(self) -> dict[str, Any]:
         return self.model_dump(exclude_unset=True)
 
 
-class PostIngestItem(RequestModel):
-    url: str
+class CollectRequest(RequestModel):
     platform: str
-    external_id: str | None = None
-    title: str | None = None
-    text: str | None = None
-    author_handle: str | None = None
-    author_name: str | None = None
-    posted_at: datetime | None = None
-    engagement: dict[str, Any] = Field(default_factory=dict)
-    context: dict[str, Any] = Field(default_factory=dict)
-    query_id: str | None = None
-    drop_reason: str | None = None
 
 
-class PostsBulkRequest(RequestModel):
-    run_id: str | None = None
-    posts: list[PostIngestItem]
-
-
-class PostJudgeItem(RequestModel):
+class PostVerdict(RequestModel):
     id: str
-    status: str
-    drop_reason: str | None = None
-    relevance: float | None = None
-    composite_score: float | None = None
+    keep: bool
     keep_reason: str | None = None
     suggested_angle: str | None = None
 
 
 class PostsJudgeRequest(RequestModel):
-    posts: list[PostJudgeItem]
+    posts: list[PostVerdict]
 
 
 class PostPatchRequest(RequestModel):
@@ -118,20 +77,13 @@ class PostFilters(RequestModel):
     platform: str | None = None
     query_id: str | None = None
     run_id: str | None = None
-    min_relevance: float | None = None
     q: str | None = None
-    sort: str | None = None
 
 
 class ConfigResponse(EntityModel):
     id: str
     site_id: str
     platforms: list[str]
-    results_per_keyword: int
-    strictness: str
-    max_age_days: int
-    min_similarity: float
-    min_relevance: float
     created_at: JsDateTime
     updated_at: JsDateTime
 
@@ -143,7 +95,6 @@ class QueryResponse(EntityModel):
     enabled: bool
     source: str
     keywords: list[str]
-    negative_keywords: list[str]
     embedded: bool
     found: int
     kept: int
@@ -180,6 +131,7 @@ class RunResponse(EntityModel):
 class PostResponse(EntityModel):
     id: str
     site_id: str
+    post_id: str
     url: str
     platform: str
     external_id: str | None = None
@@ -191,10 +143,7 @@ class PostResponse(EntityModel):
     engagement: dict[str, Any]
     context: dict[str, Any]
     status: str
-    drop_reason: str | None = None
     similarity: float | None = None
-    relevance: float | None = None
-    composite_score: float | None = None
     keep_reason: str | None = None
     suggested_angle: str | None = None
     reply_text: str | None = None
@@ -207,15 +156,8 @@ class PostResponse(EntityModel):
 
 class GateResponse(EntityModel):
     pending: int
-    scored: int
-    kept: int
-    dropped: int
-
-
-class BulkInsertResponse(EntityModel):
-    inserted: int
-    known: int
-    duplicates: int
+    matched: int
+    removed: int
 
 
 class UpsertResponse(EntityModel):
@@ -224,7 +166,8 @@ class UpsertResponse(EntityModel):
 
 
 class JudgeResponse(EntityModel):
-    updated: int
+    kept: int
+    removed: int
 
 
 class DeleteResponse(EntityModel):
