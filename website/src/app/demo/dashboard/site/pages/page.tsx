@@ -23,17 +23,9 @@ import { SiteAskButton } from "../site-ask";
 import type { SitePage } from "@demo/lib/types";
 import * as chips from "@demo/features/prompt-chips/site";
 
-const KIND_TONE: Record<string, BadgeTone> = {
-  home: "good",
-  product: "good",
-  pricing: "good",
-  article: "neutral",
-  category: "neutral",
-  docs: "neutral",
-  about: "neutral",
-  contact: "neutral",
-  legal: "neutral",
-  other: "neutral",
+const PAGE_TYPE_TONE: Record<string, BadgeTone> = {
+  money: "good",
+  hub: "good",
 };
 
 const SORT_COLUMNS = [
@@ -47,17 +39,14 @@ const SORT_COLUMNS = [
 
 type SortField = (typeof SORT_COLUMNS)[number]["value"];
 
-const KINDS = [
-  "home",
-  "product",
-  "pricing",
-  "article",
-  "category",
-  "docs",
-  "about",
-  "contact",
+const PAGE_TYPES = [
+  "money",
+  "hub",
+  "informational",
+  "support",
+  "company",
   "legal",
-  "other",
+  "utility",
 ] as const;
 
 const STATUSES = [
@@ -86,11 +75,11 @@ type ParamDef =
 
 const PARAMS: readonly ParamDef[] = [
   {
-    key: "kind",
+    key: "pageType",
     label: "Kind",
     input: "enum",
-    param: "kind",
-    options: KINDS.map((k) => ({ value: k, label: k })),
+    param: "pageType",
+    options: PAGE_TYPES.map((t) => ({ value: t, label: t })),
   },
   { key: "status", label: "Status", input: "enum", param: "status", options: STATUSES },
   {
@@ -247,6 +236,9 @@ function rowSummary(row: FilterRow): string {
 const CONTROL =
   "rounded-lg border border-edge2 bg-panel px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none";
 
+const FIELD =
+  "h-8 rounded-md border border-edge2 bg-panel px-2.5 text-xs text-ink focus:border-accent focus:outline-none";
+
 export default function SitePagesPage() {
   const router = useRouter();
   const [sortField, setSortField] = useState<SortField>("url");
@@ -395,18 +387,26 @@ export default function SitePagesPage() {
         )}
 
         {showFilters && (
-          <div className="space-y-2 rounded-xl border border-edge bg-panel p-4">
-            {rows.map((row) => (
-              <FilterRowEditor
-                key={row.id}
-                row={row}
-                onChange={(next) =>
-                  editRows((prev) => prev.map((r) => (r.id === row.id ? next : r)))
-                }
-                onRemove={() => editRows((prev) => prev.filter((r) => r.id !== row.id))}
-              />
-            ))}
-            <select value="" onChange={(e) => e.target.value && addRow(e.target.value)} className={CONTROL}>
+          <div className="rounded-xl border border-edge bg-panel2/60 p-3">
+            {rows.length > 0 && (
+              <div className="mb-2 divide-y divide-edge/60">
+                {rows.map((row) => (
+                  <FilterRowEditor
+                    key={row.id}
+                    row={row}
+                    onChange={(next) =>
+                      editRows((prev) => prev.map((r) => (r.id === row.id ? next : r)))
+                    }
+                    onRemove={() => editRows((prev) => prev.filter((r) => r.id !== row.id))}
+                  />
+                ))}
+              </div>
+            )}
+            <select
+              value=""
+              onChange={(e) => e.target.value && addRow(e.target.value)}
+              className={`${FIELD} w-auto border-dashed text-sub transition-colors hover:text-ink`}
+            >
               <option value="">+ Add filter</option>
               {PARAMS.map((p) => (
                 <option key={p.key} value={p.key}>
@@ -482,7 +482,7 @@ function FilterRowEditor({
   const def = byKey(row.key);
   if (!def) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 py-1.5">
       <select
         value={row.key}
         onChange={(e) =>
@@ -493,7 +493,7 @@ function FilterRowEditor({
             b: "",
           })
         }
-        className={CONTROL}
+        className={`${FIELD} w-44 font-medium`}
       >
         {PARAMS.map((p) => (
           <option key={p.key} value={p.key}>
@@ -505,7 +505,7 @@ function FilterRowEditor({
         <select
           value={row.a}
           onChange={(e) => onChange({ ...row, a: e.target.value })}
-          className={CONTROL}
+          className={`${FIELD} w-44`}
         >
           <option value="">choose…</option>
           {def.options.map((o) => (
@@ -520,14 +520,14 @@ function FilterRowEditor({
           value={row.a}
           onChange={(e) => onChange({ ...row, a: e.target.value })}
           placeholder={def.placeholder ?? "contains…"}
-          className={`${CONTROL} min-w-0 flex-1`}
+          className={`${FIELD} w-64 min-w-0 placeholder:text-faint`}
         />
       )}
       {def.input === "bool" && (
         <select
           value={row.a}
           onChange={(e) => onChange({ ...row, a: e.target.value })}
-          className={CONTROL}
+          className={`${FIELD} w-24`}
         >
           <option value="true">yes</option>
           <option value="false">no</option>
@@ -540,15 +540,15 @@ function FilterRowEditor({
             value={row.a}
             onChange={(e) => onChange({ ...row, a: e.target.value })}
             placeholder="min"
-            className={`${CONTROL} w-24`}
+            className={`${FIELD} w-20 placeholder:text-faint`}
           />
-          <span className="text-sm text-faint">–</span>
+          <span className="text-xs text-faint">–</span>
           <input
             type="number"
             value={row.b}
             onChange={(e) => onChange({ ...row, b: e.target.value })}
             placeholder="max"
-            className={`${CONTROL} w-24`}
+            className={`${FIELD} w-20 placeholder:text-faint`}
           />
         </>
       )}
@@ -558,21 +558,22 @@ function FilterRowEditor({
             type="date"
             value={row.a}
             onChange={(e) => onChange({ ...row, a: e.target.value })}
-            className={CONTROL}
+            className={FIELD}
           />
-          <span className="text-sm text-faint">to</span>
+          <span className="text-xs text-faint">to</span>
           <input
             type="date"
             value={row.b}
             onChange={(e) => onChange({ ...row, b: e.target.value })}
-            className={CONTROL}
+            className={FIELD}
           />
         </>
       )}
       <button
         type="button"
         onClick={onRemove}
-        className="ml-auto text-faint transition-colors hover:text-ink"
+        title="Remove this filter"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition-colors hover:bg-panel hover:text-ink"
       >
         <X size={14} />
       </button>
@@ -601,7 +602,11 @@ function PageTableRow({ page, onOpen }: { page: SitePage; onOpen: () => void }) 
         {page.match && <MatchExcerpt match={page.match} />}
       </TCell>
       <TCell>
-        <Badge tone={KIND_TONE[page.kind] ?? "neutral"}>{page.kind}</Badge>
+        {page.pageType ? (
+          <Badge tone={PAGE_TYPE_TONE[page.pageType] ?? "neutral"}>{page.pageType}</Badge>
+        ) : (
+          <span className="text-xs text-faint">—</span>
+        )}
       </TCell>
       <TCell className="tabular-nums">{page.status ?? "—"}</TCell>
       <TCell className="tabular-nums">

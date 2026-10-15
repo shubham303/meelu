@@ -1,27 +1,29 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Check, ChevronDown, ChevronRight, ExternalLink, Layers, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Layers, RefreshCw, RotateCcw, Trash2, X } from "lucide-react";
 import { Badge, Button, ConfirmDelete, EmptyState, Spinner, Tabs, type BadgeTone } from "@demo/components/ui";
-import { api, useApi, usePagedApi } from "@demo/lib/use-api";
+import { api, usePagedApi } from "@demo/lib/use-api";
 import { cn, formatRelative } from "@demo/lib/utils";
 import type {
-  LinkSuggestionState,
   PillarSuggestion,
   PillarSuggestionAction,
-  PillarSuggestionSummary,
+  SuggestionState,
+  SuggestionSummary,
 } from "@demo/lib/types";
 
 const PAGE_SIZE = 20;
 
-type TabState = Exclude<LinkSuggestionState, "draft">;
+type TabState = Extract<SuggestionState, "review_approved" | "user_rejected">;
 
 const STATE_LABEL: Record<TabState, string> = {
-  ready: "Ready",
-  done: "Done",
+  review_approved: "Approved",
   user_rejected: "Turned down",
-  llm_rejected: "Screened out",
-  stale: "Stale",
+};
+
+const SUMMARY_KEY: Record<TabState, keyof SuggestionSummary> = {
+  review_approved: "reviewApproved",
+  user_rejected: "userRejected",
 };
 
 const ACTION_LABEL: Record<PillarSuggestionAction, string> = {
@@ -35,29 +37,30 @@ const ACTION_TONE: Record<PillarSuggestionAction, BadgeTone> = {
 };
 
 const EMPTY: Record<TabState, string> = {
-  ready: "No pillar pages ready. Ask the agent which topics lack a hub, and they land here.",
-  done: "No pillar marked done yet.",
+  review_approved:
+    "No approved pillar pages. Ask the agent which topics lack a hub, and the ones that pass review land here.",
   user_rejected: "Nothing turned down yet.",
-  llm_rejected: "The agent has not screened anything out.",
-  stale: "No suggestion has gone stale. One does when most of its pages leave the crawl.",
 };
 
-const EMPTY_SUMMARY: PillarSuggestionSummary = {
+const EMPTY_SUMMARY: SuggestionSummary = {
   draft: 0,
-  ready: 0,
-  llm_rejected: 0,
-  user_rejected: 0,
-  done: 0,
-  stale: 0,
+  screeningRejected: 0,
+  screeningApproved: 0,
+  reviewApproved: 0,
+  reviewRejected: 0,
+  userRejected: 0,
 };
 
-export function PillarSuggestions() {
-  const [state, setState] = useState<TabState>("ready");
+export function PillarSuggestions({
+  summary,
+  refreshSummary,
+}: {
+  summary: SuggestionSummary | null;
+  refreshSummary: () => void;
+}) {
+  const [state, setState] = useState<TabState>("review_approved");
   const [page, setPage] = useState(1);
 
-  const { data: summary, refresh: refreshSummary } = useApi<PillarSuggestionSummary>(
-    "/api/v1/site/structure/pillar-suggestions/summary",
-  );
   const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE), state });
   const { data: paged, loading, error, refresh } = usePagedApi<PillarSuggestion>(
     `/api/v1/site/structure/pillar-suggestions?${params}`,
@@ -70,24 +73,40 @@ export function PillarSuggestions() {
     void refreshSummary();
   }, [refresh, refreshSummary]);
 
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshSuggestions = async () => {
+    setRefreshing(true);
+    try {
+      await api("/api/v1/site/structure/pillar-suggestions/reconcile", { method: "POST" });
+      reload();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const counts = summary ?? EMPTY_SUMMARY;
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const total = counts.reviewApproved + counts.userRejected;
   const nothingAtAll = summary !== null && total === 0;
 
   return (
-    <div className="mt-10">
+    <div>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg text-ink">Pillar pages</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={refreshing}
+            onClick={refreshSuggestions}
+            title="Clear pillar suggestions the site has caught up with: the hub now exists, or most of its pages left the crawl"
+          >
+            <RefreshCw size={13} className={cn(refreshing && "animate-spin")} /> Refresh
+          </Button>
+        </div>
         <span className="text-xs text-faint">
-          Topics the site covers in pieces with no page that introduces them. You build the page, then mark it done.
+          Topics the site covers in pieces with no page that introduces them. Build the page; after the next crawl, Refresh clears it.
         </span>
       </div>
 
-      {counts.draft > 0 && (
-        <p className="mb-3 text-xs text-sub">
-          {counts.draft} suggestion{counts.draft === 1 ? "" : "s"} still being screened by the agent.
-        </p>
-      )}
 
       {nothingAtAll ? (
         <EmptyState
@@ -106,7 +125,7 @@ export function PillarSuggestions() {
             tabs={(Object.keys(STATE_LABEL) as TabState[]).map((k) => ({
               key: k,
               label: STATE_LABEL[k],
-              count: counts[k],
+              count: counts[SUMMARY_KEY[k]],
             }))}
           />
           {error && <p className="text-sm text-bad">{error}</p>}
@@ -149,7 +168,7 @@ function PillarRow({ row, onChanged }: { row: PillarSuggestion; onChanged: () =>
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const move = async (to: LinkSuggestionState) => {
+  const move = async (to: SuggestionState) => {
     setBusy(true);
     try {
       await api(`/api/v1/site/structure/pillar-suggestions/${row.id}`, {
@@ -206,25 +225,17 @@ function PillarRow({ row, onChanged }: { row: PillarSuggestion; onChanged: () =>
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-faint">
             <span>{formatRelative(row.createdAt)}</span>
             {row.state === "user_rejected" && <Badge tone="neutral">Turned down</Badge>}
-            {row.state === "llm_rejected" && <Badge tone="neutral">Screened out</Badge>}
-            {row.state === "stale" && <Badge tone="warn">Stale</Badge>}
-            {row.state === "done" && <Badge tone="good">Done</Badge>}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1" onClick={stop} onKeyDown={stop}>
-          {row.state === "ready" && (
-            <>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => move("done")}>
-                <Check size={13} /> Done
-              </Button>
-              <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
-                <X size={13} /> Turn down
-              </Button>
-            </>
+          {row.state === "review_approved" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("user_rejected")}>
+              <X size={13} /> Turn down
+            </Button>
           )}
-          {row.state !== "ready" && (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("ready")}>
-              <RotateCcw size={13} /> Reopen
+          {row.state === "user_rejected" && (
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => move("review_approved")}>
+              <RotateCcw size={13} /> Restore
             </Button>
           )}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setDeleting(true)} title="Delete this suggestion for good">

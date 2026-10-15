@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { currentSiteId, subscribeToSite } from "./current-site";
 import { mockFetch } from "@demo/mock/api";
+import {
+  billingResolvedCount,
+  readBillingBlock,
+  setBillingBlock,
+  subscribeToBillingBlock,
+} from "./billing-block";
 
 export interface Pagination {
   page: number;
@@ -26,7 +32,9 @@ async function request(
   const res = await mockFetch(opts.method ?? "GET", path, opts.body);
   const payload = (res.payload ?? {}) as Record<string, unknown>;
   if (res.status >= 400) {
-    const err = payload.error as { message?: string } | undefined;
+    const err = payload.error as { message?: string; code?: string } | undefined;
+    const blocked = res.status === 402 ? readBillingBlock(err) : null;
+    if (blocked) setBillingBlock(blocked);
     throw new Error(err?.message ?? `Request failed (${res.status})`);
   }
   return payload;
@@ -56,6 +64,11 @@ export function useCurrentSite(): string | null {
 
 function useFetched<T>(path: string | null, fetcher: (path: string) => Promise<T>) {
   const siteId = useCurrentSite();
+  const billingResolved = useSyncExternalStore(
+    subscribeToBillingBlock,
+    billingResolvedCount,
+    () => 0,
+  );
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +85,7 @@ function useFetched<T>(path: string | null, fetcher: (path: string) => Promise<T
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, siteId]);
+  }, [path, siteId, billingResolved]);
 
   useEffect(() => {
     setData(null);

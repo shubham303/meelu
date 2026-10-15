@@ -26,18 +26,6 @@ export interface UserProfile {
   websiteUrl?: string;
 }
 
-export type SitePageKind =
-  | "home"
-  | "product"
-  | "pricing"
-  | "category"
-  | "article"
-  | "docs"
-  | "about"
-  | "contact"
-  | "legal"
-  | "other";
-
 export type SiteShallowReason =
   | "thin"
   | "legal"
@@ -66,36 +54,27 @@ export interface SitePage extends BaseEntity, SiteScoped {
   lastModified?: string;
   lastCrawledAt?: string;
   inlinks: number;
-  inboundAnchors: { from: string; anchor: string }[];
   title?: string;
   titlePixels?: number;
   metaDescription?: string;
   h1: string[];
   headings: { level: number; text: string; ordinal: number }[];
   bodyText?: string;
-  outLinks: {
-    url: string;
-    anchor: string;
-    rel?: string;
-    region: LinkRegion;
-    count: number;
-    ordinal?: number;
-    context?: string;
-  }[];
-  externalLinks: { url: string; anchor: string; rel?: string; region: LinkRegion }[];
   canonical?: string;
   robotsDirectives?: string;
   xRobotsTag?: string;
   blockedByRobots: boolean;
-  hasViewport?: boolean;
-  socialMeta: Record<string, string>;
+  viewportMeta?: string | null;
+  nosnippetCount?: number;
   socialMetaCount: number;
+  socialMeta?: Record<string, string>;
+  hasGoogleAnalytics?: boolean | null;
   author?: string;
   schemaTypes: string[];
   schemaNodes: { type: string; keys: number; props: string[] }[];
   lang?: string;
   hreflang: Record<string, string>;
-  kind: SitePageKind;
+  pageType?: SitePageType | null;
   format?: string;
   inSitemap: boolean;
   depth?: number;
@@ -108,9 +87,7 @@ export interface SitePage extends BaseEntity, SiteScoped {
   publishedAt?: string;
   modifiedAt?: string;
   wordCount?: number;
-  externalLinkDensity?: number | null;
   mixedContent: boolean;
-  keywords?: string[];
   contentChangedAt?: string;
   indexState?: SiteIndexState;
   coverageState?: string;
@@ -119,21 +96,51 @@ export interface SitePage extends BaseEntity, SiteScoped {
   similarity?: number;
   match?: { text: string; headingPath?: string };
   linkScore?: number;
-  editorialInlinks?: number;
-  editorialScore?: number;
   chunkedFromHash?: string;
   embedState?: string;
   embedError?: string;
   shallow: boolean;
   shallowReason?: SiteShallowReason;
   stage?: PageStage;
+  outLinkCount: number;
+  externalLinkCount: number;
+  isLeaf?: boolean;
+}
+
+export interface SitePageLink {
+  id: ID;
+  srcPageId: ID;
+  srcUrl?: string;
+  dstPageId: ID;
+  dstUrl: string;
+  region: LinkRegion;
+  rel?: string;
+  anchor?: string;
+  count: number;
+  followable: boolean;
+  dstCanonical: boolean;
+}
+
+export interface SiteExternalLink {
+  url: string;
+  region: LinkRegion;
+  rel?: string;
+  anchor?: string;
+  count: number;
+  followable: boolean;
+}
+
+export interface SitePageLinks {
+  inbound: SitePageLink[];
+  outbound: SitePageLink[];
+  external: SiteExternalLink[];
 }
 
 export interface SiteDiscoveryPage {
   id: ID;
   url: string;
   title?: string;
-  kind: SitePageKind;
+  pageType?: SitePageType | null;
   inlinks: number;
   depth?: number;
   inSitemap: boolean;
@@ -160,10 +167,8 @@ export interface SiteChunk extends BaseEntity, SiteScoped {
   headingPath?: string;
   text: string;
   embedModel?: string;
-  embeddedFromHash?: string;
   embedAttempts: number;
   embedError?: string;
-  chunkStrategy?: string;
   fromHash?: string;
 }
 
@@ -431,18 +436,27 @@ export interface SitePageIssue extends SiteIssue {
   url?: string;
 }
 
-export const LINK_SUGGESTION_STATES = [
+export const SUGGESTION_STATES = [
   "draft",
-  "ready",
-  "llm_rejected",
+  "screening_rejected",
+  "screening_approved",
+  "review_approved",
+  "review_rejected",
   "user_rejected",
-  "done",
-  "stale",
 ] as const;
 
-export type LinkSuggestionState = (typeof LINK_SUGGESTION_STATES)[number];
+export type SuggestionState = (typeof SUGGESTION_STATES)[number];
 
-export const LINK_SUGGESTION_ACTIONS = ["create", "delete", "edit"] as const;
+export interface SuggestionSummary {
+  draft: number;
+  screeningRejected: number;
+  screeningApproved: number;
+  reviewApproved: number;
+  reviewRejected: number;
+  userRejected: number;
+}
+
+export const LINK_SUGGESTION_ACTIONS = ["create", "delete"] as const;
 
 export type LinkSuggestionAction = (typeof LINK_SUGGESTION_ACTIONS)[number];
 
@@ -452,7 +466,7 @@ export interface LinkSuggestion extends BaseEntity, SiteScoped {
   fromChunkId?: string | null;
   toPageId: string;
   action: LinkSuggestionAction;
-  state: LinkSuggestionState;
+  state: SuggestionState;
   suggestion: string;
   searchScore?: number | null;
   confidence?: number | null;
@@ -461,9 +475,9 @@ export interface LinkSuggestion extends BaseEntity, SiteScoped {
   toUrl?: string | null;
   fromChunkHeading?: string | null;
   fromChunkOrdinal?: number | null;
+  fromChunkText?: string | null;
+  anchor?: string | null;
 }
-
-export type LinkSuggestionSummary = Record<LinkSuggestionState, number>;
 
 export const PILLAR_SUGGESTION_ACTIONS = ["create", "expand"] as const;
 
@@ -481,16 +495,14 @@ export interface PillarSuggestion extends BaseEntity, SiteScoped {
   topic: string;
   memberPageIds: string[];
   coveringPageId?: string | null;
-  coveringUrl?: string | null;
-  state: LinkSuggestionState;
+  state: SuggestionState;
   suggestion: string;
   searchScore?: number | null;
   confidence?: number | null;
   score?: number | null;
+  coveringUrl?: string | null;
   members: PillarMember[];
 }
-
-export type PillarSuggestionSummary = Record<LinkSuggestionState, number>;
 
 export type SiteIssueScope = "site" | "pages";
 
@@ -612,14 +624,11 @@ export interface SiteTrafficSync extends BaseEntity, SiteScoped {
 export interface SiteCrawlJob extends BaseEntity, SiteScoped {
   status: SiteCrawlJobStatus;
   trigger: string;
-  freshBefore?: string;
-  cutoffDays?: number;
   sitemapUrls: string[];
   startedAt?: string;
   finishedAt?: string;
   heartbeatAt?: string;
   discovered: number;
-  skipped: number;
   fetched: number;
   queued: number;
   newPages: number;
@@ -659,10 +668,16 @@ export interface SiteSocialLink {
   handle?: string;
 }
 
+export type SiteStatus = "active" | "disabled";
+
 export interface SiteProfile extends BaseEntity {
   domain: string;
   name: string;
-  country?: string;
+  status: SiteStatus;
+  pausedAt?: string | null;
+  deletesAt?: string | null;
+  markets: string[];
+  language?: string | null;
   repoUrl?: string;
   summary?: string;
   socialLinks: SiteSocialLink[];
@@ -728,21 +743,6 @@ export interface HostVariants {
   variants: HostVariantProbe[];
 }
 
-export interface SiteChannel extends BaseEntity, SiteScoped {
-  channelKey: string;
-  enabled: boolean;
-  rules: string[];
-  label: string;
-  composeUrl: string;
-  characterLimit: number;
-  requiresMedia: boolean;
-  maxLinks: number | null;
-  maxHashtags: number | null;
-  maxMedia: number;
-}
-
-export type PieceStatus = "draft" | "blocked";
-
 export type MediaSource = "none" | "upload" | "unsplash";
 
 export interface PostMedia extends BaseEntity {
@@ -755,7 +755,7 @@ export interface PostMedia extends BaseEntity {
 
 export interface PieceCheck {
   code: string;
-  level: "block" | "warn";
+  level: "warn";
   message: string;
 }
 
@@ -772,41 +772,47 @@ export interface PieceMedia {
 
 export interface ContentPieceSlim extends BaseEntity, SiteScoped {
   title: string;
-  channelKey: string;
-  status: PieceStatus;
+  slug?: string | null;
+  targetKeyword?: string | null;
   wordCount: number;
   checks: PieceCheck[];
   mediaSource: MediaSource;
   mediaUrl?: string | null;
-  parentPieceId?: string | null;
 }
 
 export interface ContentPiece extends ContentPieceSlim, PieceMedia {
+  h1: string;
+  metaDescription: string;
   bodyMarkdown: string;
   createdBy: "agent" | "user";
   sourcePageId?: string | null;
 }
 
-export interface AnalyticsSession extends BaseEntity, SiteScoped {
-  title: string;
-  about: string;
-  sessionKey?: string | null;
-}
-
-export interface AnalyticsSource extends BaseEntity, SiteScoped {
-  sessionId: string;
-  name: string;
-  filePath?: string | null;
-}
-
 export interface AnalyticsReport extends BaseEntity, SiteScoped {
-  sessionId?: ID | null;
   title: string;
   html: string;
   createdBy: "agent" | "user";
 }
 
 export type AnalyticsReportSummary = Omit<AnalyticsReport, "html"> & { htmlBytes: number };
+
+export interface AnalyticsChat {
+  id: string;
+  siteId: string;
+  title: string;
+  sdkSessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AnalyticsChatSummary = Pick<AnalyticsChat, "id" | "title" | "updatedAt">;
+
+export interface AnalyticsChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
+}
 
 export interface ApiKey extends BaseEntity {
   name: string;
@@ -820,62 +826,49 @@ export interface CreatedApiKey extends ApiKey {
 
 export interface SocialListeningConfig extends BaseEntity, SiteScoped {
   platforms: string[];
-  resultsPerKeyword: number;
-  minRelevance: number;
-  minSimilarity: number;
-  maxAgeDays: number;
-  dropDeadPosts: boolean;
-  schedule: "daily" | "weekly" | null;
 }
-
-export type SocialListeningSource = "user" | "profile" | "suggested";
 
 export interface SocialListeningQuery extends BaseEntity, SiteScoped {
   text: string;
   enabled: boolean;
   source: "user" | "suggested";
   keywords: string[];
-  negativeKeywords: string[];
   embedded: boolean;
-}
-
-export interface SocialListeningTarget extends BaseEntity, SiteScoped {
-  kind: "brand" | "competitor";
-  name: string;
-  enabled: boolean;
-  source: SocialListeningSource;
+  found: number;
+  kept: number;
 }
 
 export type SocialListeningRunStatus = "running" | "done" | "stopped" | "error";
+
+export interface SocialListeningPlatformStats {
+  status?: "running" | "done" | "error";
+  keywords?: number;
+  fromVendor?: number;
+  fromDatabase?: number;
+  candidates?: number;
+  failedKeywords?: string[];
+  error?: string;
+}
 
 export interface SocialListeningRun extends BaseEntity, SiteScoped {
   status: SocialListeningRunStatus;
   startedAt: string;
   finishedAt: string | null;
   fetchedCount: number;
+  matchedCount: number;
   keptCount: number;
-  platformStats: Record<string, { fetched?: number; kept?: number; error?: string }>;
+  platformStats: Record<string, SocialListeningPlatformStats>;
   error: string | null;
 }
 
-export type SocialListeningPostKind = "topic" | "brand" | "competitor";
-export type SocialListeningInboxStatus = "needs_reply" | "drafted" | "replied" | "skipped";
-export type SocialListeningPostStatus =
-  | SocialListeningInboxStatus
-  | "fetched"
-  | "matched"
-  | "filtered";
-export type SocialListeningClass =
-  | "praise"
-  | "complaint"
-  | "feature_request"
-  | "question"
-  | "switch_opportunity";
+export type SocialListeningReviewStatus = "to_reply" | "drafted" | "replied" | "skipped" | "rejected";
+export type SocialListeningPostStatus = SocialListeningReviewStatus | "candidate" | "matched";
 
 export interface SocialListeningPost extends BaseEntity, SiteScoped {
+  postId: string;
   url: string;
   platform: string;
-  kind: SocialListeningPostKind;
+  externalId: string | null;
   title: string | null;
   text: string | null;
   authorHandle: string | null;
@@ -883,97 +876,23 @@ export interface SocialListeningPost extends BaseEntity, SiteScoped {
   postedAt: string | null;
   engagement: { score?: number | null; comments?: number | null; views?: number | null };
   context: { subreddit?: string | null; tags?: string[] | null };
-  matchedTargets: string[];
-  intent: string | null;
-  sentiment: "positive" | "neutral" | "negative" | null;
-  isQuestion: boolean | null;
-  classes: SocialListeningClass[];
-  relevance: number | null;
-  compositeScore: number | null;
-  keepReason: string | null;
-  suggestedAngle: string | null;
   status: SocialListeningPostStatus;
   similarity: number | null;
-  queryId: string | null;
+  keepReason: string | null;
+  suggestedAngle: string | null;
   replyText: string | null;
   repliedAt: string | null;
+  queryId: string | null;
   runId: string | null;
 }
 
 export interface SocialListeningSummary {
-  unprocessed: number;
-  needsReply: number;
+  toReply: number;
   drafted: number;
   replied: number;
   skipped: number;
-  brandMentions: number;
-  competitorMentions: number;
+  rejected: number;
+  done: number;
+  unprocessed: number;
   lastRun: SocialListeningRun | null;
-  keptByQuery: Array<{ id: string; text: string; kept: number }>;
-  mentionClasses: {
-    praise: number;
-    complaint: number;
-    featureRequest: number;
-    question: number;
-    switchOpportunity: number;
-  };
-  sentiment: { positive: number; neutral: number; negative: number };
-}
-
-export type LeadCampaignStatus = "active" | "paused" | "archived";
-
-export interface LeadCampaign extends BaseEntity, SiteScoped {
-  name: string;
-  status: LeadCampaignStatus;
-  audience: string;
-  sources: string[];
-  schedule: "daily" | "weekly" | null;
-}
-
-export type LeadRunStatus = "running" | "done" | "stopped" | "error";
-
-export interface LeadRun extends BaseEntity, SiteScoped {
-  campaignId: ID;
-  status: LeadRunStatus;
-  startedAt: string;
-  finishedAt: string | null;
-  found: number;
-  qualified: number;
-  skippedKnown: number;
-  sourceStats: Record<string, { found?: number; qualified?: number; error?: string }>;
-  error: string | null;
-}
-
-export type LeadStage = "found" | "qualified" | "shortlisted";
-
-export interface Lead extends BaseEntity, SiteScoped {
-  campaignId: ID | null;
-  runId: ID | null;
-  name: string;
-  company: string | null;
-  role: string | null;
-  email: string | null;
-  emailVerified: boolean;
-  website: string | null;
-  source: string | null;
-  sourceUrl: string | null;
-  channelHandles: Record<string, string>;
-  fitScore: number | null;
-  fitReason: string | null;
-  evidence: Array<{ quote: string; url: string }>;
-  stage: LeadStage;
-  stageChangedAt: string | null;
-  note: string | null;
-}
-
-export interface LeadSummary {
-  stages: Record<LeadStage, number>;
-  lastRun: LeadRun | null;
-  campaigns: Array<{
-    id: ID;
-    name: string;
-    status: LeadCampaignStatus;
-    qualified: number;
-    shortlisted: number;
-  }>;
 }

@@ -13,6 +13,8 @@ import {
 import Link from "next/link";
 import { AlertCircle, Check, ExternalLink, Loader2, Square, X } from "lucide-react";
 import { Drawer } from "@demo/components/ui";
+import { activeSiteId, GLOBAL } from "@demo/lib/current-site";
+import { useCurrentSite } from "@demo/lib/use-api";
 import { useIsApp } from "@demo/lib/use-app-mode";
 import { cn } from "@demo/lib/utils";
 import { agentEnabled, bridge, type AgentEvent, type AskLink } from "./bridge";
@@ -30,6 +32,7 @@ export interface RunUnit {
 export interface AgentRun {
   id: string;
   label: string;
+  siteId: string | null;
   desk?: string;
   status: RunStatus;
   startedAt: number;
@@ -56,6 +59,7 @@ export interface AgentRunsApi {
   startRun: (init: {
     id?: string;
     label: string;
+    siteId?: string | null;
     desk?: string;
     unit?: RunUnit;
     onStop?: () => void;
@@ -93,7 +97,13 @@ export function AgentRunsProvider({ children }: { children: ReactNode }) {
       const id = init.id ?? crypto.randomUUID();
       setRuns((prev) => [
         ...prev.filter((r) => r.id !== id),
-        { ...init, id, status: "running", startedAt: Date.now() },
+        {
+          ...init,
+          id,
+          siteId: init.siteId === undefined ? activeSiteId() : init.siteId,
+          status: "running",
+          startedAt: Date.now(),
+        },
       ]);
       return id;
     },
@@ -184,9 +194,34 @@ export function AgentRunsProvider({ children }: { children: ReactNode }) {
     });
   }, [isApp, askYes]);
 
+  const site = useCurrentSite();
+  const here = site === GLOBAL ? null : site;
+  const visibleRuns = useMemo(
+    () => runs.filter((r) => r.siteId === null || r.siteId === here),
+    [runs, here],
+  );
+  const visibleYes = useMemo(
+    () =>
+      needsYes.filter((y) => {
+        if (!y.runId) return true;
+        const run = runs.find((r) => r.id === y.runId);
+        return !run || run.siteId === null || run.siteId === here;
+      }),
+    [needsYes, runs, here],
+  );
+
   const api = useMemo<AgentRunsApi>(
-    () => ({ runs, needsYes, startRun, updateRun, endRun, askYes, answerYes, dismiss }),
-    [runs, needsYes, startRun, updateRun, endRun, askYes, answerYes, dismiss],
+    () => ({
+      runs: visibleRuns,
+      needsYes: visibleYes,
+      startRun,
+      updateRun,
+      endRun,
+      askYes,
+      answerYes,
+      dismiss,
+    }),
+    [visibleRuns, visibleYes, startRun, updateRun, endRun, askYes, answerYes, dismiss],
   );
 
   return <RunsContext.Provider value={api}>{children}</RunsContext.Provider>;

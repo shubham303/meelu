@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   NotebookPen,
   Radar,
+  Search,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -42,12 +43,21 @@ export const WEBSITE_DESKS: Desk[] = [
     scope: "site",
   },
   {
+    id: "seo",
+    href: "/demo/dashboard/seo",
+    label: "SEO",
+    icon: Search,
+    stage: "decide",
+    blurb: "How Google sees the site and what visitors do — Search Console and Analytics.",
+    scope: "site",
+  },
+  {
     id: "content",
     href: "/demo/dashboard/content",
     label: "Content",
     icon: FileText,
     stage: "make",
-    blurb: "Web pages for your own site — title, H1, meta description, slug, target keyword and body, checked before you publish them yourself.",
+    blurb: "Pages for your website — keyword, internal links, title, H1 and meta description, checked on every save.",
     scope: "site",
   },
   {
@@ -56,7 +66,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "Social Listening",
     icon: Radar,
     stage: "earn",
-    blurb: "Conversations your site belongs in — questions to answer, mentions of you, and competitor threads.",
+    blurb: "Conversations your site belongs in, found from what you describe — you decide which to answer.",
     scope: "site",
   },
   {
@@ -65,7 +75,7 @@ export const WEBSITE_DESKS: Desk[] = [
     label: "Analytics",
     icon: BarChart3,
     stage: "measure",
-    blurb: "Any tabular source in, tables and charts out. The measured half.",
+    blurb: "Ask about your Search Console and Analytics data — answers with charts and evidence; keep the ones that matter as reports.",
     scope: "site",
   },
   {

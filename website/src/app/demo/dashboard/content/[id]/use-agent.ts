@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { refuseOnWeb, streamTurn, type RunningTurn } from "@demo/components/agent";
+import { refuseOnWeb, streamTurn, usePinnedSite, type RunningTurn } from "@demo/components/agent";
+import type { PieceForm } from "./use-autosave";
 
 export interface AgentReply {
   text: string;
@@ -45,9 +46,10 @@ function issuesFraming(issues: FlaggedIssue[]): string[] {
 
 export function useAgent(
   pieceId: string,
-  getDraft: () => { title: string; body: string; channel: string },
+  getDraft: () => PieceForm | null,
   getIssues: () => FlaggedIssue[] = () => [],
 ) {
+  const siteId = usePinnedSite();
   const runningRef = useRef<RunningTurn | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export function useAgent(
       setBusy(true);
       const turn = streamTurn({
         action: "content-draft",
+        siteId,
         message,
         onText: options.onText ? (_chunk, full) => options.onText?.(full) : undefined,
         onTool: options.onTool,
@@ -79,15 +82,20 @@ export function useAgent(
         body: fenced ? fenced[1].replace(/\s+$/, "") : null,
       };
     },
-    [],
+    [siteId],
   );
 
   const draftFraming = useCallback(() => {
-    const { title, body, channel } = getDraft();
+    const draft = getDraft();
     return [
-      `We are working on ONE piece, id ${pieceId}, titled "${title}", written for the ${channel} channel.`,
-      "Current text of the piece:",
-      `"""${body}"""`,
+      `We are working on ONE web page, id ${pieceId}.`,
+      `Title: ${draft?.title || "(empty)"}`,
+      `H1: ${draft?.h1 || "(empty)"}`,
+      `Meta description: ${draft?.metaDescription || "(empty)"}`,
+      `Slug: ${draft?.slug || "(empty)"}`,
+      `Target keyword: ${draft?.targetKeyword || "(empty)"}`,
+      "Current body of the piece:",
+      `"""${draft?.bodyMarkdown ?? ""}"""`,
       ...issuesFraming(getIssues()),
     ].join("\n");
   }, [getDraft, getIssues, pieceId]);
