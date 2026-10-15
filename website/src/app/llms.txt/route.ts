@@ -24,7 +24,7 @@ Meelu is in development and built in the open. The desktop app is out for macOS 
 
 ## Pricing
 
-- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each website costs 0.4 credits a day; external services (DataForSEO, Apify, OpenRouter) are charged per use. New accounts get 1 free credit.
+- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 0.4 credits a day and every website after that 0.2; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for three days; the agent can also run on the user's own LLM key.
 
 ## Open source
 

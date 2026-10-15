@@ -27,7 +27,8 @@ class InsufficientCreditsError(Exception):
     def __init__(self, balance_micros: int, floor_micros: int):
         super().__init__(
             f"This workspace is below the ${floor_micros / 1_000_000:.2f} minimum needed to call "
-            f"a paid vendor (balance ${balance_micros / 1_000_000:.4f}). Add credits to continue."
+            f"a paid vendor (balance ${balance_micros / 1_000_000:.4f}). Add credits, or set up "
+            "your own LLM key in Connections."
         )
         self.balance_micros = balance_micros
         self.floor_micros = floor_micros
@@ -73,6 +74,7 @@ class CreditService:
             raise HTTPException(404, "Not found")
         row = await site_billings.get(db, user_id, site.domain)
         last = row.last_charged_at if row else None
+        earlier = await site_billings.count_earlier(db, user_id, site.domain) if row else 0
         return SiteBillingResponse(
             site_id=site.id,
             status=site.status,
@@ -80,7 +82,7 @@ class CreditService:
             next_charge_at=None if last is None else last + billing.period(),
             charge_count=row.charge_count if row else 0,
             charged_micros=row.charged_micros if row else 0,
-            daily_price_micros=pricing.site_day_price_micros(),
+            daily_price_micros=pricing.site_day_price_micros(earlier),
         )
 
     async def start_site_billing(
@@ -106,12 +108,8 @@ class CreditService:
         await self.add_credits(db, user_id, to_micros(body.amount_usd), "grant", body.note)
         return await self.balance(db, user_id)
 
-    async def signup_grant(self, db: AsyncSession, user_id: str) -> None:
-        micros = to_micros(settings.credits_signup_grant_usd)
-        if micros > 0:
-            await credit_ledger_service.apply(db, user_id, micros, "grant", "Signup credits")
-        else:
-            await credit_accounts.ensure(db, user_id)
+    async def open_account(self, db: AsyncSession, user_id: str) -> None:
+        await credit_accounts.ensure(db, user_id)
 
     async def charge_vendor_call(
         self,

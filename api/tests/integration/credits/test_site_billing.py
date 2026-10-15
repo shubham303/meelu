@@ -287,3 +287,57 @@ async def test_paid_sites_resume_even_when_an_unpaid_one_cannot_be_charged(clien
 
     states = {s["id"]: s["status"] for s in (await client.get("/api/v1/sites")).json()["data"]}
     assert states == {first["id"]: "disabled", second["id"]: "active"}
+
+
+async def test_the_first_site_is_free_for_the_first_three_days(client, email):
+    await signup(client, email, credits=0, trial=True)
+    user_id = await user_id_of(client)
+
+    first = await add_site(client, "first.com", "First")
+    assert first["status"] == "active"
+    assert await balance_usd(client) == 0
+
+    second = await add_site(client, "second.com", "Second")
+    assert second["status"] == "disabled"
+
+    await age_billing(first["id"], 25)
+    await site_billing_service.sweep()
+    r = await client.get(f"/api/v1/credits/sites/{first['id']}")
+    assert r.json()["data"]["status"] == "active"
+    assert r.json()["data"]["chargeCount"] == 2
+    assert await balance_usd(client) == 0
+
+    async with unit_of_work() as db:
+        await db.execute(
+            text("UPDATE \"user\" SET created_at = now() - interval '4 days' WHERE id = :u"),
+            {"u": user_id},
+        )
+    await age_billing(first["id"], 25)
+    await site_billing_service.sweep()
+    r = await client.get(f"/api/v1/credits/sites/{first['id']}")
+    assert r.json()["data"]["status"] == "disabled"
+
+
+async def test_paid_calls_need_credits_during_the_trial(client, email):
+    from src.credits.service import InsufficientCreditsError, credit_service
+
+    await signup(client, email, credits=0, trial=True)
+    user_id = await user_id_of(client)
+
+    async with unit_of_work() as db:
+        with pytest.raises(InsufficientCreditsError) as caught:
+            await credit_service.require_balance(db, user_id)
+    assert "Connections" in str(caught.value)
+
+
+async def test_sites_after_the_fifth_cost_half(client, email):
+    await signup(client, email, credits=10)
+
+    added = [await add_site(client, f"tier{i}.com", f"Tier {i}") for i in range(7)]
+
+    assert await balance_usd(client) == pytest.approx(10 - 5 * 0.4 - 2 * 0.2)
+    prices = []
+    for site in added:
+        r = await client.get(f"/api/v1/credits/sites/{site['id']}")
+        prices.append(r.json()["data"]["dailyPriceMicros"])
+    assert prices == [400_000] * 5 + [200_000] * 2

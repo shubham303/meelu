@@ -73,7 +73,7 @@ const reasons: { title: string; body: ReactNode }[] = [
     title: "Pay per website, not per seat.",
     body: (
       <>
-        Each website costs 0.4 credits a day, and outside data is charged per use.
+        Each website costs 0.4 credits a day, 0.2 from the sixth website on, and outside data is charged per use.
         Your whole team uses it with no seat fees. See{" "}
         <Link href="/pricing" className="text-ink underline underline-offset-4 hover:text-accent">
           pricing
@@ -235,7 +235,7 @@ export default function Home() {
           </h2>
           <p className="mx-auto mt-4 max-w-md text-sub text-pretty">
             Free to download for Mac and Windows. Sign in with your Meelu account.
-            New accounts start with 1 free credit. The app is in beta and updated continuously, and not yet
+            Your first website is free for three days. The app is in beta and updated continuously, and not yet
             verified by Apple, Microsoft or Google, so expect a security warning
             the first time you download and open it.
           </p>
