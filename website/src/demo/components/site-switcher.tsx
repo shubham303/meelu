@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Globe, Layers, Plus, Trash2 } from "lucide-react";
 import { Button, Field, IconButton, Input, Modal } from "@demo/components/ui";
+import { bridge } from "@demo/components/agent/bridge";
 import { GLOBAL_HOME, SITE_ROOT, WEBSITE_HOME } from "@demo/components/desks";
 import { GLOBAL, setCurrentSite } from "@demo/lib/current-site";
 import { api, useApi, useCurrentSite } from "@demo/lib/use-api";
@@ -11,6 +12,23 @@ import { useIsApp } from "@demo/lib/use-app-mode";
 import { cn } from "@demo/lib/utils";
 import { MCP_CATALOG } from "@demo/lib/mcp-catalog";
 import type { SiteProfile } from "@demo/lib/types";
+
+function pausedTitle(deletesAt: string | null | undefined): string {
+  if (!deletesAt) return "Paused: the workspace ran out of credits";
+  const day = new Date(deletesAt).toLocaleDateString(undefined, { dateStyle: "medium" });
+  return `Paused: the workspace ran out of credits. Add credits before ${day} or this website is deleted.`;
+}
+
+function PausedTag({ deletesAt }: { deletesAt?: string | null }) {
+  return (
+    <span
+      title={pausedTitle(deletesAt)}
+      className="shrink-0 rounded border border-warn/40 bg-warn/10 px-1 text-[10px] leading-4 text-warn"
+    >
+      paused
+    </span>
+  );
+}
 
 export function SiteSwitcher() {
   const { data: sites, refresh } = useApi<SiteProfile[]>("/api/v1/sites?page_size=100");
@@ -73,7 +91,12 @@ export function SiteSwitcher() {
           <Globe size={14} className="text-accent shrink-0" />
         )}
         <span className="min-w-0 flex-1">
-          <span className="block text-sm text-ink truncate">{global ? "Global" : current?.name}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="block text-sm text-ink truncate">
+              {global ? "Global" : current?.name}
+            </span>
+            {current?.status === "disabled" && <PausedTag deletesAt={current.deletesAt} />}
+          </span>
           <span className="block text-[11px] text-faint truncate">
             {global ? "not about one website" : current?.domain}
           </span>
@@ -120,7 +143,10 @@ export function SiteSwitcher() {
                       )}
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm text-ink truncate">{site.name}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="block text-sm text-ink truncate">{site.name}</span>
+                        {site.status === "disabled" && <PausedTag deletesAt={site.deletesAt} />}
+                      </span>
                       <span className="block text-[11px] text-faint truncate">{site.domain}</span>
                     </span>
                   </button>
@@ -181,7 +207,8 @@ function DeleteSiteModal({
     <Modal open={!!site} onClose={onClose} title={site ? `Delete ${site.name}?` : "Delete?"}>
       <div className="space-y-4">
         <p className="text-sm text-sub">
-          Everything under {site?.name} goes with it — pages, crawls, keywords, drafts and notes. This cannot be undone; to work on {site?.domain} again you would add it back
+          Everything under {site?.name} goes with it — pages, content, social posts, notes
+          and crawls. This cannot be undone; to work on {site?.domain} again you would add it back
           and crawl it from scratch.
         </p>
         {err && <p className="text-sm text-bad">{err}</p>}
@@ -240,6 +267,7 @@ function AddSiteModal({
         method: "POST",
         body: { domain, name },
       });
+      if (isApp) void bridge()?.describeSite?.(site.id);
       await onAdded(site);
       onClose();
     } catch (e) {
@@ -268,8 +296,12 @@ function AddSiteModal({
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Example Co" />
         </Field>
         <p className="text-xs text-faint">
+          A website costs 0.4 credits a day, charged when you add it and every 24 hours after.
+          It pauses if the balance runs out and picks up again once you top up.
+        </p>
+        <p className="text-xs text-faint">
           {isApp
-            ? "That's all we need — the crawl starts from the Site desk, and your coworker writes up what the site is about once it has pages to read."
+            ? "That's all we need — your coworker reads the homepage and writes up what the site is about in the background, and the crawl starts from the Site desk."
             : "Next you'll crawl it from the Site desk. In the Meelu app your coworker then writes up what the site is about."}
         </p>
         {err && <p className="text-sm text-bad">{err}</p>}

@@ -238,12 +238,14 @@ export function Modal({
   title,
   children,
   wide,
+  elevated,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  elevated?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
   const [shown, setShown] = useState(false);
@@ -285,7 +287,7 @@ export function Modal({
 
   if (!mounted || !shown) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50">
+    <div className={cn("fixed inset-0", elevated ? "z-[70]" : "z-50")}>
       <div
         ref={backdropRef}
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"

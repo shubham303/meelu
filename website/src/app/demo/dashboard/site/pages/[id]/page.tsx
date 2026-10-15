@@ -15,12 +15,11 @@ import { Badge, Card, Spinner, StatCard, type BadgeTone } from "@demo/components
 import { LinkPreviews } from "@demo/components/link-previews";
 import { apiPaged, useApi } from "@demo/lib/use-api";
 import { formatRelative } from "@demo/lib/utils";
-import type { SitePage, SitePageLlmExtraction } from "@demo/lib/types";
+import type { SitePage, SitePageLinks, SitePageLlmExtraction } from "@demo/lib/types";
 
-const KIND_TONE: Record<string, BadgeTone> = {
-  home: "good",
-  product: "good",
-  pricing: "good",
+const PAGE_TYPE_TONE: Record<string, BadgeTone> = {
+  money: "good",
+  hub: "good",
 };
 
 export default function SitePageDetailPage() {
@@ -29,6 +28,7 @@ export default function SitePageDetailPage() {
   const { data: extraction } = useApi<SitePageLlmExtraction>(
     `/api/v1/site/page-llm-extractions/by-page/${id}`,
   );
+  const { data: links } = useApi<SitePageLinks>(`/api/v1/site/pages/${id}/links`);
 
   return (
     <PageEnter>
@@ -49,7 +49,7 @@ export default function SitePageDetailPage() {
       ) : !page ? (
         <p className="text-sm text-sub">This page is not in the crawl any more.</p>
       ) : (
-        <PageDetail page={page} extraction={extraction} />
+        <PageDetail page={page} extraction={extraction} links={links} />
       )}
     </PageEnter>
   );
@@ -129,20 +129,27 @@ function JumpSearch({ currentId }: { currentId: string }) {
 function PageDetail({
   page: p,
   extraction,
+  links,
 }: {
   page: SitePage;
   extraction: SitePageLlmExtraction | null;
+  links: SitePageLinks | null;
 }) {
-  const anchors = uniqueAnchors(p.inboundAnchors);
-  const inboundPages = uniqueUrls((p.inboundAnchors ?? []).map((a) => a.from));
-  const outboundPages = uniqueUrls((p.outLinks ?? []).map((l) => l.url));
+  const anchors = uniqueAnchors(links?.inbound);
+  const inboundPages = uniqueUrls((links?.inbound ?? []).map((l) => l.srcUrl));
+  const outboundPages = uniqueUrls((links?.outbound ?? []).map((l) => l.dstUrl));
+  const externalPages = uniqueUrls((links?.external ?? []).map((l) => l.url));
 
   return (
     <div className="space-y-5">
       <div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="font-display text-2xl text-ink">{p.title || p.url}</h1>
-          <Badge tone={KIND_TONE[p.kind] ?? "neutral"}>{p.kind}</Badge>
+          {extraction?.pageType && (
+            <Badge tone={PAGE_TYPE_TONE[extraction.pageType] ?? "neutral"}>
+              {extraction.pageType}
+            </Badge>
+          )}
           {p.shallow && <Badge tone="neutral">{p.shallowReason ?? "skipped"}</Badge>}
         </div>
         <a
@@ -239,20 +246,6 @@ function PageDetail({
           <div className="space-y-3">
             {p.metaDescription && <Block label="Meta description" text={p.metaDescription} />}
             {!!p.h1?.length && <Block label="H1" text={p.h1.join(" · ")} />}
-            {!!p.keywords?.length && (
-              <div>
-                <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-sub">
-                  Keywords
-                </h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {p.keywords.map((k) => (
-                    <Badge key={k} tone="neutral">
-                      {k}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
             {!!anchors.length && (
               <div>
                 <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-sub">
@@ -265,8 +258,8 @@ function PageDetail({
                 </ul>
               </div>
             )}
-            {!p.metaDescription && !p.h1?.length && !p.keywords?.length && !anchors.length && (
-              <p className="text-xs text-faint">The crawl read no meta, headings or keywords here.</p>
+            {!p.metaDescription && !p.h1?.length && !anchors.length && (
+              <p className="text-xs text-faint">The crawl read no meta or headings here.</p>
             )}
           </div>
         </Card>
@@ -278,6 +271,10 @@ function PageDetail({
             <UrlList
               label={`Pages this page links to (${outboundPages.length})`}
               urls={outboundPages}
+            />
+            <UrlList
+              label={`Other sites this page links to (${externalPages.length})`}
+              urls={externalPages}
             />
             {!inboundPages.length && !outboundPages.length && (
               <p className="text-xs text-faint">No internal links touch this page.</p>
@@ -295,10 +292,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function uniqueAnchors(list: { anchor: string }[] | undefined): string[] {
+function uniqueAnchors(list: { anchor?: string }[] | undefined): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const { anchor } of list ?? []) {
+    if (!anchor) continue;
     const key = anchor.trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);

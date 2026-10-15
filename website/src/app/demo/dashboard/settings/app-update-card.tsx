@@ -1,0 +1,96 @@
+"use client";
+
+import { useState } from "react";
+import { Download, Loader2, RefreshCw } from "lucide-react";
+import { Button, Card } from "@demo/components/ui";
+
+interface AppUpdate {
+  currentVersion: string;
+  version: string;
+  downloadUrl: string;
+}
+
+interface CheckResult {
+  currentVersion?: string;
+  update?: AppUpdate | null;
+  store?: boolean;
+  error?: string;
+}
+
+interface UpdateBridge {
+  appUpdate?: () => Promise<{ update?: AppUpdate | null }>;
+  checkUpdate?: () => Promise<CheckResult>;
+  downloadUpdate?: () => Promise<{ ok?: boolean }>;
+}
+
+function updateBridge(): UpdateBridge | null {
+  if (typeof window === "undefined") return null;
+  return (window as Window & { meeluAgent?: UpdateBridge }).meeluAgent ?? null;
+}
+
+export function AppUpdateCard() {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<CheckResult | null>(null);
+
+  const check = async () => {
+    const bridge = updateBridge();
+    setChecking(true);
+    try {
+      if (bridge?.checkUpdate) {
+        setResult(await bridge.checkUpdate());
+        return;
+      }
+      const launched = await bridge?.appUpdate?.();
+      setResult(
+        launched?.update
+          ? { update: launched.update }
+          : {
+              error:
+                "This Meelu is older than 0.1.4 and only checks when it starts. Quit and reopen Meelu to check again, or get the latest from meelu.tech/download.",
+            },
+      );
+    } catch {
+      setResult({ error: "The update check failed. Try again." });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const update = result?.update ?? null;
+
+  return (
+    <Card className="stagger-item">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-2 min-w-0">
+          <RefreshCw size={15} className="text-accent shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <div className="font-medium">App updates</div>
+            <p className="text-sm text-sub mt-0.5">
+              {result?.error
+                ? result.error
+                : result?.store
+                  ? "This Meelu was installed from the Microsoft Store, which keeps it up to date."
+                  : update
+                  ? `Meelu ${update.version} is available · you have ${update.currentVersion}. Download it, quit Meelu, then install it over this one. Your sign-in and settings stay.`
+                  : result
+                    ? `You have the latest version${result.currentVersion ? ` (${result.currentVersion})` : ""}.`
+                    : "Meelu checks for a new version every 10 minutes. Check now to see it straight away."}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {update && (
+            <Button size="sm" onClick={() => void updateBridge()?.downloadUpdate?.()}>
+              <Download size={13} />
+              Download {update.version}
+            </Button>
+          )}
+          <Button size="sm" variant="outline" disabled={checking} onClick={() => void check()}>
+            {checking && <Loader2 size={13} className="animate-spin" />}
+            {checking ? "Checking…" : "Check for updates"}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}

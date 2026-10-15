@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Cable,
-  FileText,
+  Coins,
   Globe,
   LogOut,
   PanelLeftClose,
@@ -18,8 +18,9 @@ import { GLOBAL } from "@demo/lib/current-site";
 import { useCurrentSite } from "@demo/lib/use-api";
 import { signOut, useSession } from "@demo/lib/session";
 import { Logo } from "./logo";
-import { SessionUsage } from "./session-usage";
+import { useCredits } from "@demo/lib/use-credits";
 import { SiteSwitcher } from "./site-switcher";
+import { AnalyticsTree } from "./analytics-tree";
 import { APP_DESKS, GLOBAL_HOME, WEBSITE_DESKS, type Desk } from "./desks";
 
 const COLLAPSED_KEY = "meelu.sidebar.collapsed";
@@ -77,11 +78,18 @@ export function Sidebar() {
 
   const navLink = (item: Desk) => {
     const Icon: LucideIcon = item.icon;
-    return (
+    const link = (
       <Link key={item.href} href={item.href} title={collapsed ? item.label : undefined} className={linkClass(isActive(item))}>
         <Icon size={16} className="shrink-0" />
         {!collapsed && item.label}
       </Link>
+    );
+    if (item.id !== "analytics" || collapsed || !isActive(item)) return link;
+    return (
+      <div key={item.href}>
+        {link}
+        <AnalyticsTree canChat={isApp} />
+      </div>
     );
   };
 
@@ -162,7 +170,7 @@ export function Sidebar() {
       </nav>
 
       <div className={cn("border-t border-edge space-y-0.5", collapsed ? "p-2" : "p-3")}>
-        {isApp ? (
+        {isApp && (
           <Link
             href="/demo/dashboard/connections"
             title={collapsed ? "Connections" : undefined}
@@ -171,11 +179,6 @@ export function Sidebar() {
             <Cable size={16} className="shrink-0" />
             {!collapsed && "Connections"}
           </Link>
-        ) : (
-          <a href="/" target="_top" title={collapsed ? "Docs" : undefined} className={linkClass(false)}>
-            <FileText size={16} className="shrink-0" />
-            {!collapsed && "Docs"}
-          </a>
         )}
         <button
           onClick={() => void signOut()}
@@ -185,12 +188,28 @@ export function Sidebar() {
           <LogOut size={16} className="shrink-0" />
           {!collapsed && "Sign out"}
         </button>
-        <SessionUsage compact={collapsed} />
+        <CreditsLink collapsed={collapsed} className={linkClass(pathname.startsWith("/demo/dashboard/credits"))} />
         {session?.user && !collapsed && (
           <p className="px-3 pt-2 text-[11px] text-faint truncate">{session.user.email}</p>
         )}
       </div>
     </aside>
+  );
+}
+
+function CreditsLink({ collapsed, className }: { collapsed: boolean; className: string }) {
+  const { data } = useCredits();
+  const amount = data ? `$${data.balanceUsd.toFixed(2)}` : "—";
+  return (
+    <Link href="/demo/dashboard/credits" title={collapsed ? `Credits: ${amount}` : undefined} className={className}>
+      <Coins size={16} className="shrink-0" />
+      {!collapsed && (
+        <span className="flex flex-1 items-center justify-between gap-2">
+          Credits
+          <span className="tabular-nums text-ink">{amount}</span>
+        </span>
+      )}
+    </Link>
   );
 }
 

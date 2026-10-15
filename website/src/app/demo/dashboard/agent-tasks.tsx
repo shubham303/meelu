@@ -19,18 +19,22 @@ import {
   Minimize2,
   Paperclip,
   Sparkles,
-  Wrench,
   X,
 } from "lucide-react";
 import { gsap, useGSAP } from "@demo/components/animate";
-import { Button, IconButton } from "@demo/components/ui";
+import { IconButton } from "@demo/components/ui";
 import { currentSiteId, GLOBAL } from "@demo/lib/current-site";
-import { useApi } from "@demo/lib/use-api";
+import { useApi, useCurrentSite } from "@demo/lib/use-api";
 import { useIsApp } from "@demo/lib/use-app-mode";
 import { formatRelative } from "@demo/lib/utils";
 import type { PromptChip } from "@demo/features/prompt-chips/lib";
+import { taskModel } from "@demo/features/llm-models/models";
 import { RunRail, useAgentRunsOptional } from "@demo/components/agent/run-rail";
 import { AgentChat, type AgentChatItem } from "@demo/components/agent/agent-chat";
+import { ChartFrame } from "@demo/components/agent/chart-frame";
+import { PermissionPrompt } from "@demo/components/agent/permission-prompt";
+import type { UserPromptSurface } from "@demo/features/user-prompts/api";
+import { UserPromptEditor } from "@demo/features/user-prompts/prompt-editor";
 
 declare global {
   interface Window {
@@ -43,6 +47,7 @@ declare global {
         form: Record<string, string | undefined>;
         params?: Record<string, string>;
         files?: Array<{ name: string; type: string; data: string }>;
+        model?: string;
       }) => Promise<{ turnId?: string; error?: string }>;
       onEvent: (
         cb: (m: { turnId: string; event: string; data: Record<string, unknown> }) => void,
@@ -60,66 +65,17 @@ declare global {
         requestId: string,
         decision: "allow" | "always" | "full" | "deny",
       ) => Promise<{ ok?: boolean; error?: string }>;
-      getLlmConfig?: () => Promise<LlmConfigView | { error: string }>;
-      setLlmConfig?: (cfg: {
-        provider: LlmProvider;
-        model: string;
-        baseUrl: string;
-        apiKey?: string;
-      }) => Promise<LlmConfigView | { error: string }>;
       getConnectors?: () => Promise<ConnectorsView | { error: string }>;
-      setConnector?: (
-        provider: string,
-        values: Record<string, string>,
-        secretKeys: string[],
-      ) => Promise<ConnectorsView | { error: string }>;
       removeConnector?: (provider: string) => Promise<ConnectorsView | { error: string }>;
       connectGsc?: () => Promise<ConnectorsView | { error: string }>;
       connectGa4?: () => Promise<ConnectorsView | { error: string }>;
-      analyticsSaveSource?: (params: {
-        sessionId: string;
-        sourceId: string;
-        content: string;
-      }) => Promise<
-        | { relativePath: string; bytes: number }
-        | { error: string }
-      >;
-      analyticsCheckSession?: (params: {
-        sessionKey?: string | null;
-        paths: string[];
-      }) => Promise<
-        | { engine: "none" | "present" | "missing"; missing: string[]; ok: boolean }
-        | { error: string }
-      >;
-      analyticsResolvePaths?: (params: {
-        paths: string[];
-      }) => Promise<
-        Array<{ relativePath: string; path: string | null; missing: boolean }> | { error: string }
-      >;
-      analyticsDeleteSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok: true; kept?: boolean } | { error: string }>;
-      analyticsReadSource?: (params: {
-        relativePath: string;
-        limit?: number;
-      }) => Promise<
-        | {
-            name: string;
-            path: string;
-            bytes: number;
-            columns: string[];
-            rows: string[][];
-            more: boolean;
-          }
-        | { error: string }
-      >;
-      analyticsRevealSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok: true } | { error: string }>;
-      analyticsExportSource?: (params: {
-        relativePath: string;
-      }) => Promise<{ ok?: true; canceled?: true; path?: string } | { error: string }>;
-      analyticsExportText?: (params: {
+      getOwnKeys?: () => Promise<OwnKeysView | { error: string }>;
+      saveOwnAnthropic?: (payload: {
+        apiKey?: string;
+        defaultModel?: string;
+      }) => Promise<OwnKeysView | { error: string }>;
+      ownModels?: () => Promise<{ models: OwnModel[] } | { error: string }>;
+      saveTextFile?: (params: {
         name: string;
         content: string;
       }) => Promise<{ ok?: true; canceled?: true; path?: string } | { error: string }>;
@@ -128,6 +84,7 @@ declare global {
         platforms?: string[];
       }) => Promise<{ jobId?: string; error?: string }>;
       socialSignalsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
+      socialSignalsActive?: (siteId: string) => Promise<SocialSignalsSnapshot | { error: string }>;
       socialSignalsPlatforms?: () => Promise<
         | { platforms: Array<{ id: string; label: string; access: "direct" | "apify"; available: boolean }> }
         | { error: string }
@@ -135,44 +92,29 @@ declare global {
       onSocialSignalsEvent?: (
         cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
       ) => () => void;
-      leadsRun?: (payload: {
-        campaignId?: string;
-      }) => Promise<{ jobId?: string; error?: string }>;
-      leadsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
-      onLeadsEvent?: (
-        cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
-      ) => () => void;
-      prospectSources?: () => Promise<
-        | {
-            sources: Array<{
-              id: string;
-              label: string;
-              access: "free" | "apify";
-              available: boolean;
-            }>;
-          }
-        | { error: string }
-      >;
     };
   }
 }
-
-
 
 export type ConnectorsView = Record<
   string,
   { fields: Record<string, string>; updatedAt: string | null }
 >;
 
+export interface SocialSignalsSnapshot {
+  jobId: string | null;
+  stopping: boolean;
+  startedAt: number | null;
+  progress: Array<{ event: string; data: Record<string, unknown> }>;
+}
 
-export type LlmProvider = "anthropic" | "openrouter" | "llamacpp" | "custom";
+export interface OwnKeysView {
+  anthropic: { saved: boolean; defaultModel: string };
+}
 
-export interface LlmConfigView {
-  saved: boolean;
-  provider: LlmProvider;
-  model: string;
-  baseUrl: string;
-  hasApiKey: boolean;
+export interface OwnModel {
+  id: string;
+  name: string;
 }
 
 export type AgentTaskStatus = "idle" | "running" | "done" | "failed";
@@ -186,6 +128,7 @@ export interface AgentTaskInit {
   suggestions?: PromptChip[];
   global?: boolean;
   autoStart?: string;
+  promptSurface?: UserPromptSurface;
   onCreated?: () => void | Promise<void>;
   onWrote?: (tool: string) => void | Promise<void>;
 }
@@ -219,6 +162,9 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [lastTaskId, setLastTaskId] = useState<string | null>(null);
+  const [instantId, setInstantId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(SHEET_DEFAULT);
+  const [panelMaximized, setPanelMaximized] = useState(false);
   const tasksRef = useRef<AgentTask[]>([]);
 
   const { data: sites } = useApi<Array<{ id: string; name: string }>>("/api/v1/sites?page_size=100");
@@ -254,6 +200,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
         tasksRef.current = next;
         return next;
       });
+      setInstantId(null);
       setOpenTaskId(id);
       setLastTaskId(id);
       return id;
@@ -261,6 +208,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     [isApp],
   );
   const openTask = useCallback((id: string) => {
+    setInstantId(null);
     setOpenTaskId(id);
     setLastTaskId(id);
   }, []);
@@ -274,6 +222,11 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
       setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...hooks } : t))),
     [],
   );
+  const switchTask = useCallback((id: string) => {
+    setInstantId(id);
+    setOpenTaskId(id);
+    setLastTaskId(id);
+  }, []);
   const hasTask = useCallback((id: string) => tasksRef.current.some((t) => t.id === id), []);
   const setTaskStatus = useCallback(
     (id: string, status: AgentTaskStatus) =>
@@ -290,15 +243,23 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     setLastTaskId((prev) => (prev === id ? null : prev));
   }, []);
 
+  const site = useCurrentSite();
+  const here = site === GLOBAL ? null : site;
+  const mine = useMemo(
+    () => tasks.filter((t) => t.siteId === null || t.siteId === here),
+    [tasks, here],
+  );
+  const mineIds = useMemo(() => new Set(mine.map((t) => t.id)), [mine]);
+
   const sorted = useMemo(
     () =>
-      [...tasks].sort((a, b) => {
+      [...mine].sort((a, b) => {
         const ra = a.status === "running" ? 0 : 1;
         const rb = b.status === "running" ? 0 : 1;
         if (ra !== rb) return ra - rb;
         return b.createdAt - a.createdAt;
       }),
-    [tasks],
+    [mine],
   );
 
   const rail = useAgentRunsOptional();
@@ -306,8 +267,8 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
     (r) => r.status === "running" || r.status === "waiting",
   ).length;
   const needsYes = rail?.needsYes.length ?? 0;
-  const anyRunning = tasks.some((t) => t.status === "running") || liveRuns > 0;
-  const dockCount = tasks.length + liveRuns;
+  const anyRunning = mine.some((t) => t.status === "running") || liveRuns > 0;
+  const dockCount = mine.length + liveRuns;
 
   const api = useMemo(
     () => ({ launchTask, openTask, hasTask, updateTaskDraft, updateTaskHooks }),
@@ -329,11 +290,30 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
           params={task.params}
           suggestions={task.suggestions}
           autoStart={task.autoStart}
+          promptSurface={task.promptSurface}
           siteId={task.siteId}
-          open={openTaskId === task.id}
-          onOpenChange={(o) =>
-            setOpenTaskId((prev) => (o ? task.id : prev === task.id ? null : prev))
+          open={openTaskId === task.id && mineIds.has(task.id)}
+          instant={instantId === task.id}
+          width={panelWidth}
+          onWidthChange={setPanelWidth}
+          maximized={panelMaximized}
+          onMaximizedChange={setPanelMaximized}
+          tabs={
+            <TaskTabs
+              tasks={mine}
+              activeId={task.id}
+              onPick={switchTask}
+              onShowAll={() => {
+                setInstantId(null);
+                setOpenTaskId(null);
+                setListOpen(true);
+              }}
+            />
           }
+          onOpenChange={(o) => {
+            if (!o) setInstantId(null);
+            setOpenTaskId((prev) => (o ? task.id : prev === task.id ? null : prev));
+          }}
           onStatus={(s) => setTaskStatus(task.id, s)}
           onCreated={async () => {
             await task.onCreated?.();
@@ -373,6 +353,7 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
         siteName={siteName}
         onOpenTask={(id) => {
           setListOpen(false);
+          setInstantId(null);
           setOpenTaskId(id);
           setLastTaskId(id);
         }}
@@ -380,10 +361,13 @@ export function AgentTasksProvider({ children }: { children: ReactNode }) {
       />
       )}
 
-      {isApp && lastTaskId !== null && openTaskId === null && !listOpen && (
+      {isApp && lastTaskId !== null && mineIds.has(lastTaskId) && openTaskId === null && !listOpen && (
         <button
           type="button"
-          onClick={() => setOpenTaskId(lastTaskId)}
+          onClick={() => {
+            setInstantId(null);
+            setOpenTaskId(lastTaskId);
+          }}
           aria-label="Reopen last task panel"
           title="Reopen last task panel"
           className="fixed right-0 top-1/2 z-30 flex h-40 w-4 -translate-y-1/2 items-center justify-center rounded-l-lg border border-r-0 border-edge2 bg-panel/95 shadow-[0_2px_14px_rgb(31_45_61/0.10)] backdrop-blur-sm transition-colors hover:border-accent/50 hover:bg-panel cursor-pointer"
@@ -414,6 +398,55 @@ const STATUS_LABEL: Record<AgentTaskStatus, string> = {
   done: "done",
   failed: "failed",
 };
+
+function TaskTabs({
+  tasks,
+  activeId,
+  onPick,
+  onShowAll,
+}: {
+  tasks: AgentTask[];
+  activeId: string;
+  onPick: (id: string) => void;
+  onShowAll: () => void;
+}) {
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeId]);
+
+  if (tasks.length < 2) return null;
+  return (
+    <div className="flex items-center gap-1.5 border-b border-edge px-3 py-2">
+      <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none]">
+        {tasks.map((task) => {
+          const active = task.id === activeId;
+          return (
+            <button
+              key={task.id}
+              ref={active ? activeRef : undefined}
+              type="button"
+              onClick={() => !active && onPick(task.id)}
+              aria-current={active ? "true" : undefined}
+              title={`${task.title} · ${STATUS_LABEL[task.status]}`}
+              className={`flex max-w-48 shrink-0 items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+                active
+                  ? "border-accent/50 bg-accent-soft text-accent"
+                  : "border-edge bg-panel2/50 text-sub hover:border-accent/50 hover:text-ink cursor-pointer"
+              }`}
+            >
+              <StatusSignal status={task.status} />
+              <span className="truncate">{task.title}</span>
+            </button>
+          );
+        })}
+      </div>
+      <IconButton onClick={onShowAll} aria-label="All tasks" title="All tasks">
+        <ListTodo size={14} />
+      </IconButton>
+    </div>
+  );
+}
 
 function TasksSheet({
   open,
@@ -549,9 +582,9 @@ const SHEET_MIN = 360;
 const SHEET_DEFAULT = 672;
 
 type ChatItem =
-  | { kind: "user"; text: string; files?: string[] }
+  | { kind: "user"; text: string; files?: string[]; typed: boolean }
   | { kind: "assistant"; text: string }
-  | { kind: "tool"; text: string }
+  | { kind: "tool"; text: string; name?: string }
   | { kind: "chart"; html: string }
   | {
       kind: "permission";
@@ -578,8 +611,15 @@ function AgentTaskChat({
   params,
   suggestions,
   autoStart,
+  promptSurface,
   siteId,
   open,
+  instant,
+  width,
+  onWidthChange,
+  maximized,
+  onMaximizedChange,
+  tabs,
   onOpenChange,
   onStatus,
   onCreated,
@@ -592,8 +632,15 @@ function AgentTaskChat({
   params?: Record<string, string>;
   suggestions?: PromptChip[];
   autoStart?: string;
+  promptSurface?: UserPromptSurface;
   siteId: string | null;
   open: boolean;
+  instant: boolean;
+  width: number;
+  onWidthChange: (width: number) => void;
+  maximized: boolean;
+  onMaximizedChange: (maximized: boolean) => void;
+  tabs: ReactNode;
   onOpenChange: (open: boolean) => void;
   onStatus: (status: AgentTaskStatus) => void;
   onCreated: () => void | Promise<void>;
@@ -605,6 +652,7 @@ function AgentTaskChat({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingPrompt, setSavingPrompt] = useState<string | null>(null);
   const sessionRef = useRef<string | null>(null);
   const abortRef = useRef<{ abort: () => void } | null>(null);
   const draftRef = useRef(draft);
@@ -616,8 +664,6 @@ function AgentTaskChat({
 
   const [closing, setClosing] = useState(false);
   const visible = open || closing;
-  const [width, setWidth] = useState(SHEET_DEFAULT);
-  const [maximized, setMaximized] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ startX: number; startWidth: number; overshoot: number } | null>(null);
@@ -631,7 +677,10 @@ function AgentTaskChat({
   useGSAP(
     () => {
       if (!panelRef.current) return;
-      if (open) {
+      if (open && instant) {
+        gsap.set(panelRef.current, { xPercent: 0, x: 0 });
+        gsap.set(backdropRef.current, { opacity: 1 });
+      } else if (open) {
         gsap.fromTo(
           panelRef.current,
           { xPercent: 100, x: 0 },
@@ -660,7 +709,7 @@ function AgentTaskChat({
     const max = Math.floor(window.innerWidth * 0.85);
     const min = Math.min(SHEET_MIN, max);
     const desired = drag.current.startWidth + (drag.current.startX - e.clientX);
-    setWidth(Math.min(Math.max(desired, min), max));
+    onWidthChange(Math.min(Math.max(desired, min), max));
     const overshoot = Math.max(0, min - desired);
     drag.current.overshoot = overshoot;
     if (panelRef.current) gsap.set(panelRef.current, { x: overshoot });
@@ -701,6 +750,13 @@ function AgentTaskChat({
   }, [autoStart]);
 
   const push = (item: ChatItem) => setItems((prev) => [...prev, item]);
+  const showProgress = (name: string, done: number, total: number) =>
+    setItems((prev) => {
+      const text = `${name} · ${done}/${total} reviewed`;
+      const at = prev.findLastIndex((item) => item.kind === "tool" && item.name === name);
+      if (at === -1) return [...prev, { kind: "tool", name, text }];
+      return prev.map((item, i) => (i === at ? { kind: "tool", name, text } : item));
+    });
   const appendAssistant = (text: string) =>
     setItems((prev) => {
       const last = prev[prev.length - 1];
@@ -764,6 +820,7 @@ function AgentTaskChat({
       kind: "user",
       text: displayAs ?? message,
       files: attachments.map((f) => f.name),
+      typed: displayAs === undefined && text.trim() !== "",
     });
 
     let created = false;
@@ -776,7 +833,14 @@ function AgentTaskChat({
       } else if (event === "text" && typeof data.text === "string") {
         appendAssistant(data.text);
       } else if (event === "tool" && typeof data.name === "string") {
-        push({ kind: "tool", text: data.name });
+        push({ kind: "tool", text: data.name, name: data.name });
+      } else if (
+        event === "progress" &&
+        typeof data.tool === "string" &&
+        typeof data.done === "number" &&
+        typeof data.total === "number"
+      ) {
+        showProgress(data.tool, data.done, data.total);
       } else if (event === "chart" && typeof data.html === "string") {
         push({ kind: "chart", html: data.html });
       } else if (event === "permission") {
@@ -830,6 +894,7 @@ function AgentTaskChat({
               form: draftRef.current,
               params,
               files: attachments.length > 0 ? attachments : undefined,
+              model: taskModel() ?? undefined,
             })
             .then((res) => {
               if (res.error || !res.turnId) {
@@ -865,7 +930,9 @@ function AgentTaskChat({
   if (!visible || typeof document === "undefined") return null;
 
   const agentItems: AgentChatItem[] = items.map((item, i) => {
-    if (item.kind === "user") return { kind: "user", key: i, text: item.text, files: item.files };
+    if (item.kind === "user") {
+      return { kind: "user", key: i, text: item.text, files: item.files, savable: item.typed };
+    }
     if (item.kind === "assistant") return { kind: "assistant", key: i, text: item.text };
     if (item.kind === "tool") return { kind: "tool", key: i, text: item.text };
     if (item.kind === "chart") {
@@ -920,7 +987,7 @@ function AgentTaskChat({
           )}
           <h2 className="font-display text-lg text-ink flex-1 truncate">{title}</h2>
           <IconButton
-            onClick={() => setMaximized((v) => !v)}
+            onClick={() => onMaximizedChange(!maximized)}
             aria-label={maximized ? "Restore" : "Maximize"}
             title={maximized ? "Restore" : "Maximize"}
           >
@@ -930,6 +997,8 @@ function AgentTaskChat({
             <X size={16} />
           </IconButton>
         </div>
+
+        {tabs}
 
         <input
           ref={fileInputRef}
@@ -950,6 +1019,7 @@ function AgentTaskChat({
           emptyState={<p className="text-sm text-faint">{emptyHint}</p>}
           chips={suggestions ?? []}
           onPickChip={(chip) => void send(chip.prompt, chip.label)}
+          onSaveUserText={promptSurface ? setSavingPrompt : undefined}
           onSend={(text) => void send(text)}
           onStop={() => abortRef.current?.abort()}
           allowEmptySend={files.length > 0}
@@ -997,34 +1067,17 @@ function AgentTaskChat({
           autoFocus
         />
       </div>
+      {promptSurface && (
+        <UserPromptEditor
+          open={savingPrompt !== null}
+          onClose={() => setSavingPrompt(null)}
+          surface={promptSurface}
+          initialPrompt={savingPrompt ?? ""}
+          elevated
+        />
+      )}
     </div>,
     document.body,
-  );
-}
-
-function ChartFrame({ html }: { html: string }) {
-  const ref = useRef<HTMLIFrameElement>(null);
-  const [height, setHeight] = useState(320);
-
-  const measure = () => {
-    const doc = ref.current?.contentDocument;
-    const h = doc?.documentElement?.scrollHeight ?? 0;
-    if (h > 0) setHeight(h);
-  };
-
-  return (
-    <iframe
-      ref={ref}
-      title="Chart"
-      sandbox="allow-same-origin"
-      srcDoc={html}
-      style={{ height }}
-      className="block w-full bg-white"
-      onLoad={() => {
-        measure();
-        setTimeout(measure, 150);
-      }}
-    />
   );
 }
 
@@ -1086,6 +1139,7 @@ export async function runInlineTurn({
         siteId: site && site !== GLOBAL ? site : null,
         message,
         form: form ?? {},
+        model: taskModel() ?? undefined,
       })
       .then((res) => {
         if (res.error || !res.turnId) {
@@ -1102,57 +1156,4 @@ export async function runInlineTurn({
   });
 
   return text.trim();
-}
-
-function PermissionPrompt({
-  item,
-  onAnswer,
-}: {
-  item: { tool: string; input: Record<string, unknown>; answered?: string };
-  onAnswer: (decision: "allow" | "always" | "full" | "deny") => void;
-}) {
-  const summary = Object.entries(item.input)
-    .filter(([, v]) => v !== undefined && v !== null && v !== "")
-    .slice(0, 4)
-    .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
-    .join(" · ");
-
-  if (item.answered) {
-    return (
-      <p className="flex items-center gap-1.5 text-[11px] text-faint font-mono">
-        <Wrench size={10} className="shrink-0" />
-        {item.tool} — {item.answered === "deny" ? "declined" : "allowed"}
-      </p>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-accent/30 bg-accent-soft px-3 py-2.5 space-y-2">
-      <div>
-        <p className="text-sm text-ink font-medium">
-          Meelu wants to run <span className="font-mono">{item.tool}</span>
-        </p>
-        {summary && (
-          <p className="text-xs text-sub mt-0.5 line-clamp-3 break-words">{summary}</p>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" onClick={() => onAnswer("allow")}>
-          Allow
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("always")}>
-          Always allow this action
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("full")}>
-          Full access
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => onAnswer("deny")}>
-          No
-        </Button>
-      </div>
-      <p className="text-[11px] text-faint">
-        “Always” and “full access” last until you quit the app.
-      </p>
-    </div>
-  );
 }
