@@ -1,10 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
-from src.providers.social_search.actors import SearchQuery, linkedin, reddit, x
+from src.providers.social_search.actors import SearchQuery, facebook, linkedin, reddit, x
 from src.providers.social_search.apify import ACTORS, posted_since
 from src.providers.social_search.shape import iso_date
 
-QUERY = SearchQuery(keywords=["seo audit"], since=None, limit=20)
+QUERY = SearchQuery(keywords=["seo audit"], since=None, per_keyword=20)
 
 
 def test_every_platform_has_primary_then_fallback():
@@ -70,7 +70,7 @@ def test_reddit_fatihtahta():
 
 
 def test_x_kaito_parses_twitter_dates_and_since():
-    q = SearchQuery(keywords=["seo audit"], since="2026-10-01T00:00:00Z", limit=20)
+    q = SearchQuery(keywords=["seo audit"], since="2026-10-01T00:00:00Z", per_keyword=20)
     assert x.kaito_input(q)["searchTerms"] == ["seo audit since:2026-10-01"]
     out = x.kaito_post(
         {
@@ -112,11 +112,13 @@ def test_linkedin_harvest_and_maestro():
     q = SearchQuery(
         keywords=["seo audit", "crawl"],
         since=(datetime.now(UTC) - timedelta(days=3)).isoformat(),
-        limit=20,
+        per_keyword=20,
     )
     assert linkedin.harvest_input(q)["postedLimit"] == "week"
     assert linkedin.maestro_input(q)["keyword"] == '"seo audit" OR crawl'
     assert linkedin.maestro_input(q)["date_filter"] == "past-week"
+    assert linkedin.maestro_input(q)["total_posts"] == 40
+    assert linkedin.harvest_input(q)["maxPosts"] == 20
 
     harvested = linkedin.harvest_post(
         {
@@ -169,3 +171,50 @@ def test_cost_estimate_floors_lagging_result_events():
     }
     charges = ChargeEvents(result="post", start="apify-actor-start")
     assert _event_estimate_micros(run, charges, 5) == 10_050
+
+
+def test_caps_are_per_keyword():
+    q = SearchQuery(keywords=["a b", "c d", "e f"], since=None, per_keyword=25)
+    assert q.run_cap() == 75
+    assert reddit.harshmaur_input(q)["maxPostsCount"] == 25
+    assert reddit.fatihtahta_input(q)["maxPosts"] == 25
+    assert x.kaito_input(q)["maxItems"] == 25
+    assert x.codeperfection_input(q)["maxTweets"] == 25
+    assert x.codeperfection_input(q)["maxTotalTweets"] == 75
+
+
+def test_facebook_scraper_one():
+    q = SearchQuery(keywords=["wordpress slow"], since="2026-10-08T00:00:00Z", per_keyword=25)
+    assert facebook.scraper_one_input(q) == {
+        "query": "wordpress slow",
+        "resultsCount": 25,
+        "searchType": "latest",
+        "startDate": "2026-10-08",
+    }
+    out = facebook.scraper_one_post(
+        {
+            "url": "https://www.facebook.com/groups/784025789158373/permalink/2160015128226092/",
+            "postId": "2160015128226092",
+            "timestamp": 1792663967000,
+            "postText": "A slow WordPress site can have problems",
+            "reactionsCount": 1,
+            "commentsCount": 1,
+            "isReshare": False,
+            "author": {"id": "1", "name": "Yasin BusinessDev"},
+        }
+    )
+    assert out["id"] == "2160015128226092"
+    assert out["title"] is None
+    assert out["author"] == {"handle": "Yasin BusinessDev", "displayName": "Yasin BusinessDev"}
+    assert out["engagement"] == {"score": 1, "comments": 1, "views": None}
+    assert out["createdAt"] == "2026-10-22T10:12:47+00:00"
+
+
+def test_facebook_identity_uses_post_id():
+    from src.social_listening.identity import post_key
+
+    for url in (
+        "https://www.facebook.com/permalink.php?story_fbid=pfbid02Ka7&id=1",
+        "https://www.facebook.com/stella512/posts/pfbid02yDStsc2aAo8",
+    ):
+        assert post_key("facebook", "10163020137237023", url) == "facebook:10163020137237023"

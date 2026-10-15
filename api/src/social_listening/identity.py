@@ -3,8 +3,8 @@ import re
 from urllib.parse import parse_qs, parse_qsl, urlencode, urlsplit, urlunsplit
 
 HOST_PREFIXES = ("www.", "m.", "mobile.", "old.", "new.", "np.")
-HOST_ALIASES = {"twitter.com": "x.com", "redd.it": "reddit.com", "youtu.be": "youtube.com"}
-KEPT_QUERY_PARAMS = ("id", "v")
+HOST_ALIASES = {"twitter.com": "x.com", "redd.it": "reddit.com"}
+KEPT_QUERY_PARAMS = ("id",)
 REDDIT_FULLNAME = re.compile(r"^t[1-6]_")
 REDDIT_COMMENTS_PATH = re.compile(r"^(/r/[^/]+/comments/[^/]+)(/.*)?$", re.IGNORECASE)
 URL_PATTERN = re.compile(r"https?://\S+")
@@ -12,9 +12,15 @@ NON_WORD = re.compile(r"[^\w]+")
 MIN_HASHED_CHARS = 80
 
 PATH_IDS = {
-    "reddit": (re.compile(r"/comments/([a-z0-9]+)", re.IGNORECASE), lambda m, _: m.group(1).lower()),
+    "reddit": (
+        re.compile(r"/comments/([a-z0-9]+)", re.IGNORECASE),
+        lambda m, _: m.group(1).lower(),
+    ),
     "x": (re.compile(r"/status(?:es)?/(\d+)"), lambda m, _: m.group(1)),
-    "stackexchange": (re.compile(r"/(?:questions|q)/(\d+)"), lambda m, host: f"{host}-{m.group(1)}"),
+    "stackexchange": (
+        re.compile(r"/(?:questions|q)/(\d+)"),
+        lambda m, host: f"{host}-{m.group(1)}",
+    ),
     "github": (
         re.compile(r"^/([^/]+)/([^/]+)/(?:issues|pull|discussions)/(\d+)"),
         lambda m, _: f"{m.group(1).lower()}/{m.group(2).lower()}#{m.group(3)}",
@@ -24,9 +30,6 @@ PATH_IDS = {
         lambda m, _: f"{m.group(1).lower()}/{m.group(2)}",
     ),
     "linkedin": (re.compile(r"activity[-:](\d+)"), lambda m, _: m.group(1)),
-    "instagram": (re.compile(r"/(?:p|reel|tv)/([^/]+)"), lambda m, _: m.group(1)),
-    "tiktok": (re.compile(r"/video/(\d+)"), lambda m, _: m.group(1)),
-    "youtube": (re.compile(r"/(?:shorts|embed|live)/([^/?]+)"), lambda m, _: m.group(1)),
 }
 
 
@@ -54,9 +57,7 @@ def canonical_url(url: str) -> str:
             path = match.group(1)
         path = path.lower()
     path = path.rstrip("/")
-    query = urlencode(
-        sorted((k, v) for k, v in parse_qsl(parts.query) if k in KEPT_QUERY_PARAMS)
-    )
+    query = urlencode(sorted((k, v) for k, v in parse_qsl(parts.query) if k in KEPT_QUERY_PARAMS))
     return urlunsplit(("https", host, path, query, ""))
 
 
@@ -65,12 +66,6 @@ def id_from_url(platform: str, url: str) -> str | None:
     if platform == "hackernews":
         values = parse_qs(parts.query).get("id")
         return values[0] if values else None
-    if platform == "youtube":
-        values = parse_qs(parts.query).get("v")
-        if values:
-            return values[0]
-        if _host(parts) == "youtube.com" and (parts.hostname or "").endswith("youtu.be"):
-            return parts.path.strip("/") or None
     rule = PATH_IDS.get(platform)
     if rule is None:
         return None

@@ -181,29 +181,30 @@ asks or confirms it is stale.
     "social-listening": """\
 ## Social listening
 
-- `social_listening_post`: every post Meelu has ever seen for the site, never
-  deleted, so a run never proposes the same post twice. `post_key` is its
-  identity, unique per site: the platform plus its native id
-  (`external_id`), or a cleaned URL when the platform gives none.
-  `content_hash` catches the same text posted twice. `status` is one of:
-  fetched (saved, awaiting the embedding check), matched (close in meaning to
-  its query, awaiting the LLM judge), dropped (never shown; `drop_reason` is
-  too_old, excluded_word, far_in_meaning, judged_off_topic, dead, duplicate,
-  unembeddable or line_removed), then the user's own states: to_reply,
-  drafted, replied, skipped, rejected (the user marked it not relevant).
-  `similarity` is the 0-1 cosine score against the query; `relevance` and
-  `composite_score` are the judge's 0-1 verdicts; `keep_reason` is the
+- `social_post`: one row per public post Meelu has fetched for any site,
+  kept 30 days. You can read only the posts tied to this site. It holds the
+  content (`platform`, `url`, `title`, `text`, `author_handle`,
+  `author_name`, `posted_at`, `engagement`, `context`) and `fetched_at`, when
+  Meelu first saw it.
+- `social_listening_post`: this site's posts, one row per post, joined to
+  `social_post` by `post_id`. `status` is candidate (fetched, awaiting the
+  meaning check), matched (close in meaning to a line, awaiting the judge),
+  then the user's own states: to_reply, drafted, replied, skipped, rejected
+  (the user marked it not relevant). Posts that fail the meaning check or
+  the judge are deleted, so there are no dropped rows. `similarity` is the
+  0-1 cosine score against the line in `query_id`; `keep_reason` is the
   judge's one-line why; `suggested_angle` is a reply angle; `reply_text` is
-  the user's own words. `query_id` is the line that found it, `run_id` the run.
-- `social_listening_query`: the lines of plain text the user listens for.
-  `enabled` gates one; `source` is user or suggested; `keywords` and
-  `negative_keywords` are the search terms the run extracted from it;
-  `embedding` is what posts are compared against.
-- `social_listening_config`: one row per site: the `platforms` list,
-  `strictness` (loose, balanced or strict), `max_age_days`, run limits.
+  the user's own words; `run_id` is the run that found it.
+- `social_listening_query`: the lines of plain text the user listens for, at
+  most 30 per site. `enabled` gates one; `source` is user or suggested;
+  `keywords` are the two search phrases the run extracted from it.
+- `social_listening_config`: one row per site: the `platforms` list. The
+  meaning check keeps a post when its similarity to a line is at least 0.8.
 - `social_listening_run`: one row per run (always started by the user) with
   `fetched_count`, `matched_count`, `kept_count`, per-platform
-  `platform_stats` and its terminal status.
+  `platform_stats` (posts from the platform, posts from Meelu's shared store,
+  keywords that failed) and its terminal status. Each run looks back at
+  most 7 days.
 """,
 }
 

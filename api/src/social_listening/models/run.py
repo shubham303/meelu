@@ -9,7 +9,15 @@ from src.core.orm import EMPTY_JSON_OBJECT, Base, EntityMixin, SiteScopedMixin
 
 class SocialListeningRun(EntityMixin, SiteScopedMixin, Base):
     __tablename__ = "social_listening_run"
-    __table_args__ = (Index("social_listening_run_site_idx", "site_id", "seq"),)
+    __table_args__ = (
+        Index("social_listening_run_site_idx", "site_id", "seq"),
+        Index(
+            "social_listening_run_one_running_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+    )
 
     status: Mapped[str] = mapped_column(nullable=False, server_default=text("'running'"))
     started_at: Mapped[datetime] = mapped_column(

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+import time
 from typing import Any
 
 import httpx
@@ -8,6 +9,7 @@ import httpx
 from src.providers.errors import ProviderRequestError
 
 ATTEMPTS = 3
+MAX_RATE_LIMIT_WAIT_S = 65.0
 
 _client: httpx.AsyncClient | None = None
 
@@ -22,6 +24,17 @@ def client() -> httpx.AsyncClient:
 def _backoff(attempt: int) -> float:
     base = min(0.5 * 2**attempt, 8.0)
     return base + random.random() * base * 0.5
+
+
+def _rate_limit_wait(res: httpx.Response) -> float | None:
+    retry_after = res.headers.get("retry-after")
+    if retry_after and retry_after.strip().isdigit():
+        return float(retry_after)
+    if res.headers.get("x-ratelimit-remaining") == "0":
+        reset = res.headers.get("x-ratelimit-reset")
+        if reset and reset.strip().isdigit():
+            return max(float(reset) - time.time(), 0.0) + 1.0
+    return None
 
 
 def _parse(res: httpx.Response) -> Any:
@@ -62,6 +75,14 @@ async def vendor_request(
                 await asyncio.sleep(_backoff(attempt))
             continue
         parsed = _parse(res)
+        wait = _rate_limit_wait(res) if res.status_code in (403, 429) else None
+        if wait is not None and wait <= MAX_RATE_LIMIT_WAIT_S:
+            last = ProviderRequestError(
+                provider_id, res.status_code, f"{provider_id} is rate limited", parsed
+            )
+            if attempt + 1 < ATTEMPTS:
+                await asyncio.sleep(wait)
+            continue
         if res.status_code == 429 or res.status_code >= 500:
             last = ProviderRequestError(
                 provider_id, res.status_code, f"{provider_id} answered {res.status_code}", parsed

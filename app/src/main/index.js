@@ -493,12 +493,8 @@ function registerAgentIpc() {
 
   ipcMain.handle("social-signals:search", async (ev, payload) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
-    const providers = await providersFor();
     const cookieHeader = await sessionCookieHeader().catch(() => "");
-    return startSignalsSearch(payload ?? {}, emitSignals, {
-      providers,
-      cookieHeader,
-    });
+    return startSignalsSearch(payload ?? {}, emitSignals, { cookieHeader });
   });
   ipcMain.handle("social-signals:stop", (ev, { jobId } = {}) => {
     if (!allowedSender(ev)) return { error: "forbidden" };

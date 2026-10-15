@@ -94,7 +94,6 @@ export default function SocialListeningPage() {
   } = usePagedApi<SocialListeningPost>(
     postsPath({
       status: TAB_STATUSES[tab].join(","),
-      sort: tab === "to_reply" ? "best" : "newest",
       page: 1,
       page_size: pageSize,
     }),
@@ -149,7 +148,8 @@ export default function SocialListeningPage() {
             ...prev.platforms,
             [platform]: {
               status: d.status as "fetching" | "done" | "error",
-              count: d.count as number | undefined,
+              fromVendor: d.fromVendor as number | undefined,
+              fromDatabase: d.fromDatabase as number | undefined,
               error: d.error as string | undefined,
             },
           },
@@ -170,12 +170,11 @@ export default function SocialListeningPage() {
             fetched: m.event === "done" ? n(d.fetched) : prev.fetched,
             inserted: m.event === "done" ? n(d.inserted) : prev.inserted,
             kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
-            lookbackDays: d.lookbackDays == null ? null : n(d.lookbackDays),
             platforms:
               m.event === "done"
                 ? ((d.platforms ?? {}) as RunOutcome["platforms"])
                 : Object.fromEntries(
-                    Object.entries(prev.platforms).map(([id, p]) => [id, { fetched: p.count, error: p.error }]),
+                    Object.entries(prev.platforms).map(([id, p]) => [id, { error: p.error }]),
                   ),
           });
         }
@@ -356,8 +355,8 @@ export default function SocialListeningPage() {
               <Inbox size={26} className="text-sub" />
               <p className="text-[15px] font-semibold text-ink">Nothing to reply to yet</p>
               <p className="max-w-md text-[13.5px] text-sub">
-                When your lines look right, press Run now. The first run looks back as far as your settings allow (
-                {config?.maxAgeDays ?? 365} days), so it can take a few minutes.
+                When your lines look right, press Run now. The first run looks back 7 days, so it can take a few
+                minutes.
               </p>
             </div>
           ) : (

@@ -4,7 +4,6 @@ import type {
   SocialListeningPost,
   SocialListeningQuery,
   SocialListeningReviewStatus,
-  SocialListeningStrictness,
 } from "@/lib/types";
 
 export interface PlatformInfo {
@@ -28,21 +27,16 @@ export const OUTCOME: Partial<Record<SocialListeningReviewStatus, { label: strin
   rejected: { label: "Not relevant", tone: "warn" },
 };
 
-export const STRICTNESS: Array<{ id: SocialListeningStrictness; label: string }> = [
-  { id: "loose", label: "Loose" },
-  { id: "balanced", label: "Balanced" },
-  { id: "strict", label: "Strict" },
-];
-
-export const AGE_PICKS = [7, 30, 90, 180, 365];
-
 export type RunStep = "terms" | "searching" | "meaning" | "judging";
 
 export interface LiveRun {
   step: RunStep | null;
   lines: number;
   phrases: number;
-  platforms: Record<string, { status: "fetching" | "done" | "error"; count?: number; error?: string }>;
+  platforms: Record<
+    string,
+    { status: "fetching" | "done" | "error"; fromVendor?: number; fromDatabase?: number; error?: string }
+  >;
   fetched: number;
   inserted: number;
   gate: { pending: number; kept: number; dropped: number } | null;
@@ -86,15 +80,12 @@ const CSV_COLUMNS = [
   "url",
   "platform",
   "status",
-  "dropReason",
   "title",
   "text",
   "authorHandle",
   "postedAt",
   "line",
   "similarity",
-  "relevance",
-  "compositeScore",
   "keepReason",
   "suggestedAngle",
   "replyText",
@@ -110,7 +101,7 @@ export async function downloadPostsCsv(queries: SocialListeningQuery[]): Promise
   const lineOf = new Map(queries.map((q) => [q.id, q.text]));
   const rows: SocialListeningPost[] = [];
   for (let page = 1; page <= 50; page += 1) {
-    const res = await apiPaged<SocialListeningPost>(postsPath({ sort: "newest", page, page_size: 200 }));
+    const res = await apiPaged<SocialListeningPost>(postsPath({ page, page_size: 200 }));
     rows.push(...res.data);
     if (!res.pagination.has_next) break;
   }

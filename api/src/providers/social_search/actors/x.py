@@ -8,7 +8,7 @@ def kaito_input(q: SearchQuery) -> dict:
         "searchTerms": [f"{k} since:{day}" if day else k for k in q.keywords],
         "queryType": "Latest",
         "lang": "en",
-        "maxItems": q.limit,
+        "maxItems": q.per_keyword,
     }
 
 
@@ -40,8 +40,8 @@ def codeperfection_input(q: SearchQuery) -> dict:
         "searchTerms": q.keywords,
         "sort": "Latest",
         "language": "en",
-        "maxTweets": q.limit,
-        "maxTotalTweets": q.limit,
+        "maxTweets": q.per_keyword,
+        "maxTotalTweets": q.run_cap(),
         **({"startDate": day} if day else {}),
     }
 

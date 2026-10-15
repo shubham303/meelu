@@ -20,7 +20,7 @@ const services = [
   },
   {
     name: "Apify",
-    what: "Searches across social platforms for social listening.",
+    what: "Searches across social platforms for social listening. A run needs a balance of at least $5 to start.",
   },
   {
     name: "OpenRouter",

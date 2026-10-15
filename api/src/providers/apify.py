@@ -105,7 +105,6 @@ async def run_actor(
             "waitForFinish": WAIT_S,
             "timeout": RUN_TIMEOUT_S,
             "maxItems": max_items,
-            "maxTotalChargeUsd": settings.apify_max_charge_usd_per_run,
         },
         timeout_s=WAIT_S + 30,
     )

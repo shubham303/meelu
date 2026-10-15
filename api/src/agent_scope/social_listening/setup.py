@@ -5,6 +5,7 @@ from src.social_listening.models.config import SocialListeningConfig
 from src.social_listening.models.post import SocialListeningPost
 from src.social_listening.models.query import SocialListeningQuery
 from src.social_listening.models.run import SocialListeningRun
+from src.social_listening.models.social_post import SocialPost
 from src.social_listening.tools import social_listening_save_queries
 
 DESK = "social-listening"
@@ -14,6 +15,7 @@ TABLES = desk_tables(
     SocialListeningConfig,
     SocialListeningQuery,
     SocialListeningPost,
+    SocialPost,
     SocialListeningRun,
 )
 GUIDES = desk_guides("social-listening")
@@ -27,7 +29,7 @@ This task belongs to "{{name}}" ({{domain}}), id {{id}}. Filter every site-scope
 Read the site record and the business profile: what the site sells, who it serves, what it can speak on credibly. Read the user's notes. Read social_listening_query for what is already saved, with how many posts each line found and kept in social_listening_post. If lines already exist, you are refining, not starting over.
 
 ## How to work
-- Propose three to six lines, ranked. Each line is one plain sentence describing a conversation this site could usefully join, written the way the post would read: "people asking which tool tracks their Google rankings", "small sites that lost traffic after a Google update". Say who is posting and what they want; the run reads that intent.
+- Propose three to six lines, ranked. A site holds at most 30 lines. Each line is one plain sentence describing a conversation this site could usefully join, written the way the post would read: "people asking which tool tracks their Google rankings", "small sites that lost traffic after a Google update". Say who is posting and what they want; the run reads that intent.
 - A brand or a competitor is just another line: "people talking about <brand>", "teams looking for a cheaper <competitor> alternative". There is no separate brand list.
 - The run extracts search terms from each line itself; never write keyword lists.
 - Take corrections until the user is happy. Save ONLY on a clear go-ahead, once, with social_listening_save_queries (source "suggested").

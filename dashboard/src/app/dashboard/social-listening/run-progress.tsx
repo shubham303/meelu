@@ -35,7 +35,13 @@ export function RunProgress({ live, platformLabel }: { live: LiveRun; platformLa
       detail:
         platforms.length > 0
           ? platforms
-              .map(([id, s]) => `${platformLabel(id)} ${s.status === "error" ? "failed" : (s.count ?? "…")}`)
+              .map(([id, s]) =>
+                s.status === "error"
+                  ? `${platformLabel(id)} failed`
+                  : s.status === "fetching"
+                    ? `${platformLabel(id)} …`
+                    : `${platformLabel(id)} ${s.fromVendor ?? 0} fetched · ${s.fromDatabase ?? 0} shared`,
+              )
               .join(" · ")
           : "Waiting",
     },
