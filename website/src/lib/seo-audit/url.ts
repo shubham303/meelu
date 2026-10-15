@@ -34,6 +34,7 @@ export function absolute(href: string, base: string): string | undefined {
   try {
     const u = new URL(href, base);
     if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    if (u.pathname.startsWith("/cdn-cgi/")) return undefined;
     u.hash = "";
     return u.toString();
   } catch {
