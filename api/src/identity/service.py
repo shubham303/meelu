@@ -98,7 +98,7 @@ class IdentityService:
 
     async def _seed(self, db: AsyncSession, user: UserRecord) -> None:
         await api_keys.create(db, user.id, "Default MCP key")
-        await credit_service.signup_grant(db, user.id)
+        await credit_service.open_account(db, user.id)
         try:
             await profiles.create(db, user.id, {"full_name": user.name})
         except Exception as e:
