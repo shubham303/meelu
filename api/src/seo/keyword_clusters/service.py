@@ -120,8 +120,9 @@ class KeywordClusterService:
         rivals = await self._competitor_keywords(db, caller, site.id, market)
 
         if body.source == "seeds":
+            await db.commit()
             discovered = await seo_data.discover_keywords(
-                db, caller, body.seeds, DISCOVERED_PER_SOURCE, market
+                caller, body.seeds, DISCOVERED_PER_SOURCE, market
             )
             raw = [*body.seeds, *discovered]
         elif body.source == "search_console":
@@ -294,8 +295,8 @@ class KeywordClusterService:
     async def _rankings(
         self, db: AsyncSession, caller: Caller, domain: str, market: dict
     ) -> list[dict]:
+        await db.commit()
         pulled = await seo_data.ranked_keywords(
-            db,
             caller,
             domain,
             RANKED_PULL,
@@ -315,7 +316,8 @@ class KeywordClusterService:
     ) -> dict[str, KeywordFacts]:
         if not keywords:
             return {}
-        items = await seo_data.keyword_overview(db, caller, keywords, market)
+        await db.commit()
+        items = await seo_data.keyword_overview(caller, keywords, market)
         facts = [keyword_facts(i) for i in items]
         return {f.keyword: f for f in facts if f.keyword}
 
@@ -323,8 +325,9 @@ class KeywordClusterService:
         self, db: AsyncSession, caller: Caller, site_domain: str, cluster: ClusterRecord
     ) -> tuple[ClusterMetrics, set[str]] | None:
         market = {"location_code": cluster.location_code, "language_code": cluster.language_code}
+        await db.commit()
         serp = await seo_data.serp_organic(
-            db, caller, cluster.main_keyword, SERP_DEVICE, SERP_DEPTH, market, ttl=SERP_TTL
+            caller, cluster.main_keyword, SERP_DEVICE, SERP_DEPTH, market, ttl=SERP_TTL
         )
         if serp is None:
             return None
@@ -352,7 +355,7 @@ class KeywordClusterService:
         ]
 
         our_target = ours["url"] if ours else f"https://{site_domain}/"
-        ranks = await seo_data.pages_summary(db, caller, [r["url"] for r in above] + [our_target])
+        ranks = await seo_data.pages_summary(caller, [r["url"] for r in above] + [our_target])
 
         def rank_of(url: str) -> dict:
             return (

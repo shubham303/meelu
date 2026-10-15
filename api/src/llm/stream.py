@@ -38,10 +38,6 @@ class Usage:
             self.generation_id = message["id"]
         self.absorb(message.get("usage"))
 
-    def estimate_micros(self, input_per_million: float, output_per_million: float) -> int:
-        tokens_in = self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
-        return round(tokens_in * input_per_million + self.output_tokens * output_per_million)
-
 
 def _count(value: Any, current: int) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else current

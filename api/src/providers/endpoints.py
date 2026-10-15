@@ -58,7 +58,8 @@ async def social_search_posts(
     db: AsyncSession = Depends(get_db),
     ctx: OptionalSiteContext = Depends(optional_site),
 ) -> dict:
+    await db.commit()
     posts = await social_search.search_platform(
-        db, caller_of(ctx), body.platform, body.keywords, body.since, body.limit
+        caller_of(ctx), body.platform, body.keywords, body.since, body.limit
     )
     return {"posts": posts}

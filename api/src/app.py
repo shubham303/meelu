@@ -16,6 +16,7 @@ from src.core.logging import RequestLoggingMiddleware, configure_logging
 from src.crawl_jobs.endpoints import router as crawl_jobs_router
 from src.credits import cron as credits_cron
 from src.credits.endpoints import router as credits_router
+from src.credits.limiter import PaidCallsBusyError
 from src.credits.service import InsufficientCreditsError, SiteDisabledError
 from src.identity import cron as identity_cron
 from src.keys.endpoints import router as keys_router
@@ -129,6 +130,11 @@ async def _credits_error(request, exc: InsufficientCreditsError):
         },
         status_code=402,
     )
+
+
+@app.exception_handler(PaidCallsBusyError)
+async def _paid_calls_busy(request, exc: PaidCallsBusyError):
+    return JSONResponse({"error": {"code": exc.code, "message": str(exc)}}, status_code=429)
 
 
 @app.exception_handler(SiteDisabledError)

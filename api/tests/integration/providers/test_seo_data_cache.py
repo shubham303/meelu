@@ -48,10 +48,8 @@ async def test_a_response_is_stored_raw_under_its_query_fingerprint(client, emai
     adapter = RecordingDataForSeo()
     facade = SeoDataProvider([adapter])
 
-    async with unit_of_work() as db:
-        first = await facade.rival_domains(db, caller, "https://Cache-Test.example/")
-    async with unit_of_work() as db:
-        second = await facade.rival_domains(db, caller, "cache-test.example")
+    first = await facade.rival_domains(caller, "https://Cache-Test.example/")
+    second = await facade.rival_domains(caller, "cache-test.example")
 
     assert len(adapter.sent) == 1
     assert adapter.sent[0]["endpoint"] == COMPETITORS_PATH
@@ -83,11 +81,10 @@ async def test_a_different_query_is_a_different_fingerprint(client, email):
     adapter = RecordingDataForSeo()
     facade = SeoDataProvider([adapter])
 
-    async with unit_of_work() as db:
-        await facade.rival_domains(db, caller, "fingerprint.example", limit=10)
-        await facade.rival_domains(db, caller, "fingerprint.example", limit=20)
-        await facade.rival_domains(db, caller, "fingerprint.example", location_code=2356)
-        await facade.rival_domains(db, caller, "fingerprint.example", limit=20)
+    await facade.rival_domains(caller, "fingerprint.example", limit=10)
+    await facade.rival_domains(caller, "fingerprint.example", limit=20)
+    await facade.rival_domains(caller, "fingerprint.example", location_code=2356)
+    await facade.rival_domains(caller, "fingerprint.example", limit=20)
 
     assert [(q["task"]["limit"], q["task"]["location_code"]) for q in adapter.sent] == [
         (10, 2840),
