@@ -63,7 +63,13 @@ urgent problems are money (LLM gateway) and server-side fetches (website).
 - Fix: on disconnect charge the reservation, or fetch the real cost from
   OpenRouter by generation id.
 
-### H3. Website free tools: SSRF via DNS rebinding — verified (race), exploit plausible
+### H3. Website free tools: SSRF via DNS rebinding — verified (race), exploit plausible — FIXED 2026-10-15
+- Fixed: `fetchUrl` connects through an undici `Agent` whose `connect.lookup`
+  resolves once and refuses private answers, so the checked address is the one
+  the socket opens. `isPrivateAddress` now parses IPv6 fully (IPv4-compatible
+  and mapped in hex, NAT64, 6to4, Teredo, multicast, `100::/64`,
+  `2001:db8::/32`). Proven by `website/test/seo-audit/net.test.mts`, which fails
+  on the old code.
 - `website/src/lib/seo-audit/net.ts:169-184`; every free tool goes through
   `fetchUrl` (seo-audit, broken-links, readability, ai-detect, similarity,
   sentiment).
