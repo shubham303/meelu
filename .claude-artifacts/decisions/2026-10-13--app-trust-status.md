@@ -34,9 +34,10 @@ Pending / known gaps:
 Decided: enroll as **Individual** (developer name "Shubham Randive"; no
 registered company, so Organization is not possible).
 
-Status: enrollment through the Apple Developer app on the iPad; the iPad
-needed a software update first. Waiting for the "Welcome to the Apple
-Developer Program" email ($99/yr).
+Status: enrollment submitted from the Apple Developer app on the iPad on
+2026-10-14; shows "Enrollment pending". Address that passed Apple's checker
+needed plain letters/numbers, no commas (village address, Sangli 416305).
+Waiting for the "Welcome to the Apple Developer Program" email ($99/yr).
 
 Next, once enrolled:
 1. Create a **Developer ID Application** certificate (CSR from Keychain on the
@@ -58,8 +59,18 @@ Next, once enrolled:
 Full decision and checklist: `2026-10-13--windows-distribution.md`.
 
 Done:
-- Partner Center account, Individual developer. **Verification Status: In
-  Progress** (blocks only "Submit for certification").
+- Partner Center account, Individual developer. **Verification Status:
+  Authorized** (confirmed 2026-10-14 under Account settings → Legal info →
+  Developer).
+- 0.1.6 Store package downloaded to
+  `~/Desktop/meelu-store/0.1.6/Meelu-windows-x64.appx` (main App build run
+  38442329565), for the first update submission after 0.1.5 is published.
+- Submission 1 (0.1.5) **passed certification and is live in the Store**
+  (approval email received 2026-10-15).
+- IARC age rating live (questionnaire 2026-10-13, storefront Microsoft).
+  Global Rating ID `37b4ea3e-75e4-84a4-8160-3fa9226857b7`: reuse it on any
+  other IARC storefront instead of refilling the questionnaire. Redo the
+  questionnaire only if the app's content changes the answers.
 - Product "Meelu" reserved. Identity `ShubhamRandive.Meelu`, publisher
   `CN=62EA4499-A8A4-4A51-BF17-4B19F01B3EF1`, publisher display name
   "Shubham Randive".
@@ -76,7 +87,8 @@ Done:
   recording with the beta banner painted out; posters, box art, tiles).
 
 Next, once the account is verified:
-1. Click **Submit for certification** (1–3 days).
+1. [x] Submission 1 sent to certification (2026-10-14), approved and live
+   (2026-10-15).
 2. Install from the private Store link on a Windows PC; check sign-in, crawl,
    agent, GSC/GA connect.
 3. Switch visibility to **Public**.
