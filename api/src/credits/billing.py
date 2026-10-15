@@ -8,6 +8,7 @@ from src.credits import pricing
 from src.credits.ledger import credit_ledger_service
 from src.credits.repository import credit_accounts, site_billings
 from src.credits.schemas import DueSite, SweepResult
+from src.profile.repository import users
 from src.settings import settings
 from src.sites.repository import sites
 
@@ -47,7 +48,12 @@ class SiteBillingService:
         )
 
     async def charge_site(self, db: AsyncSession, site: DueSite) -> bool:
-        price = pricing.site_day_price_micros()
+        earlier = await site_billings.count_earlier(db, site.user_id, site.domain)
+        if earlier == 0 and await self._in_trial(db, site.user_id):
+            await site_billings.mark_charged(db, site.user_id, site.domain, 0)
+            await sites.set_status(db, site.site_id, ACTIVE, None)
+            return True
+        price = pricing.site_day_price_micros(earlier)
         balance = await credit_accounts.balance(db, site.user_id)
         if balance < price:
             await sites.set_status(db, site.site_id, DISABLED, datetime.now(UTC))
@@ -58,6 +64,11 @@ class SiteBillingService:
         await site_billings.mark_charged(db, site.user_id, site.domain, price)
         await sites.set_status(db, site.site_id, ACTIVE, None)
         return True
+
+    async def _in_trial(self, db: AsyncSession, user_id: str) -> bool:
+        user = await users.get(db, user_id)
+        trial = timedelta(days=settings.credits_trial_days)
+        return user is not None and datetime.now(UTC) - user.created_at < trial
 
     async def resume_user_sites(self, db: AsyncSession, user_id: str) -> int:
         at = cutoff()

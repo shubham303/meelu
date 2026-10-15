@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +103,23 @@ class SiteBillingRepository:
         )
         row = result.scalars().first()
         return None if row is None else SiteBillingRecord.model_validate(row)
+
+    async def count_earlier(self, db: AsyncSession, user_id: str, domain: str) -> int:
+        own = (
+            select(SiteBilling.created_at)
+            .where(SiteBilling.user_id == user_id, SiteBilling.domain == domain)
+            .scalar_subquery()
+        )
+        result = await db.execute(
+            select(func.count())
+            .select_from(SiteBilling)
+            .where(
+                SiteBilling.user_id == user_id,
+                SiteBilling.site_id.is_not(None),
+                tuple_(SiteBilling.created_at, SiteBilling.domain) < tuple_(own, domain),
+            )
+        )
+        return result.scalar_one()
 
     async def list_due(
         self, db: AsyncSession, cutoff: datetime, limit: int

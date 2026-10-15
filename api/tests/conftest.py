@@ -154,9 +154,27 @@ def better_auth_keys(monkeypatch):
     monkeypatch.setattr(better_auth, "jwks", TestKeys())
 
 
-async def signup(client, email, name="Test User"):
+async def signup(client, email, name="Test User", credits=1.0, trial=False):
     r = await client.post("/api/auth/session", json={"accessToken": mint_token(email, name)})
     assert r.status_code == 200, r.text
+    from sqlalchemy import text
+
+    from src.core.database import unit_of_work
+    from src.credits.ledger import credit_ledger_service
+
+    async with unit_of_work() as db:
+        user_id = (
+            await db.execute(text('SELECT id FROM "user" WHERE email = :e'), {"e": email})
+        ).scalar_one()
+        if not trial:
+            await db.execute(
+                text("UPDATE \"user\" SET created_at = now() - interval '30 days' WHERE id = :u"),
+                {"u": user_id},
+            )
+        if credits:
+            await credit_ledger_service.apply(
+                db, user_id, round(credits * 1_000_000), "grant", "Test credits"
+            )
     return r
 
 
