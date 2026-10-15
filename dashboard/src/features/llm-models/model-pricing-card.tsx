@@ -82,8 +82,9 @@ export function ModelPricingCard() {
         <p className="font-medium text-ink">Default model</p>
       </div>
       <p className="text-sm text-sub mt-1">
-        Tasks run on this model unless you pick another when you start one. You pay what the
-        model costs, from your credits, with no markup. Prices are per million tokens.
+        Tasks run on this model unless you pick another when you start one, or you saved your
+        own Anthropic key above. You pay what the model costs, from your credits, with no markup.
+        Prices are per million tokens.
       </p>
       {err && <p className="text-sm text-bad mt-2">{err}</p>}
       {models && (

@@ -8,6 +8,7 @@ import { startUpdateCheck } from "./update-check.js";
 import { connectSearchConsole } from "./integrations/gsc/oauth.js";
 import { connectAnalytics } from "./integrations/ga/oauth.js";
 import { saveTextFile } from "./save-text-file.js";
+import { describeOwnKeys, ownAnthropicModels, saveOwnAnthropic } from "./integrations/llm/own-key.js";
 import { closeAgentSessions, runAgentTurn } from "./agent/runner.js";
 import { requestCrawlStop, runCrawl } from "./crawler/index.js";
 import {
@@ -26,7 +27,6 @@ import { createProviders } from "./providers/index.js";
 import { clearOrphanedJobs } from "./orphaned-jobs.js";
 import { appDir, screenshotDir } from "./paths.js";
 import { crawlToken } from "./crawler/token.js";
-import { describeLlmConfig, loadLlmConfig, saveLlmConfig } from "./integrations/llm/config.js";
 import {
   listConnectors,
   removeConnector,
@@ -206,7 +206,6 @@ function registerAgentIpc() {
       cwd: agentCwd(),
       abortController,
       cookieHeader,
-      llm: loadLlmConfig(),
     };
 
     drive(emit, options)
@@ -281,7 +280,6 @@ function registerAgentIpc() {
       cwd: agentCwd(),
       abortController,
       cookieHeader,
-      llm: loadLlmConfig(),
     })
       .catch((err) => {
         if (!abortController.signal.aborted) {
@@ -314,7 +312,7 @@ function registerAgentIpc() {
   ipcMain.handle("site:describe", async (ev, { siteId } = {}) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     const cookieHeader = await sessionCookieHeader().catch(() => "");
-    void describeSite(siteId, { cookieHeader, llm: loadLlmConfig(), emit: emitSummary, log });
+    void describeSite(siteId, { cookieHeader, emit: emitSummary, log });
     return { started: true };
   });
 
@@ -449,20 +447,6 @@ function registerAgentIpc() {
     }
   });
 
-  ipcMain.handle("llm:get", (ev) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    return describeLlmConfig();
-  });
-  ipcMain.handle("llm:set", (ev, cfg) => {
-    if (!allowedSender(ev)) return { error: "forbidden" };
-    try {
-      saveLlmConfig(cfg ?? {});
-      return describeLlmConfig();
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Could not save." };
-    }
-  });
-
   ipcMain.handle("connectors:list", (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     return listConnectors();
@@ -477,6 +461,28 @@ function registerAgentIpc() {
     }
   });
 
+  ipcMain.handle("llm:ownKeys", (ev) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return describeOwnKeys();
+  });
+  ipcMain.handle("llm:saveOwnAnthropic", async (ev, payload) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    try {
+      await saveOwnAnthropic(payload ?? {});
+      return describeOwnKeys();
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not save the key." };
+    }
+  });
+  ipcMain.handle("llm:ownModels", async (ev) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    try {
+      return { models: await ownAnthropicModels() };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not list your models." };
+    }
+  });
+
   const providersFor = async () =>
     createProviders({ cookieHeader: await sessionCookieHeader().catch(() => "") });
 
@@ -486,7 +492,6 @@ function registerAgentIpc() {
     const cookieHeader = await sessionCookieHeader().catch(() => "");
     return startSignalsSearch(payload ?? {}, emitSignals, {
       providers,
-      llm: loadLlmConfig(),
       cookieHeader,
     });
   });
@@ -676,12 +681,11 @@ function boot() {
 
   startSiteSummarySchedule({
     cookieHeader: sessionCookieHeader,
-    llm: loadLlmConfig,
     emit: emitSummary,
     log,
   });
 
-  startPageReviewSchedule({ cookieHeader: sessionCookieHeader, llm: loadLlmConfig, log });
+  startPageReviewSchedule({ cookieHeader: sessionCookieHeader, log });
 
   updates = startUpdateCheck({
     manifestUrl: UPDATE_MANIFEST_URL,
