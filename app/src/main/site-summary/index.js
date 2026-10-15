@@ -84,7 +84,7 @@ function recordChanges(site, answer) {
   return changes;
 }
 
-export async function describeSite(siteId, { cookieHeader, llm, emit = () => {}, log = () => {} }) {
+export async function describeSite(siteId, { cookieHeader, emit = () => {}, log = () => {} }) {
   if (!siteId || inFlight.has(siteId)) return { started: false };
   inFlight.add(siteId);
   attempted.add(siteId);
@@ -97,7 +97,6 @@ export async function describeSite(siteId, { cookieHeader, llm, emit = () => {},
     }
     const facts = await readHomepage(site.domain);
     const answer = await jsonCall(SYSTEM, pageBrief(site, facts), {
-      llm,
       cookieHeader,
       siteId,
       purpose: "site_summary",
@@ -123,20 +122,20 @@ export async function describeSite(siteId, { cookieHeader, llm, emit = () => {},
   }
 }
 
-async function tick({ cookieHeader, llm, emit, log }) {
+async function tick({ cookieHeader, emit, log }) {
   const cookie = await cookieHeader().catch(() => "");
   if (!cookie && !ENV_DEFAULTS.meeluApiKey) return;
   const sites = await meelu("/sites?page_size=100", { cookieHeader: cookie }).catch(() => null);
   if (!Array.isArray(sites)) return;
   for (const site of sites) {
     if (!site?.id || described(site) || attempted.has(site.id)) continue;
-    await describeSite(site.id, { cookieHeader: cookie, llm: llm(), emit, log });
+    await describeSite(site.id, { cookieHeader: cookie, emit, log });
   }
 }
 
-export function startSiteSummarySchedule({ cookieHeader, llm, emit, log }) {
+export function startSiteSummarySchedule({ cookieHeader, emit, log }) {
   if (timer || firstTick) return;
-  const run = () => void tick({ cookieHeader, llm, emit, log });
+  const run = () => void tick({ cookieHeader, emit, log });
   firstTick = setTimeout(() => {
     firstTick = null;
     run();

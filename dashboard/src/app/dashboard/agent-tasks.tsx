@@ -65,16 +65,16 @@ declare global {
         requestId: string,
         decision: "allow" | "always" | "full" | "deny",
       ) => Promise<{ ok?: boolean; error?: string }>;
-      getLlmConfig?: () => Promise<LlmConfigView | { error: string }>;
-      setLlmConfig?: (cfg: {
-        provider: LlmProvider;
-        model: string;
-        apiKey?: string;
-      }) => Promise<LlmConfigView | { error: string }>;
       getConnectors?: () => Promise<ConnectorsView | { error: string }>;
       removeConnector?: (provider: string) => Promise<ConnectorsView | { error: string }>;
       connectGsc?: () => Promise<ConnectorsView | { error: string }>;
       connectGa4?: () => Promise<ConnectorsView | { error: string }>;
+      getOwnKeys?: () => Promise<OwnKeysView | { error: string }>;
+      saveOwnAnthropic?: (payload: {
+        apiKey?: string;
+        defaultModel?: string;
+      }) => Promise<OwnKeysView | { error: string }>;
+      ownModels?: () => Promise<{ models: OwnModel[] } | { error: string }>;
       saveTextFile?: (params: {
         name: string;
         content: string;
@@ -98,20 +98,18 @@ declare global {
   }
 }
 
-
-
 export type ConnectorsView = Record<
   string,
   { fields: Record<string, string>; updatedAt: string | null }
 >;
 
+export interface OwnKeysView {
+  anthropic: { saved: boolean; defaultModel: string };
+}
 
-export type LlmProvider = "meelu" | "anthropic";
-
-export interface LlmConfigView {
-  provider: LlmProvider;
-  model: string;
-  hasApiKey: boolean;
+export interface OwnModel {
+  id: string;
+  name: string;
 }
 
 export type AgentTaskStatus = "idle" | "running" | "done" | "failed";

@@ -1,23 +1,17 @@
-const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
 const API_VERSION = "2023-06-01";
 const MAX_TOKENS = 2048;
 const TIMEOUT_MS = 120_000;
 const ATTEMPTS = 4;
 const RETRYABLE = new Set([408, 409, 429, 500, 502, 503, 504, 529]);
 
-export function messagesEndpoint(gateway, anthropicKey) {
-  if (gateway) {
-    return {
-      url: `${gateway.baseUrl.replace(/\/+$/, "")}/v1/messages`,
-      headers: { authorization: `Bearer ${gateway.apiKey}`, ...gateway.headers },
-    };
+export function messagesEndpoint(gateway) {
+  if (gateway.ownKey) {
+    return { url: `${gateway.baseUrl}/v1/messages`, headers: { "x-api-key": gateway.apiKey } };
   }
-  const baseUrl = (process.env.ANTHROPIC_BASE_URL || ANTHROPIC_BASE_URL).replace(/\/+$/, "");
-  const key = anthropicKey || process.env.ANTHROPIC_API_KEY;
-  if (key) return { url: `${baseUrl}/v1/messages`, headers: { "x-api-key": key } };
-  const token = process.env.ANTHROPIC_AUTH_TOKEN;
-  if (token) return { url: `${baseUrl}/v1/messages`, headers: { authorization: `Bearer ${token}` } };
-  return null;
+  return {
+    url: `${gateway.baseUrl.replace(/\/+$/, "")}/v1/messages`,
+    headers: { authorization: `Bearer ${gateway.apiKey}`, ...gateway.headers },
+  };
 }
 
 function sleep(ms) {

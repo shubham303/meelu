@@ -23,7 +23,7 @@ OpenRouter, or a local endpoint):
    (`src/main/integrations/`), and the env-gated auto-crawl schedule.
 3. **App-only dashboard** — the dashboard serves pages only to this app; any
    other browser is sent to meelu.tech/download, except the password-reset
-   link. The app-only Connections screen holds model choice, Google OAuth and
+   link. The app-only Connections screen holds the own Anthropic key, Google OAuth and
    connectors.
 
 Two channels, exactly as designed: normal UI operations call the dashboard
@@ -31,8 +31,7 @@ REST API directly from the page; everything device-side goes over one preload
 bridge (`window.meelu`, `src/preload/index.cjs`) — agent turns and events,
 crawls and syncs, connector management, analytics source files —
 handled by IPC in `src/main/index.js`. The dashboard backend stays a dumb
-CRUD API + database, which is what keeps hosting cheap and keeps every user's
-LLM credential on their own machine.
+CRUD API + database, which is what keeps hosting cheap.
 
 ## Run it
 
@@ -40,19 +39,16 @@ LLM credential on their own machine.
 # 1. the api, agent server and dashboard (or ../scripts/rebuild-restart.sh does all of it)
 docker compose up -d --build
 
-# 2. the app — model choice in .env if you need one, see .env.example
+# 2. the app
 cd app && npm install && npm run dev
 ```
 
-Model choice lives in `app/.env`: nothing set uses your Claude Code login;
-`ANTHROPIC_API_KEY` brings your own key; `OPENROUTER_API_KEY` +
-`MEELU_OPENROUTER_MODEL` routes through OpenRouter (model ids are
-provider-first, e.g. `anthropic/claude-sonnet-5`); `MEELU_LLM_BASE_URL` +
-`MEELU_LLM_MODEL` points the harness at a local model (Ollama v0.12+ and
-llama.cpp's `llama-server --jinja` both speak the Anthropic API natively,
-at `:11434` and `:8080` respectively). The Connections screen sets the same
-choices per device — including a dedicated llama.cpp provider that reads the
-server's context size — and what it saves wins over `.env`.
+Model calls go through the Meelu gateway (`/api/v1/llm` on the api) and are
+paid from the workspace's Meelu credits, unless the user saves their own
+Anthropic API key on the Connections screen. The key is encrypted on the
+device (`llm-keys.json`), calls then go straight to api.anthropic.com, and
+the key's chosen model becomes the default. The per-task picker lists both
+Meelu models and the key's models (`own:anthropic/<model>`).
 
 Start order doesn't matter: if the dashboard server isn't up, the window
 shows a waiting screen and connects by itself. Sign in happens in the window;

@@ -4,6 +4,7 @@ import { createSdkMcpServer, getSessionInfo, query, tool as sdkTool } from "@ant
 import { app } from "electron";
 import { z } from "zod";
 import { messagesEndpoint, messagesJudge } from "./messages.js";
+import { anthropicBaseUrl, ownAnthropic, ownModelOf } from "../integrations/llm/own-key.js";
 import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
 import { ENV_DEFAULTS, meeluAuthHeaders } from "../config.js";
 import { cachedWorkspaceKey, rememberWorkspaceKey } from "./workspace-key.js";
@@ -12,9 +13,7 @@ import { agentToolCatalog, allowedToolNames, forgetToolCatalog } from "./catalog
 import { MEELU_SERVER, meeluMcpServer } from "./meelu-server.js";
 import { isPublicWebUrl } from "../public-address.js";
 
-const MODEL = process.env.MEELU_AGENT_MODEL ?? "claude-haiku-4-5-20251001";
 const MAX_TURNS = 24;
-const MAX_BUDGET_USD = 1.5;
 const SILENT_TOOLS = new Set(["run_sql"]);
 
 const MODEL_LIST_MS = 6 * 60 * 60 * 1000;
@@ -347,7 +346,23 @@ async function meeluModels(cookieHeader) {
   return modelList.models;
 }
 
-async function meeluGateway({ cookieHeader, apiKey, model, purpose, siteId }) {
+function ownKeyLlm(model) {
+  const own = ownAnthropic();
+  if (!own) {
+    throw new Error(
+      "This task uses your own Anthropic key, but no key is saved. Add it on the Connections page or pick a Meelu model.",
+    );
+  }
+  return {
+    gateway: { ownKey: true, baseUrl: anthropicBaseUrl(), apiKey: own.apiKey, model, headers: {} },
+    model,
+    limits: null,
+  };
+}
+
+export async function resolveLlm({ cookieHeader, apiKey, model, purpose, siteId }) {
+  const ownModel = ownModelOf(model) ?? (model ? null : ownAnthropic()?.defaultModel);
+  if (ownModel) return ownKeyLlm(ownModel);
   const [key, chosen, models] = await Promise.all([
     apiKey ?? workspaceApiKey(cookieHeader),
     model || apiGet("/api/v1/llm/preference", cookieHeader).then((p) => p.defaultModel),
@@ -362,21 +377,8 @@ async function meeluGateway({ cookieHeader, apiKey, model, purpose, siteId }) {
       headers: { "x-meelu-purpose": purpose, ...(siteId ? { "x-meelu-site": siteId } : {}) },
     },
     model: chosen,
-    anthropicKey: null,
     limits: context > 0 ? { context, output: outputCap(context) } : null,
   };
-}
-
-export async function resolveLlm({ llm, cookieHeader, apiKey, model, purpose, siteId }) {
-  if (llm?.provider === "anthropic") {
-    return {
-      gateway: null,
-      model: (llm.model ?? "").trim() || MODEL,
-      anthropicKey: llm.apiKey || null,
-      limits: null,
-    };
-  }
-  return meeluGateway({ cookieHeader, apiKey, model, purpose, siteId });
 }
 
 const PASSTHROUGH_ENV = [
@@ -409,7 +411,6 @@ const PASSTHROUGH_ENV = [
   "NO_PROXY",
   "NODE_EXTRA_CA_CERTS",
   "CLAUDE_CONFIG_DIR",
-  "ANTHROPIC_API_KEY",
 ];
 
 function baseEnv() {
@@ -427,70 +428,41 @@ export function claudeExecutable() {
   };
 }
 
-export function llmEnv(gateway, anthropicKey, limits) {
-  return {
+export function llmEnv(gateway, limits) {
+  const shared = {
     ...baseEnv(),
     CLAUDE_AGENT_SDK_CLIENT_APP: `meelu-app/${app.getVersion()}`,
     ENABLE_CLAUDEAI_MCP_SERVERS: "false",
     CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
-    ...(gateway
+  };
+  if (gateway.ownKey) {
+    return { ...shared, ANTHROPIC_BASE_URL: gateway.baseUrl, ANTHROPIC_API_KEY: gateway.apiKey };
+  }
+  return {
+    ...shared,
+    ANTHROPIC_BASE_URL: gateway.baseUrl,
+    ANTHROPIC_AUTH_TOKEN: gateway.apiKey,
+    ANTHROPIC_API_KEY: "",
+    ANTHROPIC_CUSTOM_HEADERS: Object.entries(gateway.headers)
+      .map(([name, value]) => `${name}: ${value}`)
+      .join("\n"),
+    ANTHROPIC_SMALL_FAST_MODEL: gateway.model,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: gateway.model,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: gateway.model,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: gateway.model,
+    ...(limits
       ? {
-          ANTHROPIC_BASE_URL: gateway.baseUrl,
-          ANTHROPIC_AUTH_TOKEN: gateway.apiKey,
-          ANTHROPIC_API_KEY: "",
-          ANTHROPIC_CUSTOM_HEADERS: Object.entries(gateway.headers)
-            .map(([name, value]) => `${name}: ${value}`)
-            .join("\n"),
-          ANTHROPIC_SMALL_FAST_MODEL: gateway.model,
-          ANTHROPIC_DEFAULT_HAIKU_MODEL: gateway.model,
-          ANTHROPIC_DEFAULT_SONNET_MODEL: gateway.model,
-          ANTHROPIC_DEFAULT_OPUS_MODEL: gateway.model,
-          ...(limits
-            ? {
-                CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(limits.context),
-                CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(limits.output),
-              }
-            : {}),
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(limits.context),
+          CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(limits.output),
         }
-      : anthropicKey
-        ? { ANTHROPIC_API_KEY: anthropicKey }
-        : {}),
+      : {}),
   };
 }
 
 const JUDGE_SYSTEM = "You answer with one JSON object and nothing else.";
 
-function reviewJudge({ model, gateway, anthropicKey, limits, cwd }) {
-  const endpoint = messagesEndpoint(gateway, anthropicKey);
-  if (endpoint) return messagesJudge({ endpoint, model, system: JUDGE_SYSTEM, limits });
-  return oneShotJudge({ model, gateway, anthropicKey, limits, cwd });
-}
-
-function oneShotJudge({ model, gateway, anthropicKey, limits, cwd }) {
-  return async (prompt) => {
-    const q = query({
-      prompt,
-      options: {
-        model,
-        cwd,
-        systemPrompt: JUDGE_SYSTEM,
-        mcpServers: {},
-        tools: [],
-        allowedTools: [],
-        settingSources: [],
-        strictMcpConfig: true,
-        permissionMode: "default",
-        maxTurns: 1,
-        ...claudeExecutable(),
-        env: llmEnv(gateway, anthropicKey, limits),
-      },
-    });
-    let text = "";
-    for await (const m of q) {
-      if (m.type === "result" && typeof m.result === "string") text = m.result;
-    }
-    return text;
-  };
+function reviewJudge({ model, gateway, limits }) {
+  return messagesJudge({ endpoint: messagesEndpoint(gateway), model, system: JUDGE_SYSTEM, limits });
 }
 
 const IDLE_CLOSE_MS = 15 * 60 * 1000;
@@ -534,7 +506,7 @@ class TurnInput {
 
 async function buildConfig(session) {
   const { action, siteId, params, desks } = session;
-  const { cookieHeader, llm } = session.options;
+  const { cookieHeader } = session.options;
 
   const [scope, apiKey] = await Promise.all([
     fetchScope(action, siteId, cookieHeader, {
@@ -545,8 +517,7 @@ async function buildConfig(session) {
     assertAgentServerUp(),
   ]);
 
-  const { gateway, model, anthropicKey, limits } = await resolveLlm({
-    llm,
+  const { gateway, model, limits } = await resolveLlm({
     cookieHeader,
     apiKey,
     model: session.model,
@@ -606,7 +577,7 @@ async function buildConfig(session) {
   const reviewServer = reviewMcpServer(readOnly ? [] : (scope.localTools ?? []), {
     cookieHeader,
     siteId,
-    judge: reviewJudge({ model, gateway, anthropicKey, limits, cwd: session.options.cwd }),
+    judge: reviewJudge({ model, gateway, limits }),
     progress: (data) => session.turn?.emit("progress", data),
   });
   const reviewTools = reviewServer ? reviewServer.allowed : new Set();
@@ -683,7 +654,6 @@ async function buildConfig(session) {
     scope,
     model,
     gateway,
-    anthropicKey,
     limits,
     writes,
     readOnly,
@@ -782,9 +752,8 @@ class LiveSession {
         strictMcpConfig: true,
         includePartialMessages: true,
         maxTurns: config.scope.limits?.maxTurns ?? MAX_TURNS,
-        ...(config.gateway ? {} : { maxBudgetUsd: config.scope.limits?.maxBudgetUsd ?? MAX_BUDGET_USD }),
         ...claudeExecutable(),
-        env: llmEnv(config.gateway, config.anthropicKey, config.limits),
+        env: llmEnv(config.gateway, config.limits),
       },
     });
     this.pumpDone = this.pump().catch((err) => {
