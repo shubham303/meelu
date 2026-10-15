@@ -281,6 +281,10 @@ export default function PrivacyPage() {
             that stays paused for lack of credits for 30 days is deleted with all its data.
           </li>
           <li>
+            Public posts found by social listening are deleted 30 days after they were posted,
+            together with your replies and statuses on them.
+          </li>
+          <li>
             Payment and credit records are kept as long as tax and accounting law requires.
           </li>
           <li>Database backups are kept for a limited time and then overwritten.</li>

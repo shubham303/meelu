@@ -804,10 +804,13 @@ class SitePageRepository:
         rows = (await db.execute(stmt, {"site_id": site_id, "urls": sitemap_urls})).scalars().all()
         return SitemapPresenceResult(known=len(rows), listed=sum(1 for r in rows if r))
 
-    async def list_needing_chunks(self, db: AsyncSession, limit: int) -> list[SitePageChunkSource]:
+    async def claim_needing_chunks(
+        self, db: AsyncSession, limit: int, skip_ids: tuple[str, ...] = ()
+    ) -> list[SitePageChunkSource]:
         rows = await db.execute(
             select(*CHUNK_SOURCE_COLUMNS)
             .where(
+                SitePage.id.not_in(skip_ids),
                 SitePage.status == 200,
                 SitePage.body_text.is_not(None),
                 SitePage.content_hash.is_not(None),
@@ -815,6 +818,7 @@ class SitePageRepository:
             )
             .order_by(SitePage.updated_at.asc())
             .limit(limit)
+            .with_for_update(skip_locked=True, of=SitePage)
         )
         return [SitePageChunkSource.model_validate(dict(r)) for r in rows.mappings()]
 

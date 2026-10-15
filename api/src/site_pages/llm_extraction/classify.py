@@ -1,6 +1,7 @@
 import asyncio
 
 from src.core.database import unit_of_work
+from src.core.locks import skip_if_locked
 from src.core.logging import get_logger
 from src.credits.service import InsufficientCreditsError
 from src.providers.errors import NoProviderError, ProviderRequestError
@@ -74,7 +75,9 @@ class SitePageClassifier:
         processed = 0
         for user_id, pending_site_id in pending:
             try:
-                processed += await self.classify_site_batch(user_id, pending_site_id)
+                async with skip_if_locked(f"page-classification:{pending_site_id}") as held:
+                    if held:
+                        processed += await self.classify_site_batch(user_id, pending_site_id)
             except (NoProviderError, InsufficientCreditsError) as exc:
                 log.warning("page extraction skipped", site_id=pending_site_id, reason=str(exc))
             except Exception:

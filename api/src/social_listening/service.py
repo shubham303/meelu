@@ -1,27 +1,41 @@
-from datetime import UTC, datetime
+import asyncio
+from collections.abc import Coroutine
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
-from src.social_listening.identity import content_hash, native_id, post_key
+from src.credits.service import credit_service
+from src.providers.social_search.platforms import PLATFORMS
+from src.providers.social_search.service import social_search
+from src.social_listening.collect import (
+    SILENT_ERROR,
+    collect_platform,
+    is_silent,
+    normalize_keyword,
+    running_stats,
+)
 from src.social_listening.models.config import SocialListeningConfig
 from src.social_listening.models.query import SocialListeningQuery
+from src.social_listening.models.run import SocialListeningRun
 from src.social_listening.repositories.config import social_listening_configs
+from src.social_listening.repositories.cursors import social_listening_cursors
 from src.social_listening.repositories.posts import social_listening_posts
 from src.social_listening.repositories.queries import social_listening_queries
 from src.social_listening.repositories.runs import social_listening_runs
+from src.social_listening.repositories.social_posts import social_posts
 from src.social_listening.schemas import (
     DONE_STATUSES,
-    INGEST_DROP_REASONS,
-    JUDGE_DROP_REASONS,
-    JUDGE_STATUSES,
-    POST_SORTS,
+    KEYWORDS_PER_LINE,
+    MAX_LINES_PER_SITE,
+    MIN_SIMILARITY,
+    MINIMUM_BALANCE_USD,
     POST_STATUSES,
     RUN_STATUSES,
-    STRICTNESS_THRESHOLDS,
     USER_STATUSES,
-    BulkInsertResponse,
     ConfigResponse,
     ConfigUpdateRequest,
     GateResponse,
@@ -29,7 +43,6 @@ from src.social_listening.schemas import (
     PostFilters,
     PostPatchRequest,
     PostResponse,
-    PostsBulkRequest,
     PostsJudgeRequest,
     QueryPatchRequest,
     QueryResponse,
@@ -40,38 +53,27 @@ from src.social_listening.schemas import (
     UpsertResponse,
 )
 
-INGEST_FIELDS = (
-    "url",
-    "platform",
-    "title",
-    "text",
-    "author_handle",
-    "author_name",
-    "posted_at",
-    "engagement",
-    "context",
-    "query_id",
-)
-
-JUDGE_FIELDS = ("relevance", "composite_score", "keep_reason", "suggested_angle")
-
 EMBED_MAX_ATTEMPTS = 3
-
-MAX_AGE_DAYS_LIMIT = 3650
+RETENTION_DAYS = 30
+STALE_RUN_HOURS = 2
+STALE_RUN_ERROR = "The run stopped reporting and was closed."
+PLATFORM_IDS = tuple(p["id"] for p in PLATFORMS)
 
 
 class SocialListeningService:
+    def __init__(self) -> None:
+        self._collecting: set[asyncio.Task] = set()
+
+    def _spawn(self, work: Coroutine[Any, Any, None]) -> None:
+        task = asyncio.create_task(work)
+        self._collecting.add(task)
+        task.add_done_callback(self._collecting.discard)
+
     def _config_response(self, row: SocialListeningConfig) -> ConfigResponse:
-        min_similarity, min_relevance = STRICTNESS_THRESHOLDS[row.strictness]
         return ConfigResponse(
             id=row.id,
             site_id=row.site_id,
-            platforms=row.platforms,
-            results_per_keyword=row.results_per_keyword,
-            strictness=row.strictness,
-            max_age_days=row.max_age_days,
-            min_similarity=min_similarity,
-            min_relevance=min_relevance,
+            platforms=[p for p in row.platforms if p in PLATFORM_IDS],
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -91,17 +93,12 @@ class SocialListeningService:
         self, db: AsyncSession, user_id: str, site_id: str, body: ConfigUpdateRequest
     ) -> ConfigResponse:
         values = body.changes()
-        strictness = values.get("strictness")
-        if strictness is not None and strictness not in STRICTNESS_THRESHOLDS:
-            raise HTTPException(
-                400, f"strictness must be one of {', '.join(STRICTNESS_THRESHOLDS)}."
-            )
-        days = values.get("max_age_days")
-        if days is not None and not 1 <= days <= MAX_AGE_DAYS_LIMIT:
-            raise HTTPException(400, f"maxAgeDays must be between 1 and {MAX_AGE_DAYS_LIMIT}.")
-        per_keyword = values.get("results_per_keyword")
-        if per_keyword is not None and per_keyword < 1:
-            raise HTTPException(400, "resultsPerKeyword must be at least 1.")
+        platforms = values.get("platforms")
+        if platforms is not None:
+            unknown = [p for p in platforms if p not in PLATFORM_IDS]
+            if unknown:
+                raise HTTPException(400, f"Unknown platform: {', '.join(unknown)}.")
+            values["platforms"] = list(dict.fromkeys(platforms))
         row = await self._config_row(db, user_id, site_id)
         row = await social_listening_configs.update(db, row, values)
         return self._config_response(row)
@@ -116,7 +113,6 @@ class SocialListeningService:
             enabled=row.enabled,
             source=row.source,
             keywords=row.keywords,
-            negative_keywords=row.negative_keywords,
             embedded=row.embedding is not None,
             found=found.get(row.id, 0),
             kept=kept.get(row.id, 0),
@@ -139,12 +135,27 @@ class SocialListeningService:
             if text:
                 deduped[text] = item
         existing = await social_listening_queries.existing_texts(db, site_id, list(deduped))
+        added = len(deduped) - len(existing)
+        if added and await social_listening_queries.count(db, site_id) + added > MAX_LINES_PER_SITE:
+            raise HTTPException(
+                400,
+                f"A website can listen for at most {MAX_LINES_PER_SITE} lines. "
+                "Remove or edit a line before adding another.",
+            )
         values = [
             {"text": text, "enabled": item.enabled, "source": item.source}
             for text, item in deduped.items()
         ]
         await social_listening_queries.upsert_many(db, user_id, site_id, values)
-        return UpsertResponse(inserted=len(deduped) - len(existing), updated=len(existing))
+        return UpsertResponse(inserted=added, updated=len(existing))
+
+    def _clean_keywords(self, keywords: list[str]) -> list[str]:
+        clean = list(dict.fromkeys(k for k in (normalize_keyword(k) for k in keywords) if k))
+        if clean and len(clean) != KEYWORDS_PER_LINE:
+            raise HTTPException(
+                400, f"A line needs exactly {KEYWORDS_PER_LINE} different keywords."
+            )
+        return clean
 
     async def patch_query(
         self, db: AsyncSession, site_id: str, query_id: str, body: QueryPatchRequest
@@ -153,6 +164,8 @@ class SocialListeningService:
         if row is None:
             raise HTTPException(404, "Not found")
         values = body.changes()
+        if "keywords" in values:
+            values["keywords"] = self._clean_keywords(values["keywords"] or [])
         if "text" in values:
             text = " ".join((values["text"] or "").split())
             if not text:
@@ -165,7 +178,6 @@ class SocialListeningService:
                     embed_attempts=0,
                     embed_error=None,
                     keywords=[],
-                    negative_keywords=[],
                 )
         row = await social_listening_queries.update(db, row, values)
         found = await social_listening_posts.counts_by_query(db, site_id)
@@ -180,7 +192,52 @@ class SocialListeningService:
         return query_id
 
     async def create_run(self, db: AsyncSession, user_id: str, site_id: str) -> RunResponse:
-        return await social_listening_runs.create(db, user_id, site_id)
+        await social_listening_runs.fail_running_before(
+            db,
+            datetime.now(UTC) - timedelta(hours=STALE_RUN_HOURS),
+            STALE_RUN_ERROR,
+            user_id=user_id,
+        )
+        if await social_listening_runs.running_for_user(db, user_id) is not None:
+            raise HTTPException(
+                409,
+                "Another social listening run is still going on one of your websites. "
+                "Wait for it to finish or stop it first.",
+            )
+        balance = await credit_service.balance(db, user_id)
+        if balance.balance_micros < MINIMUM_BALANCE_USD * 1_000_000:
+            raise HTTPException(
+                402, f"Social listening needs a credit balance of at least ${MINIMUM_BALANCE_USD}."
+            )
+        try:
+            async with db.begin_nested():
+                return await social_listening_runs.create(db, user_id, site_id)
+        except IntegrityError:
+            raise HTTPException(
+                409,
+                "Another social listening run is still going on one of your websites. "
+                "Wait for it to finish or stop it first.",
+            ) from None
+
+    async def start_collect(
+        self, db: AsyncSession, user_id: str, site_id: str, run_id: str, platform: str
+    ) -> RunResponse:
+        row = await social_listening_runs.get(db, site_id, run_id)
+        if row is None:
+            raise HTTPException(404, "Not found")
+        if row.status != "running":
+            raise HTTPException(409, "This run is no longer going.")
+        row = await self._close_silent_collects(db, row)
+        if platform not in PLATFORM_IDS or not social_search.supports(f"search.{platform}"):
+            raise HTTPException(400, f"{platform} cannot be searched right now.")
+        if (row.platform_stats.get(platform) or {}).get("status") == "running":
+            return RunResponse.model_validate(row)
+        await social_listening_runs.merge_platform_stats(db, run_id, platform, running_stats())
+        await db.commit()
+        self._spawn(collect_platform(user_id, site_id, run_id, platform))
+        row = await social_listening_runs.get(db, site_id, run_id)
+        await db.refresh(row)
+        return RunResponse.model_validate(row)
 
     async def patch_run(
         self, db: AsyncSession, site_id: str, run_id: str, body: RunUpdateRequest
@@ -192,7 +249,7 @@ class SocialListeningService:
         status = values.get("status")
         if status is not None and status not in RUN_STATUSES:
             raise HTTPException(400, f"status must be one of {', '.join(RUN_STATUSES)}.")
-        if status in ("done", "stopped", "error") and values.get("finished_at") is None:
+        if status in ("done", "stopped", "error"):
             values["finished_at"] = datetime.now(UTC)
         return await social_listening_runs.update(db, row, values)
 
@@ -205,138 +262,77 @@ class SocialListeningService:
         row = await social_listening_runs.get(db, site_id, run_id)
         if row is None:
             raise HTTPException(404, "Not found")
-        return RunResponse.model_validate(row)
+        return RunResponse.model_validate(await self._close_silent_collects(db, row))
 
-    async def ingest_posts(
-        self, db: AsyncSession, user_id: str, site_id: str, body: PostsBulkRequest
-    ) -> BulkInsertResponse:
-        if (
-            body.run_id is not None
-            and await social_listening_runs.get(db, site_id, body.run_id) is None
-        ):
-            raise HTTPException(404, f"No listening run {body.run_id} for this website.")
-        query_ids = sorted({item.query_id for item in body.posts if item.query_id is not None})
-        unknown = set(query_ids) - await social_listening_queries.existing_ids(
-            db, site_id, query_ids
-        )
-        if unknown:
-            raise HTTPException(
-                404, f"No listening query {', '.join(sorted(unknown))} for this website."
+    async def _close_silent_collects(
+        self, db: AsyncSession, row: SocialListeningRun
+    ) -> SocialListeningRun:
+        now = datetime.now(UTC)
+        silent = [p for p, stats in row.platform_stats.items() if is_silent(stats or {}, now)]
+        for platform in silent:
+            await social_listening_runs.merge_platform_stats(
+                db, row.id, platform, {"status": "error", "error": SILENT_ERROR}
             )
-        candidates: dict[str, dict] = {}
-        received = 0
-        for item in body.posts:
-            url = item.url.strip()
-            if not url:
-                continue
-            received += 1
-            if item.drop_reason is not None and item.drop_reason not in INGEST_DROP_REASONS:
-                raise HTTPException(
-                    400, f"dropReason must be one of {', '.join(INGEST_DROP_REASONS)}."
-                )
-            key = post_key(item.platform, item.external_id, url)
-            if key in candidates:
-                continue
-            values = {field: getattr(item, field) for field in INGEST_FIELDS}
-            values.update(
-                url=url,
-                post_key=key,
-                external_id=native_id(item.platform, item.external_id, url),
-                content_hash=content_hash(item.title, item.text),
-                run_id=body.run_id,
-                status="dropped" if item.drop_reason else "fetched",
-                drop_reason=item.drop_reason,
-            )
-            candidates[key] = values
-        known = await social_listening_posts.existing_keys(db, site_id, list(candidates))
-        fresh = [v for k, v in candidates.items() if k not in known]
-        seen_hashes = await social_listening_posts.existing_hashes(
-            db, site_id, [v["content_hash"] for v in fresh if v["content_hash"]]
-        )
-        duplicates = 0
-        for values in fresh:
-            digest = values["content_hash"]
-            if digest is None:
-                continue
-            if digest in seen_hashes and values["status"] == "fetched":
-                values.update(status="dropped", drop_reason="duplicate")
-                duplicates += 1
-            seen_hashes.add(digest)
-        inserted = await social_listening_posts.create_many(db, user_id, site_id, fresh)
-        return BulkInsertResponse(
-            inserted=inserted,
-            known=received - inserted,
-            duplicates=duplicates,
-        )
+        if silent:
+            await db.refresh(row)
+        return row
 
-    async def gate_posts(self, db: AsyncSession, user_id: str, site_id: str) -> GateResponse:
-        config = await self.get_config(db, user_id, site_id)
-        states = await social_listening_queries.embedding_states(db, site_id)
-        orphaned = await social_listening_posts.drop_orphaned(db, site_id, list(states))
-        vectors = await social_listening_queries.embeddings_by_ids(
-            db, site_id, [qid for qid, (has, _) in states.items() if has]
+    async def gate_posts(self, db: AsyncSession, site_id: str) -> GateResponse:
+        waiting_lines = await social_listening_queries.count_waiting_for_embedding(
+            db, site_id, EMBED_MAX_ATTEMPTS
         )
-        counts = await social_listening_posts.apply_similarity(
-            db, site_id, vectors, config.min_similarity
+        removed = await social_listening_posts.delete_unembeddable_candidates(
+            db, site_id, EMBED_MAX_ATTEMPTS
         )
-        stuck = await social_listening_posts.drop_unembeddable(
-            db,
-            site_id,
-            [qid for qid, (_, attempts) in states.items() if attempts >= EMBED_MAX_ATTEMPTS],
-            EMBED_MAX_ATTEMPTS,
+        pending = await social_listening_posts.count_unembedded_candidates(
+            db, site_id, EMBED_MAX_ATTEMPTS
         )
-        pending = await social_listening_posts.count_pending_gate(
-            db,
-            site_id,
-            [qid for qid, (_, attempts) in states.items() if attempts < EMBED_MAX_ATTEMPTS],
-            [qid for qid, (has, _) in states.items() if not has],
-        )
-        kept = counts.get("matched", 0)
-        dropped = counts.get("dropped", 0) + stuck + orphaned
-        return GateResponse(pending=pending, scored=kept + dropped, kept=kept, dropped=dropped)
+        if waiting_lines:
+            return GateResponse(pending=pending + waiting_lines, matched=0, removed=removed)
+        matched = await social_listening_posts.match_candidates(db, site_id, MIN_SIMILARITY)
+        removed += await social_listening_posts.delete_embedded_candidates(db, site_id)
+        return GateResponse(pending=pending, matched=matched, removed=removed)
 
     async def judge_posts(
         self, db: AsyncSession, site_id: str, body: PostsJudgeRequest
     ) -> JudgeResponse:
         rows = await social_listening_posts.get_many(db, site_id, [item.id for item in body.posts])
-        updated = 0
+        kept, dropped = 0, []
         for item in body.posts:
-            if item.status not in JUDGE_STATUSES:
-                raise HTTPException(400, f"status must be one of {', '.join(JUDGE_STATUSES)}.")
-            if item.status == "dropped" and item.drop_reason not in JUDGE_DROP_REASONS:
-                raise HTTPException(
-                    400, f"dropReason must be one of {', '.join(JUDGE_DROP_REASONS)}."
-                )
             row = rows.get(item.id)
             if row is None:
                 raise HTTPException(404, f"No post {item.id} for this website.")
             if row.status != "matched":
                 continue
-            values = {field: getattr(item, field) for field in JUDGE_FIELDS}
-            values["status"] = item.status
-            values["drop_reason"] = item.drop_reason if item.status == "dropped" else None
-            await social_listening_posts.update(db, row, values)
-            updated += 1
-        return JudgeResponse(updated=updated)
-
-    def _check_filters(self, filters: PostFilters) -> None:
-        if filters.sort is not None and filters.sort not in POST_SORTS:
-            raise HTTPException(400, f"sort must be one of {', '.join(POST_SORTS)}.")
-        for status in filters.statuses or []:
-            if status not in POST_STATUSES:
-                raise HTTPException(400, f"status must be one of {', '.join(POST_STATUSES)}.")
+            if not item.keep:
+                dropped.append(row.id)
+                continue
+            await social_listening_posts.update(
+                db,
+                row,
+                {
+                    "status": "to_reply",
+                    "keep_reason": item.keep_reason,
+                    "suggested_angle": item.suggested_angle,
+                },
+            )
+            kept += 1
+        removed = await social_listening_posts.delete_many(db, site_id, dropped)
+        return JudgeResponse(kept=kept, removed=removed)
 
     async def list_posts(
         self, db: AsyncSession, site_id: str, filters: PostFilters, paging: PaginationParams
     ) -> PaginatedApiResponse[PostResponse]:
-        self._check_filters(filters)
+        for status in filters.statuses or []:
+            if status not in POST_STATUSES:
+                raise HTTPException(400, f"status must be one of {', '.join(POST_STATUSES)}.")
         return await social_listening_posts.list(db, site_id, filters, paging)
 
     async def get_post(self, db: AsyncSession, site_id: str, post_id: str) -> PostResponse:
-        row = await social_listening_posts.get(db, site_id, post_id)
-        if row is None:
+        post = await social_listening_posts.get_response(db, site_id, post_id)
+        if post is None:
             raise HTTPException(404, "Not found")
-        return PostResponse.model_validate(row)
+        return post
 
     async def patch_post(
         self, db: AsyncSession, site_id: str, post_id: str, body: PostPatchRequest
@@ -355,7 +351,8 @@ class SocialListeningService:
                 values["replied_at"] = datetime.now(UTC)
             if status != "replied":
                 values["replied_at"] = None
-        return await social_listening_posts.update(db, row, values)
+        await social_listening_posts.update(db, row, values)
+        return await self.get_post(db, site_id, post_id)
 
     async def summary(self, db: AsyncSession, site_id: str) -> SummaryResponse:
         statuses = await social_listening_posts.status_counts(db, site_id)
@@ -366,9 +363,20 @@ class SocialListeningService:
             skipped=statuses.get("skipped", 0),
             rejected=statuses.get("rejected", 0),
             done=sum(statuses.get(s, 0) for s in DONE_STATUSES),
-            unprocessed=statuses.get("fetched", 0) + statuses.get("matched", 0),
+            unprocessed=statuses.get("candidate", 0) + statuses.get("matched", 0),
             last_run=await social_listening_runs.latest(db, site_id),
         )
+
+    async def purge(self, db: AsyncSession) -> dict[str, int]:
+        now = datetime.now(UTC)
+        cutoff = now - timedelta(days=RETENTION_DAYS)
+        return {
+            "posts": await social_posts.delete_older_than(db, cutoff),
+            "cursors": await social_listening_cursors.delete_older_than(db, cutoff),
+            "runs": await social_listening_runs.fail_running_before(
+                db, now - timedelta(hours=STALE_RUN_HOURS), STALE_RUN_ERROR
+            ),
+        }
 
 
 social_listening_service = SocialListeningService()

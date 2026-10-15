@@ -8,13 +8,7 @@ export interface RunOutcome {
   fetched: number;
   inserted: number;
   kept: number;
-  lookbackDays: number | null;
-  platforms: Record<string, { fetched?: number; error?: string }>;
-}
-
-function days(n: number | null) {
-  if (!n) return "";
-  return n === 1 ? " in the last day" : ` in the last ${n} days`;
+  platforms: Record<string, { error?: string | null }>;
 }
 
 function listOf(names: string[]) {
@@ -44,7 +38,7 @@ export function RunResult({
     title = `Run finished: ${outcome.kept} new ${outcome.kept === 1 ? "post" : "posts"} to reply to.`;
   } else if (outcome.fetched === 0) {
     title = "Run finished with no posts.";
-    hint = `${searched || "The platforms"} returned nothing for your lines${days(outcome.lookbackDays)}. Try a longer look-back in settings, turn on more platforms, or describe the conversation more broadly.`;
+    hint = `${searched || "The platforms"} returned nothing new for your lines since the last run (a run looks back at most 7 days). Turn on more platforms, or describe the conversation more broadly.`;
   } else if (outcome.inserted === 0) {
     title = "Run finished with no new posts.";
     hint = `All ${outcome.fetched} posts it found were ones Meelu has already shown you or set aside.`;

@@ -40,6 +40,7 @@ from src.site_structure import cron as site_structure_cron
 from src.site_structure.endpoints import router as site_structure_router
 from src.sites import cron as sites_cron
 from src.sites.endpoints import router as sites_router
+from src.social_listening import cron as social_listening_cron
 from src.social_listening.endpoints import router as social_listening_router
 from src.stats.endpoints import router as stats_router
 from src.technical_seo.endpoints import router as technical_seo_router
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI):
     site_structure_cron.register(scheduler.scheduler)
     scratchpad_cron.register(scheduler.scheduler)
     sites_cron.register(scheduler.scheduler)
+    social_listening_cron.register(scheduler.scheduler)
     async with scheduler.running():
         yield
 

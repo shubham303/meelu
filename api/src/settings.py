@@ -43,7 +43,8 @@ class Settings(EnvSettings):
     dataforseo_auth: str = ""
     dataforseo_base_url: str = "https://api.dataforseo.com"
     apify_api_key: str = ""
-    apify_max_charge_usd_per_run: float = 0.5
+    github_token: str = ""
+    stackexchange_key: str = ""
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
     openrouter_model: str = "deepseek/deepseek-v4.1-flash"

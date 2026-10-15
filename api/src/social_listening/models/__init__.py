@@ -1,1 +1,1 @@
-from src.social_listening.models import config, post, query, run
+from src.social_listening.models import config, cursor, post, query, run, social_post

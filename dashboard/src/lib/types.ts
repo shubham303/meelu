@@ -824,15 +824,8 @@ export interface CreatedApiKey extends ApiKey {
   key: string;
 }
 
-export type SocialListeningStrictness = "loose" | "balanced" | "strict";
-
 export interface SocialListeningConfig extends BaseEntity, SiteScoped {
   platforms: string[];
-  resultsPerKeyword: number;
-  strictness: SocialListeningStrictness;
-  maxAgeDays: number;
-  minSimilarity: number;
-  minRelevance: number;
 }
 
 export interface SocialListeningQuery extends BaseEntity, SiteScoped {
@@ -840,13 +833,22 @@ export interface SocialListeningQuery extends BaseEntity, SiteScoped {
   enabled: boolean;
   source: "user" | "suggested";
   keywords: string[];
-  negativeKeywords: string[];
   embedded: boolean;
   found: number;
   kept: number;
 }
 
 export type SocialListeningRunStatus = "running" | "done" | "stopped" | "error";
+
+export interface SocialListeningPlatformStats {
+  status?: "running" | "done" | "error";
+  keywords?: number;
+  fromVendor?: number;
+  fromDatabase?: number;
+  candidates?: number;
+  failedKeywords?: string[];
+  error?: string;
+}
 
 export interface SocialListeningRun extends BaseEntity, SiteScoped {
   status: SocialListeningRunStatus;
@@ -855,23 +857,15 @@ export interface SocialListeningRun extends BaseEntity, SiteScoped {
   fetchedCount: number;
   matchedCount: number;
   keptCount: number;
-  platformStats: Record<string, { fetched?: number; kept?: number; error?: string }>;
+  platformStats: Record<string, SocialListeningPlatformStats>;
   error: string | null;
 }
 
 export type SocialListeningReviewStatus = "to_reply" | "drafted" | "replied" | "skipped" | "rejected";
-export type SocialListeningPostStatus = SocialListeningReviewStatus | "fetched" | "matched" | "dropped";
-export type SocialListeningDropReason =
-  | "too_old"
-  | "excluded_word"
-  | "far_in_meaning"
-  | "judged_off_topic"
-  | "dead"
-  | "duplicate"
-  | "unembeddable"
-  | "line_removed";
+export type SocialListeningPostStatus = SocialListeningReviewStatus | "candidate" | "matched";
 
 export interface SocialListeningPost extends BaseEntity, SiteScoped {
+  postId: string;
   url: string;
   platform: string;
   externalId: string | null;
@@ -883,10 +877,7 @@ export interface SocialListeningPost extends BaseEntity, SiteScoped {
   engagement: { score?: number | null; comments?: number | null; views?: number | null };
   context: { subreddit?: string | null; tags?: string[] | null };
   status: SocialListeningPostStatus;
-  dropReason: SocialListeningDropReason | null;
   similarity: number | null;
-  relevance: number | null;
-  compositeScore: number | null;
   keepReason: string | null;
   suggestedAngle: string | null;
   replyText: string | null;
