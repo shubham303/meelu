@@ -84,9 +84,7 @@ declare global {
         platforms?: string[];
       }) => Promise<{ jobId?: string; error?: string }>;
       socialSignalsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
-      socialSignalsActive?: (
-        siteId: string,
-      ) => Promise<{ jobId: string | null; stopping: boolean } | { error: string }>;
+      socialSignalsActive?: (siteId: string) => Promise<SocialSignalsSnapshot | { error: string }>;
       socialSignalsPlatforms?: () => Promise<
         | { platforms: Array<{ id: string; label: string; access: "direct" | "apify"; available: boolean }> }
         | { error: string }
@@ -102,6 +100,13 @@ export type ConnectorsView = Record<
   string,
   { fields: Record<string, string>; updatedAt: string | null }
 >;
+
+export interface SocialSignalsSnapshot {
+  jobId: string | null;
+  stopping: boolean;
+  startedAt: number | null;
+  progress: Array<{ event: string; data: Record<string, unknown> }>;
+}
 
 export interface OwnKeysView {
   anthropic: { saved: boolean; defaultModel: string };

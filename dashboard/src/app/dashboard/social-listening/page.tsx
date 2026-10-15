@@ -15,16 +15,16 @@ import type {
   SocialListeningReviewStatus,
   SocialListeningSummary,
 } from "@/lib/types";
-import { useAgentTasks } from "../agent-tasks";
+import { useAgentTasks, type SocialSignalsSnapshot } from "../agent-tasks";
 import {
   downloadPostsCsv,
   EMPTY_LIVE,
   hoursAgo,
+  liveAfter,
   postsPath,
   TAB_STATUSES,
   type LiveRun,
   type PlatformInfo,
-  type RunStep,
   type TabKey,
 } from "./lib";
 import { ListeningCard } from "./listening-card";
@@ -34,7 +34,6 @@ import { RunProgress } from "./run-progress";
 import { RunResult, type RunOutcome } from "./run-result";
 
 const PAGE_SIZE = 25;
-const STEPS: RunStep[] = ["terms", "searching", "meaning", "judging"];
 
 const EMPTY_TAB: Record<TabKey, { title: string; hint: string }> = {
   to_reply: {
@@ -109,82 +108,67 @@ export default function SocialListeningPage() {
     });
   }, [bridge]);
 
-  const attach = useCallback((id: string, isStopping: boolean) => {
-    jobRef.current = id;
-    setJobId(id);
-    setStopping(isStopping);
-    setRunStartedAt((prev) => prev ?? Date.now());
-    setLive((prev) => (prev.step ? prev : { ...EMPTY_LIVE, step: "searching" }));
-  }, []);
+  const resume = useCallback(
+    (snapshot: SocialSignalsSnapshot | { error: string } | undefined) => {
+      if (!snapshot || "error" in snapshot || !snapshot.jobId) return;
+      jobRef.current = snapshot.jobId;
+      setJobId(snapshot.jobId);
+      setStopping(snapshot.stopping);
+      setRunStartedAt(snapshot.startedAt ?? Date.now());
+      setLive(
+        snapshot.progress.reduce<LiveRun>((acc, p) => liveAfter(acc, p.event, p.data), {
+          ...EMPTY_LIVE,
+          step: "terms",
+        }),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!siteId || !bridge?.socialSignalsActive) return;
     let cancelled = false;
-    void bridge.socialSignalsActive(siteId).then((res) => {
-      if (cancelled || "error" in res || !res.jobId) return;
-      attach(res.jobId, res.stopping);
+    void bridge.socialSignalsActive(siteId).then((snapshot) => {
+      if (!cancelled) resume(snapshot);
     });
     return () => {
       cancelled = true;
     };
-  }, [bridge, siteId, attach]);
+  }, [bridge, siteId, resume]);
 
   useEffect(() => {
     if (!bridge?.onSocialSignalsEvent) return;
     return bridge.onSocialSignalsEvent((m) => {
       if (m.jobId !== jobRef.current) return;
       const d = m.data;
-      const n = (v: unknown) => Number(v ?? 0) || 0;
-      if (m.event === "stage") {
-        const step = String(d.stage) as RunStep;
-        if (STEPS.includes(step)) setLive((prev) => ({ ...prev, step }));
-      } else if (m.event === "terms") {
-        setLive((prev) => ({ ...prev, lines: n(d.lines), phrases: n(d.phrases) }));
-      } else if (m.event === "platform") {
-        const platform = String(d.platform);
-        setLive((prev) => ({
-          ...prev,
-          platforms: {
-            ...prev.platforms,
-            [platform]: {
-              status: d.status as "fetching" | "done" | "error",
-              fromVendor: d.fromVendor as number | undefined,
-              fromDatabase: d.fromDatabase as number | undefined,
-              error: d.error as string | undefined,
-            },
-          },
-        }));
-      } else if (m.event === "saved") {
-        setLive((prev) => ({ ...prev, fetched: n(d.fetched), inserted: n(d.inserted) }));
-      } else if (m.event === "gate") {
-        setLive((prev) => ({ ...prev, gate: { pending: n(d.pending), kept: n(d.kept), dropped: n(d.dropped) } }));
-      } else if (m.event === "judged") {
-        setLive((prev) => ({ ...prev, judged: { judged: n(d.judged), total: n(d.total), kept: n(d.kept) } }));
-        void refreshPosts();
-        void refreshSummary();
-      } else if (m.event === "done" || m.event === "stopped" || m.event === "error") {
-        if (m.event !== "error") {
-          const prev = liveRef.current;
-          setOutcome({
-            stopped: m.event === "stopped",
-            fetched: m.event === "done" ? n(d.fetched) : prev.fetched,
-            inserted: m.event === "done" ? n(d.inserted) : prev.inserted,
-            kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
-            platforms:
-              m.event === "done"
-                ? ((d.platforms ?? {}) as RunOutcome["platforms"])
-                : Object.fromEntries(
-                    Object.entries(prev.platforms).map(([id, p]) => [id, { error: p.error }]),
-                  ),
-          });
+      if (m.event !== "done" && m.event !== "stopped" && m.event !== "error") {
+        setLive((prev) => liveAfter(prev, m.event, d));
+        if (m.event === "judged") {
+          void refreshPosts();
+          void refreshSummary();
         }
-        jobRef.current = null;
-        setJobId(null);
-        setStopping(false);
-        setRunStartedAt(null);
-        setLive(m.event === "error" ? { ...EMPTY_LIVE, error: String(d.message ?? "The run failed.") } : EMPTY_LIVE);
-        void refreshAll();
+        return;
       }
+      const n = (v: unknown) => Number(v ?? 0) || 0;
+      if (m.event !== "error") {
+        const prev = liveRef.current;
+        setOutcome({
+          stopped: m.event === "stopped",
+          fetched: m.event === "done" ? n(d.fetched) : prev.fetched,
+          inserted: m.event === "done" ? n(d.inserted) : prev.inserted,
+          kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
+          platforms:
+            m.event === "done"
+              ? ((d.platforms ?? {}) as RunOutcome["platforms"])
+              : Object.fromEntries(Object.entries(prev.platforms).map(([id, p]) => [id, { error: p.error }])),
+        });
+      }
+      jobRef.current = null;
+      setJobId(null);
+      setStopping(false);
+      setRunStartedAt(null);
+      setLive(m.event === "error" ? { ...EMPTY_LIVE, error: String(d.message ?? "The run failed.") } : EMPTY_LIVE);
+      void refreshAll();
     });
   }, [bridge, refreshAll, refreshPosts, refreshSummary]);
 
@@ -217,7 +201,7 @@ export default function SocialListeningPage() {
     setTab("to_reply");
     const res = await bridge.socialSignalsSearch({ siteId, platforms: runPlatforms });
     if (res.jobId && res.error) {
-      attach(res.jobId, false);
+      resume(await bridge.socialSignalsActive?.(siteId));
       return;
     }
     if (res.error || !res.jobId) {
