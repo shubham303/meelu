@@ -1,0 +1,89 @@
+---
+title: Connections
+description: The Connections screen, where you connect Google, add your own Anthropic key and choose your default AI model.
+---
+
+**Connections** is at the bottom of the sidebar. It holds the services Meelu reaches on your behalf. Everything you connect here is stored on this computer, encrypted, and never sent to Meelu's servers.
+
+The screen has four cards, from top to bottom:
+
+| Card | What it is for |
+| --- | --- |
+| **Your Anthropic key** | Run tasks on your own Anthropic account instead of your Meelu credits. |
+| **Default model** | Pick the AI model new tasks use. |
+| **Google Search Console** | Your search numbers: impressions, clicks and positions for your own site. |
+| **Google Analytics 4** | Your traffic: sessions, sources and key events for your pages. |
+
+The first two cards are covered in [AI models](/docs/concepts/ai-models). This page covers the Google cards.
+
+## Google Search Console
+
+Search Console is the only measured search data Meelu has. It powers the SEO desk's **Search performance** screen and the index status of your pages.
+
+<Screenshot
+  src="/docs/screens/connections.webp"
+  alt="The Connections screen"
+  width={1280}
+  height={900}
+  caption="The Connections screen."
+/>
+
+Each Google card shows a status badge: **Connected** or **Not connected**. A connected card also says when you connected it.
+
+## Google Analytics 4
+
+Analytics shows what actually arrived on your site: sessions, channels, landing pages and key events. It powers the SEO desk's **Traffic** screen.
+
+## Connect a Google service
+
+<Steps>
+<Step>
+
+### Click Connect
+
+Your browser opens Google's sign-in page. In Meelu, the button says **Waiting for Google…**.
+
+</Step>
+<Step>
+
+### Sign in with the right account
+
+Use the Google account that already has access to your site's property. Meelu asks for read-only access only.
+
+</Step>
+<Step>
+
+### Go to the SEO desk to import
+
+Once the card says **Connected**, open the SEO desk to pick your property and import your data. See [Connect Google Search Console and Analytics](/docs/getting-started/connect-google).
+
+</Step>
+</Steps>
+
+<Callout type="info" title="Empty property list?">
+If Meelu finds no properties after you connect, you signed in with a Google account that cannot see your site. Click **Reconnect** and pick another account. It does not mean your site has no data.
+</Callout>
+
+## Disconnect
+
+Click **Disconnect** on the card, then confirm. Meelu deletes the Google sign-in from this computer. To remove Meelu's access on Google's side too, visit [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+Data already imported stays with your website. Deleting the website removes it. See [Websites](/docs/settings/websites).
+
+## Using another computer
+
+Connections are stored on one computer. If you install Meelu on a second computer, connect Google there too.
+
+## What each button does
+
+| Button | Card | What it does |
+| --- | --- | --- |
+| **Connect** | Google cards | Opens Google's sign-in to grant read-only access. |
+| **Reconnect** | Google cards | Signs in again, for example with another Google account. |
+| **Disconnect** | Google cards | Deletes the Google sign-in from this computer, after you confirm. |
+| **Docs** | Google cards | Opens Google's own documentation for that service. |
+| **Save key** | Your Anthropic key | Checks and saves your key. |
+| **Remove key** | Your Anthropic key | Deletes your key from this computer. |
+| **Claim credits** | Your Anthropic key | Opens Anthropic's page about monthly API credits for Max and Team plans. |
+| **Use** | Default model | Makes that model the default for new tasks. |
+| **Show all** (number) **models** / **Show fewer** | Default model | Expands or shortens the model list. |

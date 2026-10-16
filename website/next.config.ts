@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { createMDX } from "fumadocs-mdx/next";
 
 const retiredPosts = [
   "crm-lead-analysis",
@@ -21,6 +22,7 @@ const nextConfig: NextConfig = {
     // Tailwind keeps the stylesheet small, so ship it inside the HTML and skip
     // the render-blocking request that was delaying the hero heading.
     inlineCss: true,
+    globalNotFound: true,
   },
   async redirects() {
     // The site lives on the bare host (site.url, canonicals and the sitemap all
@@ -51,4 +53,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+const withMDX = createMDX();
+
+export default withMDX(nextConfig);

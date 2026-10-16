@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, ExternalLink, KeyRound, Trash2 } from "lucide-react";
 import { Button, Card, Field, Input, Select } from "@demo/components/ui";
-import type { OwnKeysView, OwnModel } from "@/app/demo/dashboard/agent-tasks";
+import type { OwnKeysView, OwnModel } from "@/app/(demo)/demo/dashboard/agent-tasks";
 
 export function OwnKeyCard() {
   const bridge = typeof window !== "undefined" ? window.meeluAgent : undefined;

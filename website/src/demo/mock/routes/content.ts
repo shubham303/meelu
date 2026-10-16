@@ -1,5 +1,5 @@
 import type { ContentPiece, ContentPieceSlim } from "@demo/lib/types";
-import type { PieceIssue } from "@/app/demo/dashboard/content/types";
+import type { PieceIssue } from "@/app/(demo)/demo/dashboard/content/types";
 import * as content from "../data/content";
 import { b, MockHttpError, newId, now, ok, paginate, type Route } from "../core";
 

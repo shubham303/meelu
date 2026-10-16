@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@theme {
+  --color-bg: #f8f5eb;
+  --color-panel: #fffdf7;
+  --color-panel2: #f1ede0;
+  --color-edge: #e6e1d1;
+  --color-edge2: #d0c9b4;
+  --color-ink: #1f2d3d;
+  --color-sub: #5b6b7f;
+  --color-faint: #607184;
+  --color-accent: #2563eb;
+  --color-accent-hi: #1d4ed8;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-fd-background: #f8f5eb;
+  --color-fd-foreground: #1f2d3d;
+  --color-fd-muted: #f1ede0;
+  --color-fd-muted-foreground: #5b6b7f;
+  --color-fd-popover: #fffdf7;
+  --color-fd-popover-foreground: #1f2d3d;
+  --color-fd-card: #fffdf7;
+  --color-fd-card-foreground: #1f2d3d;
+  --color-fd-border: #e6e1d1;
+  --color-fd-primary: #2563eb;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #f1ede0;
+  --color-fd-secondary-foreground: #1f2d3d;
+  --color-fd-accent: #2563eb14;
+  --color-fd-accent-foreground: #1d4ed8;
+  --color-fd-ring: #2563eb;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.prose :where(h1, h2, h3):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
