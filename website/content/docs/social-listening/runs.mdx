@@ -1,0 +1,100 @@
+---
+title: Runs
+description: Start a search, follow its progress, read the result and understand what a run costs.
+---
+
+A **run** is one search for new posts. Meelu runs only when you click **Run now**. There is no schedule, so new posts appear only after you start a run.
+
+## Before you start
+
+**Run now** is greyed out until these are true. Point at the button to see why it is greyed out.
+
+- You are in the Meelu desktop app. On the web it says **Listening runs on your device, in the Meelu app.**
+- At least one line is on. Otherwise it says **Add a line to listen for first.**
+- At least one platform is on. Otherwise it says **Turn on at least one platform.**
+
+You also need a credit balance of at least $5 to start a run. See [Credits](#credits).
+
+Only one run can go at a time across all your websites. If one is still going, wait for it to finish or stop it first.
+
+## Start a run
+
+<Steps>
+  <Step>
+    ### Click Run now
+    Meelu switches to the **To reply** tab and shows the run progress card.
+  </Step>
+  <Step>
+    ### Watch the posts arrive
+    Posts that pass every check appear in **To reply** as they come in. New ones carry a **New** badge.
+  </Step>
+  <Step>
+    ### Read the result
+    When the run ends, a short message says what it found.
+  </Step>
+</Steps>
+
+You can leave the Social Listening screen while a run is going. When you come back, the progress card shows where it is.
+
+## How far back a run looks
+
+The first run looks back 7 days, so it can take a few minutes. Each later run looks for posts since your last run, and never more than 7 days back.
+
+A post Meelu has already shown you never comes back in a later run, even if you skipped it.
+
+## Run progress
+
+While a run is going, a card shows four steps. The current step is highlighted, finished steps get a check mark, and the bar fills up during the last step.
+
+| Step | What happens |
+| --- | --- |
+| **Search terms** | Meelu reads your lines and turns them into search phrases. It shows how many phrases came from how many lines. |
+| **Keyword search** | Meelu searches each platform that is on. For each platform it shows how many posts were fetched and how many Meelu already knew about. If a platform fails, it says so. |
+| **Close in meaning** | Meelu keeps only the posts that are close in meaning to one of your lines. It shows how many went in and how many were kept. |
+| **Checking fit** | Meelu reads each remaining post and checks it really fits what you wrote. It shows how many it has checked and how many it kept. |
+
+The heading on the card names the current step, such as **Searching the platforms** or **Checking each post fits what you wrote**.
+
+### What each button does
+
+| Button | What it does |
+| --- | --- |
+| **Stop** | Stops the run. While it stops, it reads **Stopping…**. Posts that were already checked and kept stay in **To reply**. |
+
+## Run results
+
+When a run ends, a message appears under the listening card. Click the X to dismiss it.
+
+| Message | What it means and what to do |
+| --- | --- |
+| **Run finished: N new posts to reply to.** | It worked. Open **To reply**. |
+| **Run finished with no posts.** | The platforms returned nothing new for your lines since the last run. Turn on more platforms, or describe the conversation more broadly. |
+| **Run finished with no new posts.** | Every post it found was one Meelu has already shown you or set aside. |
+| **Run finished: nothing fit closely enough.** | New posts were found, but none matched your lines well enough. Reword a line to say who is posting and what they want. |
+| **Run stopped.** | You stopped the run. If any posts were kept before that, it says how many are in **To reply**. |
+
+If a platform failed during the run, the message also says which one and why. If the whole run failed, a red message explains what went wrong.
+
+Above the post list, a line sums up your last run, for example **Last run 3 h ago · 160 found → 42 close in meaning → 11 kept**.
+
+## Credits
+
+A run uses credits in two ways. See [Credits](/docs/concepts/credits).
+
+- **Per result, on some platforms.** Reddit, X (Twitter), LinkedIn, Bluesky and Facebook charge credits for each post they return. Hacker News, Stack Exchange, Dev.to and GitHub Issues do not.
+- **For the reading steps.** Turning your lines into search terms and checking each post's fit use AI, like other AI work in Meelu. See [Models](/docs/concepts/ai-models).
+
+To keep costs down, turn off platforms you do not need, and turn off lines that keep finding nothing useful.
+
+### When credits run out
+
+You need a balance of at least $5 to start a run. If your balance is lower, the run does not start.
+
+If you run out of credits during a run, the run ends with an error. A **Not enough credits** banner appears at the top of the screen with your balance.
+
+| Button | What it does |
+| --- | --- |
+| **Add credits** | Opens the Credits screen, where you can top up. |
+| **Check again** | Checks your balance again. The banner goes away once you have enough. |
+
+Posts that were kept before the credits ran out stay in **To reply**. After you top up, click **Run now** again.

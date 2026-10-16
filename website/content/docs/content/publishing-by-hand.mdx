@@ -1,0 +1,68 @@
+---
+title: Publishing by hand
+description: Copy a finished piece out of Meelu and put it on your website yourself.
+---
+
+Meelu does not publish anything. It does not connect to your website, your content management system or your hosting. When a piece is ready, you copy it and add it to your site yourself.
+
+This is on purpose. You know your site, your layout and your timing. Meelu helps you write a good page. Whether and when it goes live is your decision.
+
+## Copy the piece
+
+<Steps>
+  <Step>
+    ### Open the piece
+    Click the piece on the Content screen.
+  </Step>
+  <Step>
+    ### Check the warnings
+    Open **Details** and **Checks** and deal with anything you want to fix. See [Checks](/docs/content/checks).
+  </Step>
+  <Step>
+    ### Click Copy markdown
+    Click the copy icon in the top bar. Meelu saves the piece first, then copies it. A check mark shows when it is on your clipboard.
+  </Step>
+  <Step>
+    ### Paste it into your site
+    Create a new page in your website's editor and paste the text in. Set the title, meta description and web address there as well.
+  </Step>
+</Steps>
+
+## What you get
+
+The copy is in Markdown. Markdown is a plain-text format for headings, lists and links. Many website tools accept it directly, and most can convert it.
+
+The copy has three parts, in this order:
+
+1. **A header block** between two `---` lines. It holds the page details: `title`, `description` (the meta description), `slug` and `keyword` (the target keyword). Details that are empty are left out. Many website tools read this block. If yours does not, use the values to fill in the page settings, then delete the block.
+2. **The H1**, as a line that starts with `#`.
+3. **The body**, with its headings, lists, links and images.
+
+For example:
+
+```md
+---
+title: How to send an invoice that gets paid
+description: Send it the day the work ships, put a real due date on it, and follow up the day after.
+slug: /blog/how-to-send-an-invoice
+keyword: how to send an invoice
+---
+
+# How to send an invoice that gets paid
+
+The body starts here…
+```
+
+Copy markdown is the only export. There is no file download or direct publish.
+
+## Things to check after you paste
+
+- **Images.** Images you added in the editor are stored in Meelu. The image links in the copied text point at Meelu, not at your site. Upload the same images to your own site and update the links.
+- **Internal links.** Links to your other pages are written as paths, such as `/pricing`. They work as they are when the page lives on the same site.
+- **The slug.** Set your page's web address to match the slug, so the address fits the folders your site already uses.
+
+## After you publish
+
+Meelu does not know that you published the piece. The piece stays on the Content desk as a draft you can keep editing. If you change the page on your site later, change the piece in Meelu as well if you want the two to match.
+
+The next time Meelu crawls your site, the new page shows up on the Site desk like any other page. See [Site desk](/docs/site).

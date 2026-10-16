@@ -1,11 +1,17 @@
 import type { MetadataRoute } from "next";
 import { listPosts } from "@/lib/blog";
+import { docsSource } from "@/lib/docs-source";
 import { site } from "@/lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = listPosts().map((post) => ({
     url: `${site.url}/blog/${post.slug}`,
     lastModified: new Date(`${post.date}T00:00:00Z`),
+  }));
+
+  const docs = docsSource.getPages().map((page) => ({
+    url: `${site.url}${page.url}`,
+    priority: page.url === "/docs" ? 0.8 : 0.6,
   }));
 
   return [
@@ -25,5 +31,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${site.url}/terms`, priority: 0.3 },
     { url: `${site.url}/privacy`, priority: 0.3 },
     ...posts,
+    ...docs,
   ];
 }

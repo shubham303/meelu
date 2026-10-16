@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import { GoogleAnalytics } from "@/components/google-analytics";
-import "./globals.css";
 import { site } from "@/lib/site";
 
 const geistSans = Geist({
@@ -20,7 +19,7 @@ const fraunces = Fraunces({
   axes: ["opsz"],
 });
 
-export const metadata: Metadata = {
+export const rootMetadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
     default: `${site.name} — ${site.tagline}`,
@@ -44,11 +43,12 @@ export const metadata: Metadata = {
 
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">{children}</body>
       {gaId && <GoogleAnalytics gaId={gaId} />}

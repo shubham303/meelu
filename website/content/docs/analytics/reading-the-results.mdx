@@ -1,0 +1,92 @@
+---
+title: Reading the results
+description: How to read Meelu's answers, charts, trust levels and caveats, and which kinds of analysis it can run.
+---
+
+Meelu's answers follow the same shape. They lead with the number and the answer. Then they say how Meelu got it, with any warning in the same breath. Then they point at the pages, dates and numbers behind the finding.
+
+## The parts of an answer
+
+<Screenshot
+  src="/docs/screens/analytics-answer.webp"
+  alt="An answer with its evidence, and the Save as report button"
+  width={1280}
+  height={1100}
+  caption="An answer with its evidence, and the Save as report button."
+  markers={[{ x: 24.6, y: 84.8, label: "Save as report keeps this answer" }]}
+/>
+
+- **The headline number.** For example, "Clicks 2,208 → 2,671 (+21%)."
+- **How it was worked out.** Which data Meelu used, the date range and what it compared.
+- **How much to trust it.** A trust level, and caveats when they matter. See below.
+- **The evidence.** The pages, queries or dates that drive the finding, often as links you can click.
+- **Charts and tables.** When a picture says it better than a sentence, Meelu draws a chart inside the answer. Short tables show side-by-side numbers.
+- **What it suggests.** What the finding may mean for you, and which desk to use if you want to act on it.
+
+## Charts
+
+Charts appear inside the answer, one chart per box. Each chart has a title and labelled axes. The numbers in a chart come from the analysis Meelu just ran, not from estimates it made up.
+
+Common charts you will see:
+
+- **Bar charts** to compare pages, queries or channels. For example, the change in clicks per page.
+- **Line charts** to show a value over time. In a forecast, the actual values and the forecast are drawn as two lines, and the forecast is often dashed.
+
+## Measured and modelled numbers
+
+Meelu tells you which kind of number it gives you:
+
+<Screenshot
+  src="/docs/screens/analytics-forecast.webp"
+  alt="A forecast is a modelled range, not a measured number"
+  width={1280}
+  height={800}
+  caption="A forecast is a modelled range, not a measured number."
+/>
+
+- **Measured** numbers happened. Clicks, impressions, positions and sessions are measured.
+- **Modelled** numbers are estimates or forecasts. Meelu says when a number is modelled, and gives its uncertainty. For example, a forecast comes with a range, not one exact value.
+
+Treat a modelled number as a guide, not a promise.
+
+## Trust levels
+
+Every analysis Meelu runs reports how much it can be trusted. Meelu passes that on to you in the answer:
+
+| Trust level | What it means |
+| --- | --- |
+| **High** | There is enough data and the method fits it well. You can rely on the result. |
+| **Moderate** | The result is useful, but read the caveats. Small numbers or noisy data may move it. |
+| **Low** | Treat it as a hint, not a fact. Check it against what you know before you act. |
+
+A **caveat** is a short warning about the result. For example: "two days of Search Console data are still provisional", or "click changes under 50 on single queries are noisy". Read caveats before you act on a finding.
+
+## When Meelu declines to answer
+
+Sometimes the data cannot support the question. For example, there may be too few days, too few pages, or no variation to measure. Then Meelu says it cannot answer and explains why. It does not give you a number it cannot back up.
+
+A decline is useful information. It usually means you need a longer date range, more traffic, or a simpler question. Try asking again with a wider range or a narrower comparison.
+
+## Kinds of analysis Meelu can run
+
+You do not need to name a method. Ask your question in plain words and Meelu picks the right one. It helps to know what is possible:
+
+| Kind of analysis | What it answers |
+| --- | --- |
+| **Summary of the data** | What a set of numbers looks like: totals, ranges, typical values and gaps. |
+| **Comparing periods** | Did a value change between two date ranges, and is the change real or just noise? |
+| **Finding sudden changes** | On which day did a trend shift, for example when clicks suddenly rose or fell? |
+| **Finding unusual values** | Which days, pages or queries stand out from the rest? |
+| **Trend and seasonality** | How much of a change is a long-term trend, and how much repeats every week or year? |
+| **Forecasting** | What a value will likely be over the coming weeks, with a range. |
+| **Relationships** | Do two things move together, such as position and click-through rate? |
+| **Grouping similar items** | Which pages or queries behave alike, so you can look at them as groups. |
+| **What drives a metric** | Which factors most explain a value, such as signups or clicks. |
+
+<Callout type="warn" title="Moving together is not the same as causing">
+  When Meelu finds that two things move together, it does not prove that one causes the other. Use the finding as a lead to look into, and use your own knowledge of the site to judge it.
+</Callout>
+
+## You decide what to do
+
+Meelu's answer ends with a suggestion and its evidence. It never changes your site. If a finding says a page needs a new title, or a group of pages needs work, decide whether you agree. Then act on it in the desk that owns that work, such as the [SEO desk](/docs/seo). For more on how Meelu works with you, see [Working with the agent](/docs/concepts/working-with-the-agent).

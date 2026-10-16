@@ -3,6 +3,7 @@ import { Logo } from "@/components/logo";
 
 const links = [
   { href: "/tools", label: "Free tools", short: "Tools" },
+  { href: "/docs", label: "Docs", short: "Docs" },
   { href: "/pricing", label: "Pricing", short: "Pricing" },
   { href: "/blog", label: "Blog", short: "Blog" },
 ] as const;

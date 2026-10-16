@@ -1,0 +1,44 @@
+---
+title: Why Meelu is a desktop app
+description: What runs on your own computer, what runs on Meelu's servers, and why there is no web version.
+---
+
+Meelu runs only as a desktop app for macOS and Windows. If you open your Meelu address in a web browser, it sends you to the [download page](https://meelu.tech/download).
+
+This is on purpose. Some of Meelu's most important work happens on your own computer.
+
+## What runs on your computer
+
+| Work | Why it runs locally |
+| --- | --- |
+| **The agent** | The AI coworker that answers questions and prepares suggestions runs inside the app. |
+| **Crawling your site** | Meelu reads your website from your own machine and internet connection. It costs no credits. |
+| **Google connections** | Your Search Console and Analytics sign-in is stored on your computer, encrypted by your operating system, and never sent to Meelu's servers. |
+| **Importing Google data** | The app fetches your reports from Google and saves the numbers to your Meelu account. |
+| **Social listening runs** | The app starts each run and follows its progress. |
+| **Your own Anthropic key** | If you add one, it stays encrypted on your computer, and model calls go straight to Anthropic. |
+
+## What runs on Meelu's servers
+
+Your account, your websites and everything the desks show are stored on Meelu's servers, so the same data is there wherever you sign in. Some work also runs there, such as fetching keyword data, searching social platforms and sorting your pages into types. That work uses credits. See [Credits and billing](/docs/concepts/credits).
+
+## Keep the app open for background work
+
+Because the crawl and the agent run on your computer, they stop when you quit Meelu. While the app is open:
+
+- each website is crawled again about once a day
+- Meelu checks for a new version of itself every 10 minutes
+
+If you close the app, the next daily crawl starts soon after you open it again.
+
+## Using Meelu on more than one computer
+
+Install the app and sign in on each computer. Your websites, pages, drafts and notes are the same everywhere, because they live in your account. Things that stay on one computer need setting up again on the other:
+
+- your Google Search Console and Analytics connections
+- your own Anthropic key
+- any **Always allow this action** or **Full access** answers, which reset when you quit anyway
+
+## Try it without installing
+
+The website has a copy of the dashboard with sample data at [meelu.tech/demo](https://meelu.tech/demo). You can click through every desk. It does not connect to a real account, and nothing you do there is saved.

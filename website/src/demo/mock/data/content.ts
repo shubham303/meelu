@@ -1,5 +1,5 @@
 import type { ContentPiece, PieceCheck } from "@demo/lib/types";
-import type { PieceIssue } from "@/app/demo/dashboard/content/types";
+import type { PieceIssue } from "@/app/(demo)/demo/dashboard/content/types";
 import { ago, DAY, HOUR } from "../rand";
 import { pageId, SITE_ID } from "./site";
 

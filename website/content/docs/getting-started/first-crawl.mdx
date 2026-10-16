@@ -1,0 +1,87 @@
+---
+title: Run your first crawl
+description: Let Meelu read your website so every desk has something to work with.
+---
+
+A **crawl** is when Meelu visits your website and reads its pages one by one, the way a search engine does. Until the first crawl finishes, most desks have nothing to show. The crawl runs from your own computer and uses no credits.
+
+## Start the crawl
+
+<Steps>
+<Step>
+
+### Open the Site desk
+
+Click **Site** in the sidebar. Right after you add a website, Meelu opens this desk for you. It says **This website has not been read yet**.
+
+</Step>
+<Step>
+
+### Click Crawl website
+
+The button is at the top right of the Site desk, and also in the middle of the empty screen.
+
+</Step>
+<Step>
+
+### Keep Meelu open while it runs
+
+A progress bar shows what the crawl is doing. You can use other desks while it runs, but keep the app open. A small site takes a few minutes. A site with thousands of pages takes longer.
+
+</Step>
+<Step>
+
+### Look at what it found
+
+When the crawl ends, the Site desk shows four numbers: **Sitemap coverage**, **Broken**, **Not in sitemap** and **Orphans**. The **Pages**, **Structure** and **Technical SEO** sections fill in too.
+
+<Screenshot
+  src="/docs/screens/site-overview.webp"
+  alt="The Site desk after a crawl"
+  width={1280}
+  height={900}
+  caption="The Site desk after a crawl."
+  markers={[{ x: 84.1, y: 6, label: "Crawl again reads the whole site again" }, { x: 95.3, y: 6.3, label: "Ask Meelu opens ready-made questions for this desk" }, { x: 21.4, y: 38.5, label: "Pages lists every page the crawl read" }, { x: 21.4, y: 48.3, label: "Structure shows links, orphans and suggestions" }, { x: 21.4, y: 58.1, label: "Technical SEO lists technical problems" }]}
+/>
+
+</Step>
+</Steps>
+
+## What the progress bar says
+
+| Message | What is happening |
+| --- | --- |
+| **Reading the sitemap and robots.txt** | Meelu reads your sitemap (the file that lists your pages for search engines) and your robots.txt (the file that tells crawlers what they may read). |
+| **Reading the pages the sitemap lists** | Meelu reads every page your sitemap lists. |
+| **Following links the sitemap did not list** | Meelu follows links on your pages to find pages the sitemap missed. |
+| **Stopping — the pages already read are kept** | You clicked **Stop crawl**. Nothing already read is lost. |
+
+## If something goes wrong
+
+<Accordions>
+<Accordion title="Meelu says no sitemap was found">
+A box appears under the crawl button. Paste the full address of your sitemap, such as `https://example.com/sitemap.xml`, and click **Use this sitemap**. Meelu remembers it for later crawls. Not sure where your sitemap is? Most website builders put it at `/sitemap.xml` or `/sitemap_index.xml`.
+</Accordion>
+<Accordion title="Most pages come back blocked">
+Your firewall or bot protection may be treating the crawl as a bot. The Site desk gives you a **Crawl access token** you can allow in your firewall. See [If your firewall blocks the crawl](/docs/site/crawling#if-your-firewall-blocks-the-crawl).
+</Accordion>
+</Accordions>
+
+## After the first crawl
+
+While the app is open, Meelu crawls each of your websites again about once a day, so the desks stay current. Click **Crawl again** yourself after you change your site, for example after you publish a page or fix broken links.
+
+For everything about crawling, including limits and pages Meelu skips, see [Crawling your site](/docs/site/crawling).
+
+## What each button does
+
+| Button | What it does |
+| --- | --- |
+| **Crawl website** | Starts the first crawl of this website. |
+| **Crawl again** | Starts a new crawl of a website that has been crawled before. |
+| **Stop crawl** | Stops the crawl and keeps the pages already read. |
+| **Use this sitemap** | Crawls using the sitemap address you pasted, and remembers it. |
+
+## Next step
+
+[Connect Google Search Console and Analytics](/docs/getting-started/connect-google).

@@ -1,0 +1,103 @@
+---
+title: Crawling your site
+description: How to run a crawl, what Meelu reads, how to follow the progress and how the site stays up to date.
+---
+
+A **crawl** is when Meelu visits your website and reads its pages, one by one, like a search engine does. Every screen on the Site desk is built from what the crawl read. If the crawl is old, the screens are old too.
+
+<Callout type="info" title="Crawling runs in the desktop app">
+The crawl runs in the Meelu desktop app, from your own computer. In the browser, the crawl button is greyed out. Keep the app open while a crawl runs. A crawl uses no credits.
+</Callout>
+
+## Run your first crawl
+
+<Screenshot
+  src="/docs/screens/site-crawl-progress.webp"
+  alt="A crawl in progress. The bar says which step it is on"
+  width={1280}
+  height={700}
+  caption="A crawl in progress. The bar says which step it is on."
+/>
+
+<Steps>
+<Step>
+### Open the Site desk
+
+Open the Meelu desktop app and click **Site** in the sidebar.
+</Step>
+<Step>
+### Click Crawl website
+
+Click **Crawl website** at the top right. If the site has been crawled before, the button says **Crawl again**.
+</Step>
+<Step>
+### Watch the progress bar
+
+A progress bar shows which step the crawl is on and how many pages it has read. You can keep working in other desks while it runs.
+</Step>
+<Step>
+### Read the result
+
+When the crawl ends, a short note says how many pages were read. The four numbers on the Site screen and the Pages, Structure and Technical SEO screens update.
+</Step>
+</Steps>
+
+## What the crawl reads
+
+The crawl starts from your **sitemap**. A sitemap is a file on your site, often at `/sitemap.xml`, that lists the pages you want search engines to find. If you have not given Meelu a sitemap, it looks in the usual places for one.
+
+The crawl works in three steps. The progress bar names the step it is on:
+
+| Step shown | What is happening |
+| --- | --- |
+| **Reading the sitemap and robots.txt** | Meelu reads your sitemap and your `robots.txt`. **robots.txt** is a file that tells crawlers which pages they may read. |
+| **Reading the pages the sitemap lists** | Meelu reads every page in your sitemap. |
+| **Following links the sitemap did not list** | Meelu follows links on your pages to find pages your sitemap left out. |
+
+Some limits to know:
+
+- **Up to 10,000 pages per crawl.** If your sitemap lists more, the crawl stops there and does not follow links. A note tells you so.
+- **Link-following is capped.** The crawl reads at most twice as many extra pages as your sitemap lists, so extra pages never crowd out the ones you listed.
+- **Only your own site.** Links to other websites are recorded but not read.
+- **Pages robots.txt blocks for Google are not read.** Meelu records them, because Google will not read them either.
+
+### Pages Meelu skips
+
+Some pages are read but marked as not worth studying. They show a grey badge in the Pages table:
+
+| Badge | Why |
+| --- | --- |
+| **legal** | Privacy, terms, cookie or refund pages. |
+| **pagination** | Page 2, 3 and so on of a list. |
+| **thin** | Fewer than 80 words of text. |
+| **redirect** | The address sends the visitor to another page. |
+
+## If no sitemap is found
+
+If Meelu cannot find a sitemap, a box appears under the crawl button. Paste your sitemap's full address, such as `https://example.com/sitemap.xml`, and click **Use this sitemap**. Meelu crawls with it and remembers it for later crawls. You can also add sitemaps in [the website record](/docs/site/website-profile).
+
+## If your firewall blocks the crawl
+
+The crawl reads your site from your computer, so a firewall or bot protection may treat it as a bot and block it. To let it through, use the **Crawl access token** in [the website record](/docs/site/website-profile#crawl-access-token).
+
+## Stopping a crawl
+
+Click **Stop crawl** while a crawl runs. The button shows **Stopping…** for a moment. Meelu keeps every page it has already read, so a stopped crawl is not wasted.
+
+## Daily crawls
+
+While the desktop app is open, Meelu crawls each of your sites again about once a day. It only does this for a site you have crawled at least once, and it crawls one site at a time. When a crawl started this way, the progress bar says **started on its daily schedule**.
+
+If the app is closed, no daily crawl happens. The next one starts soon after you open the app.
+
+<Callout type="idea" title="When to crawl by hand">
+Click **Crawl again** after you change your site, such as after you publish a new page, fix broken links or change your menu. Then the Structure and Technical SEO screens show the new state, and suggestions you already acted on can be cleared.
+</Callout>
+
+## What each button does
+
+| Button | What it does |
+| --- | --- |
+| **Crawl website** / **Crawl again** | Starts a crawl of this site. Desktop app only. |
+| **Stop crawl** | Stops the running crawl and keeps what it read. |
+| **Use this sitemap** | Crawls with the sitemap address you pasted and remembers it. |
