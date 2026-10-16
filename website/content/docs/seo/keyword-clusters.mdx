@@ -1,0 +1,154 @@
+---
+title: Keyword clusters
+description: Group searches that one page can win, score how winnable each group is, and plan the page.
+---
+
+A **keyword cluster** is a group of searches that Google answers with the same pages. If "free invoice template" and "invoice template pdf" show the same results, one page can win both. So Meelu groups them and treats the group as one target.
+
+Clusters are the heart of the SEO desk. You find them on the SEO home screen in the **Keyword clusters** table.
+
+## Why clusters, not single keywords
+
+Writing one page per keyword leads to many thin pages that compete with each other (this is called cannibalisation). Writing one page per cluster means each page has a clear job. Each cluster has a **main keyword**. The page leads with the main keyword and also answers the rest of the cluster.
+
+## How clusters are built
+
+You do not build clusters by hand. You ask Meelu, and it does the work in four steps:
+
+1. **Collect searches** from one of four sources (see below).
+2. **Drop noise.** Searches with almost no volume compared with their main topic are dropped.
+3. **Drop off-topic searches.** Meelu checks each search against what your website is about. It removes other companies' brands, jobs and salaries, piracy, other meanings of the same word, and subjects you do not cover.
+4. **Group by need.** Searches about the same core topic are grouped. A group is split again when Google would show different pages for its searches. These smaller groups are sometimes called sub-clusters. Several clusters can share one **core keyword**, but each one is its own page target.
+
+When it finishes, Meelu tells you how many clusters came out and how many searches it dropped as noise or off-topic.
+
+Searches that are already in a cluster are not clustered again. Clusters are built for the first country in your website's **Markets** setting.
+
+### The four sources
+
+Each source has its own task card on the SEO home screen:
+
+| Task card | Where the searches come from |
+| --- | --- |
+| **Build clusters for a topic** | You name a topic. Meelu picks a few seed keywords, shows them to you, and builds clusters once you agree. |
+| **Cluster my Search Console queries** | The searches Google already shows you for, most impressions first. |
+| **Cluster what I already rank for** | The keywords your site already ranks for in the wider market, most traffic first. |
+| **Find competitor keyword gaps** | Keywords that two or more of your saved [competitors](/docs/seo/competitors) rank for, and you do not. You need at least two saved competitors. |
+
+Building clusters uses credits. See [Credits](/docs/concepts/credits).
+
+## The Keyword clusters table
+
+| Column | Meaning |
+| --- | --- |
+| **Main keyword** | The cluster's lead search. Under it: how many keywords the cluster holds, and its core keyword. |
+| **Winnability** | A score from 0 to 100 (explained below). Green is 60 or more, amber is 30 to 59. **not scored** means it has no score yet. |
+| **Searches / mo** | Estimated monthly searches for the main keyword in your market. |
+| **Likely spot** | Where a good page would probably land, for example **#4**. |
+| **We rank** | Your current position, if you rank. Under it: how many of your saved competitors rank here. |
+
+The table is ranked by winnability, then by monthly searches. Type in **Search a topic or phrase** to find clusters. Use the filters to narrow the list:
+
+- **All**: every cluster.
+- **Scored**: clusters with a winnability score.
+- **Not scored**: clusters still waiting for a score.
+- **We rank**: clusters where your site already ranks.
+
+Click a row to open the cluster.
+
+## Winnability, explained
+
+Winnability answers: **if you had a good page for this, how likely is it to reach the top of Google?**
+
+To score a cluster, Meelu looks at the ten results that rank for the main keyword today. For each one, it compares two things:
+
+- **Link strength.** How strong that page and its domain are, compared with yours. Strength mostly comes from the links pointing at them.
+- **Intent fit.** Whether the result really serves the search. A strong page that misses what searchers want is easy to pass, however strong its links are.
+
+From this, Meelu works out your chance of passing each result in turn, from the bottom of page one to the top. Winnability combines your chance of reaching the top three with your chance of reaching page one.
+
+If you already rank, the climb starts from your page. If you do not, it starts below the top ten with your domain's strength, as a new page would.
+
+<Callout type="idea" title="What the score cannot see">
+Winnability does not judge how good your content will be. It tells you where the competition is weak. A high score is an opening, not a promise.
+</Callout>
+
+When Meelu scores clusters in bulk, it skips clusters scored in the last 30 days. Use **Rescore** on a cluster to refresh it now. Scoring uses credits.
+
+## The cluster screen
+
+Click a cluster to open it. The header shows how many keywords it has, its monthly searches, its market and language, and when it was scored.
+
+<Screenshot
+  src="/docs/screens/seo-cluster.webp"
+  alt="A scored cluster"
+  width={1280}
+  height={1000}
+  caption="A scored cluster."
+  markers={[{ x: 21.4, y: 17, label: "Plan a page for this cluster" }, { x: 76.7, y: 8.4, label: "Track its ranking" }, { x: 88.2, y: 8.4, label: "Score or rescore the cluster" }, { x: 74.2, y: 111.3, label: "Delete the cluster" }]}
+/>
+
+### Score cards
+
+| Card | Meaning |
+| --- | --- |
+| **Winnability** | The score out of 100. |
+| **Likely spot** | Where a good page probably lands. |
+| **Top 3 chance** | The chance of reaching the top three. |
+| **Page one chance** | The chance of reaching the top ten. |
+| **Searches / mo** | Monthly searches for the main keyword. |
+
+### The climb
+
+**The climb** lists each result above you, one row per position:
+
+| Column | Meaning |
+| --- | --- |
+| **#** | Its position. |
+| **Result** | The page title and its domain. Click to open it. |
+| **Page rank** | The strength of that page. |
+| **Domain rank** | The strength of its whole site. |
+| **Intent** | **fits intent**, **partly fits** or **misses intent**. |
+| **Chance to pass** | Your chance of moving above it. |
+
+Read it from the bottom up. The rows with a high chance to pass are the weak spots. The rows with a low chance are the pages you must beat with something clearly better.
+
+### Side cards
+
+- **Keywords in this cluster** lists every search the page should answer. The main keyword is marked **main**.
+- **Competitors ranking here** shows which of your saved competitors appear, and whether **you rank** or **you don't rank**.
+- **Where it came from** shows the seed keywords, the core keyword and your ranking page, if you have one.
+
+## What each button does
+
+On the SEO home screen:
+
+| Button | What it does |
+| --- | --- |
+| **All** / **Scored** / **Not scored** / **We rank** | Filter the table. |
+| **Plan a page** | Asks Meelu for a page brief for that cluster. Desktop app only. |
+| **Score them** | Asks Meelu to score the clusters without a score. It starts with the most searched ones, then recommends the best few. Desktop app only. |
+
+On a cluster screen:
+
+| Button | What it does |
+| --- | --- |
+| **Track its ranking** | Starts tracking your rank for the main keyword in every market. Results appear on [Tracked keywords](/docs/seo/tracked-keywords). Uses credits. |
+| **Score** / **Rescore** | Scores the cluster now, or refreshes an old score. Uses credits. |
+| **Ask Meelu** (sparkle icon) | Opens a task about this cluster. Desktop app only. |
+| **Delete cluster** | Removes the cluster after you confirm. |
+
+Under **Start a task on this cluster**, three task cards are ready (desktop app only):
+
+| Task card | What Meelu does |
+| --- | --- |
+| **Plan a page for this cluster** | Reads the results that rank now and writes a brief: title, H1, meta description, an outline and the keywords to cover. It also says which results are weakest and what the page needs to beat them. |
+| **Why is this winnable?** | Walks through each result above you and explains the score. It says plainly what the score cannot see. |
+| **Is a page of mine close?** | Checks whether one of your existing pages could own this cluster, and whether editing it beats writing a new one. |
+
+## Using clusters well
+
+- Start with **What should I target next?**. Meelu scores what is waiting and recommends three to five clusters, each with the reason and the kind of page that would win it.
+- Before you write a new page, run **Is a page of mine close?**. Improving an existing page is often faster.
+- Treat each cluster as one page. Do not split its keywords across several pages.
+- The brief is a suggestion. You decide what to write. The Content desk can draft the page with you.

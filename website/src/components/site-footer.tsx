@@ -14,6 +14,9 @@ export function SiteFooter() {
           <Link href="/tools" className="transition-colors hover:text-ink">
             Free tools
           </Link>
+          <Link href="/docs" className="transition-colors hover:text-ink">
+            Docs
+          </Link>
           <Link href="/pricing" className="transition-colors hover:text-ink">
             Pricing
           </Link>

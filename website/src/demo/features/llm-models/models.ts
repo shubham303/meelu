@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { api } from "@demo/lib/use-api";
-import type { OwnModel } from "@/app/demo/dashboard/agent-tasks";
+import type { OwnModel } from "@/app/(demo)/demo/dashboard/agent-tasks";
 
 export type LlmTier = "featured" | "well_known" | "other";
 

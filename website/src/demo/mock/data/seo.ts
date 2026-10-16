@@ -2,7 +2,7 @@ import type {
   ClimbResult,
   KeywordCluster,
   TrackedKeyword,
-} from "@/app/demo/dashboard/seo/types";
+} from "@/app/(demo)/demo/dashboard/seo/types";
 import { ago, DAY, hashString, HOUR, NOW, seeded } from "../rand";
 import { ORIGIN } from "./site";
 

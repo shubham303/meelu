@@ -5,7 +5,7 @@ import { Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { ConfirmDelete, IconButton } from "@demo/components/ui";
 import { useIsApp } from "@demo/lib/use-app-mode";
 import type { PromptChip } from "@demo/features/prompt-chips/lib";
-import { useAgentTasks } from "@/app/demo/dashboard/agent-tasks";
+import { useAgentTasks } from "@/app/(demo)/demo/dashboard/agent-tasks";
 import { deleteUserPrompt, useUserPrompts, type UserPrompt, type UserPromptSurface } from "./api";
 import { UserPromptEditor } from "./prompt-editor";
 

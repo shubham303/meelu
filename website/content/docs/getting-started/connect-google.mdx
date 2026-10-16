@@ -1,0 +1,110 @@
+---
+title: Connect Google Search Console and Analytics
+description: Give Meelu read-only access to your real search and traffic numbers.
+---
+
+Meelu works best when it can see your real numbers. Two Google services provide them:
+
+- **Google Search Console** shows how your site does in Google search: which searches show your pages (impressions), how often people click, and where you rank. It also says which pages Google has indexed.
+- **Google Analytics 4** shows what visitors do once they arrive: sessions, where they came from, which pages they land on and which key events (such as sign-ups or purchases) they complete.
+
+Both connections are optional and read-only. Meelu can never change anything in your Google accounts.
+
+<Callout type="info" title="Your Google sign-in stays on your computer">
+When you connect, Google's sign-in page opens in your browser. The sign-in token is stored on your computer, encrypted by your operating system. It is never sent to Meelu's servers. The app uses it to fetch your reports and saves the report data to your Meelu account so the desks can show it.
+</Callout>
+
+## Before you start
+
+Find the Google account that already has access to your site's Search Console property and Analytics property. If you sign in with a different account, the property list comes back empty. That means the wrong account, not missing data.
+
+## Connect Search Console
+
+<Steps>
+<Step>
+
+### Open Connections
+
+Click **Connections** near the bottom of the sidebar.
+
+</Step>
+<Step>
+
+### Click Connect on the Google Search Console card
+
+Your browser opens Google's sign-in page. The button in Meelu says **Waiting for Google…** until you finish.
+
+</Step>
+<Step>
+
+### Sign in and allow access
+
+Pick the right Google account and allow read-only Search Console access. When you return to Meelu, the card says **Connected**.
+
+</Step>
+<Step>
+
+### Import your data
+
+Click **SEO** in the sidebar, then open **Search performance**. Click **Import 16 months of search data**. If your site has more than one Search Console property, Meelu asks **Which property is authoritative?** first. Pick the one you trust.
+
+</Step>
+</Steps>
+
+## Connect Google Analytics
+
+<Steps>
+<Step>
+
+### Click Connect on the Google Analytics 4 card
+
+It is on the same **Connections** screen. Sign in with the account that can read your site's Analytics property.
+
+</Step>
+<Step>
+
+### Pick your property
+
+Click **SEO** in the sidebar, then open **Traffic**. Meelu asks **Which Analytics property measures this site?** Analytics does not say which website a property belongs to, so you always choose this yourself.
+
+</Step>
+<Step>
+
+### Import your data
+
+Click **Import 16 months of traffic data**.
+
+</Step>
+</Steps>
+
+You can also connect straight from the SEO desk. When a service is not connected, **Search performance** and **Traffic** show a yellow box with a **Connect Search Console** or **Connect Google Analytics** button.
+
+## How long the import takes
+
+The first import brings in 16 months of daily data. A progress bar shows the day it is on, such as "Importing search data — day 120 of 480". For Search Console, Meelu then checks the index status of your pages. You can keep working while it runs, and you can click **Stop** at any time.
+
+Importing runs from your computer and costs no credits.
+
+<Callout type="warn" title="Search Console data lags">
+Google's Search Console numbers run about three days behind. A drop in the last two or three days is usually missing data, not a real drop.
+</Callout>
+
+## What each button does
+
+| Button | Where | What it does |
+| --- | --- | --- |
+| **Connect** | Connections | Opens Google's sign-in so you can grant read-only access. |
+| **Reconnect** | Connections | Signs in again, for example to switch to another Google account. |
+| **Disconnect** | Connections | Deletes the Google sign-in from your computer. Meelu asks you to confirm. |
+| **Docs** | Connections | Opens Google's own documentation for that service. |
+| **Connect Search Console** / **Connect Google Analytics** | SEO desk | The same as **Connect**, from the screen that needs it. |
+| **Import 16 months of search data** / **Import 16 months of traffic data** | SEO desk | Starts the first import. |
+| **Stop** | SEO desk | Stops the import. |
+
+To remove Meelu's access completely, disconnect here and also remove Meelu at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+For what the imported data shows, see [Search performance](/docs/seo/search-performance) on the SEO desk.
+
+## Next step
+
+[Take a tour of the dashboard](/docs/getting-started/tour).

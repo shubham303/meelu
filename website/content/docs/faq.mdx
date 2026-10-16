@@ -1,0 +1,119 @@
+---
+title: FAQ
+description: Short answers to the questions people ask most about Meelu.
+---
+
+## The basics
+
+<Accordions>
+<Accordion title="What is Meelu?">
+Meelu is a desktop app with an AI coworker for your website. It reads your pages, looks at your Search Console and Analytics numbers, finds what is worth fixing, and helps you plan and write new pages. It suggests, and you decide. See the [docs home](/docs).
+</Accordion>
+<Accordion title="Does Meelu change my website?">
+No. Meelu never publishes, edits or deletes anything on your website. It prepares suggestions and drafts inside Meelu. You make the change on your site yourself. See [Suggestions and evidence](/docs/concepts/suggestions).
+</Accordion>
+<Accordion title="Does Meelu post on social media for me?">
+No. The Social Listening desk finds posts and drafts a reply. You copy the reply and post it yourself, then mark it replied. See the [Social Listening desk](/docs/social-listening).
+</Accordion>
+<Accordion title="Can I use Meelu in my web browser?">
+No. Meelu runs only as a desktop app for macOS and Windows. Opening your Meelu address in a browser sends you to the download page. To look around first, try the [demo](https://meelu.tech/demo), which runs in the browser with sample data. See [Why Meelu is a desktop app](/docs/concepts/desktop-app).
+</Accordion>
+<Accordion title="Which computers does it run on?">
+macOS on Apple Silicon (M1 to M4) or Intel, and Windows 10 or 11, 64-bit. See [Install the app](/docs/getting-started/install).
+</Accordion>
+<Accordion title="Why does my computer warn me when I install Meelu?">
+Meelu is in beta and is not yet verified by Apple, Microsoft or Google. Their systems warn about any app they have not verified. The warning appears once. [Install the app](/docs/getting-started/install#open-it-for-the-first-time) shows how to continue on each system. Only download Meelu from [meelu.tech/download](https://meelu.tech/download).
+</Accordion>
+</Accordions>
+
+## Pricing and credits
+
+<Accordions>
+<Accordion title="How much does Meelu cost?">
+There is one plan, and it runs on credits. One credit is one US dollar. Each of your first five websites costs 0.4 credits a day, and each one after that 0.2 credits a day. Outside services, such as AI model calls, keyword data and social listening searches, are charged per use at what they cost. There is no subscription. See [Credits and billing](/docs/concepts/credits).
+</Accordion>
+<Accordion title="Is there a free trial?">
+Yes. Your first website is free for the first three days of your account. Outside services still need credits during the trial. You can avoid AI model costs by using your own Anthropic key.
+</Accordion>
+<Accordion title="What is free?">
+Crawling your site and importing your Search Console and Analytics data. Both run on your computer. Results Meelu already has are also free to read again.
+</Accordion>
+<Accordion title="Where can I see what I spent?">
+Click **Credits** at the bottom of the sidebar and open the **Activity** tab. Every charge is listed with what it was for and the amount. For a rough total of AI costs since you opened the app, see **Model usage** in **Settings**.
+</Accordion>
+<Accordion title="What happens when my credits run out?">
+Paid steps stop, and you see a **Not enough credits** banner. A website whose next daily fee cannot be paid is paused. Its data stays. Add credits, and it works again right away. A website that stays paused for 30 days is deleted with all its data.
+</Accordion>
+<Accordion title="Can I use my own AI key?">
+Yes, an Anthropic key. Add it on the **Connections** screen. Tasks then run on your Anthropic account instead of your Meelu credits. Keyword data, social listening and page classification still use credits. See [AI models](/docs/concepts/ai-models#use-your-own-anthropic-key).
+</Accordion>
+<Accordion title="Do I pay tax on top-ups?">
+Sales tax or VAT for your country is added at checkout, on top of the amount of credits you buy.
+</Accordion>
+</Accordions>
+
+## Working with the agent
+
+<Accordions>
+<Accordion title="Why does Meelu keep asking for permission?">
+Meelu asks before it saves, changes or deletes anything. Click **Allow** for one action, **Always allow this action** to stop being asked about that action, or **Full access** to stop being asked at all. Both of the last two reset when you quit the app. See [Approving what Meelu does](/docs/concepts/approving-actions).
+</Accordion>
+<Accordion title="How do I make Meelu remember something?">
+Write it on the Notes desk. Meelu reads your notes before every task on that website. Use a **Rule** for how you want things done, and a **Correction** for something it got wrong. See [Notes](/docs/concepts/notes).
+</Accordion>
+<Accordion title="Meelu got something wrong about my business. What should I do?">
+Correct it in the task. If the correction will still be true next month, save it as a **Correction** note so every future task knows.
+</Accordion>
+<Accordion title="Which AI model should I use?">
+Start with your default model, or one marked **Recommended**. Use a cheaper model for simple lookups and a stronger one for planning and writing. You can pick a model for each task in the task panel. See [AI models](/docs/concepts/ai-models).
+</Accordion>
+<Accordion title="Can I close the task panel while Meelu works?">
+Yes. The task keeps running. The **Tasks** button in the bottom-right corner shows its status and says **needs you** when Meelu is waiting for your answer.
+</Accordion>
+<Accordion title="Where did my tasks go?">
+Tasks belong to a website, so switching website shows a different list. The task list is also cleared when you quit Meelu. What a task saved, such as a draft or a suggestion, stays on its desk.
+</Accordion>
+</Accordions>
+
+## Your site and your data
+
+<Accordions>
+<Accordion title="How often does Meelu crawl my site?">
+About once a day for each website, while the app is open, once you have crawled it at least once. You can click **Crawl again** on the Site desk any time. See [Crawling your site](/docs/site/crawling).
+</Accordion>
+<Accordion title="My firewall blocks the crawl. What can I do?">
+The Site desk gives you a **Crawl access token**. Allow it in your firewall or bot protection, and the crawl gets through. See [If your firewall blocks the crawl](/docs/site/crawling#if-your-firewall-blocks-the-crawl).
+</Accordion>
+<Accordion title="Can I manage more than one website?">
+Yes. Add each one from the website switcher. A second business is a second website, not a second account. Each website keeps its own data, notes and saved prompts. See [Websites](/docs/settings/websites).
+</Accordion>
+<Accordion title="Can Meelu change anything in my Google accounts?">
+No. Meelu asks Google for read-only access to Search Console and Analytics. It can read your reports but cannot change anything.
+</Accordion>
+<Accordion title="Where is my Google sign-in stored?">
+On your computer, encrypted by your operating system. It is never sent to Meelu's servers. If you use Meelu on a second computer, connect Google there too.
+</Accordion>
+<Accordion title="Why does Search Console show no properties after I connect?">
+You signed in with a Google account that cannot see your site's property. Click **Reconnect** on the **Connections** screen and pick the account that has access.
+</Accordion>
+<Accordion title="Does Meelu train AI models on my data?">
+No. Meelu does not use your data, or your Google data, to train AI models. See [Privacy and your data](/docs/concepts/privacy).
+</Accordion>
+<Accordion title="How do I delete my data?">
+Delete a website from the website switcher to remove everything for that site. Disconnect Google on the **Connections** screen. To delete your whole account, email the address in the [Privacy Policy](https://meelu.tech/privacy) from your account email.
+</Accordion>
+</Accordions>
+
+## Account
+
+<Accordions>
+<Accordion title="I did not get the confirmation code.">
+Check your spam folder. The code expires after 10 minutes. Wait a minute, then click **Send a new code**.
+</Accordion>
+<Accordion title="I forgot my password.">
+Click **Forgot password?** on the sign-in screen. Meelu emails you a 6-digit code to set a new password. See [Create your account](/docs/getting-started/create-account#forgot-your-password).
+</Accordion>
+<Accordion title="How do I update the app?">
+Meelu tells you with a banner when a new version is out. Click **Download**, quit Meelu, then install the new version over the old one. Your sign-in and settings stay. See [App updates](/docs/settings/app-updates).
+</Accordion>
+</Accordions>
