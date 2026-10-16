@@ -1,0 +1,117 @@
+---
+title: SEO desk
+description: Find what to target next in search, see what Google already sends you, and track where you rank.
+---
+
+The SEO desk answers one practical question: **what should this website try to rank for next, and how likely is it to work?**
+
+It brings together three kinds of evidence:
+
+- **What Google already sends you**, measured by Google Search Console.
+- **What visitors do once they arrive**, measured by Google Analytics.
+- **What the wider search market looks like**: how many people search a phrase, who ranks for it today, and how strong those pages are.
+
+Meelu reads this evidence, points at the best openings and explains why. You decide what to write, change or leave alone. The desk never edits your site.
+
+## The screens
+
+<Cards>
+  <Card title="SEO home" href="/docs/seo#the-seo-home-screen" description="Keyword clusters ranked by winnability, plus a summary of every other screen." />
+  <Card title="Search performance" href="/docs/seo/search-performance" description="Clicks, impressions, CTR and position from Search Console." />
+  <Card title="Indexation" href="/docs/seo/indexation" description="Which of your pages Google actually holds in its index." />
+  <Card title="Traffic" href="/docs/seo/traffic" description="Sessions, channels, landing pages and key events from Google Analytics." />
+  <Card title="Keyword clusters" href="/docs/seo/keyword-clusters" description="Groups of searches one page can win, and how winnable each is." />
+  <Card title="Tracked keywords" href="/docs/seo/tracked-keywords" description="Your rank and monthly search demand over twelve months." />
+  <Card title="Competitors" href="/docs/seo/competitors" description="The domains that chase the same searchers as you." />
+  <Card title="Backlink opportunities" href="/docs/seo/backlinks" description="Sites that link to your competitors but not to you." />
+  <Card title="Asking the SEO desk" href="/docs/seo/asking-the-seo-desk" description="Task cards, saved prompts and the questions Meelu answers best." />
+</Cards>
+
+## The SEO home screen
+
+Open **SEO** in the sidebar. The top of the screen shows your **Market** badge. This is the country or countries the desk researches. It comes from the **Markets** and **Language** fields on your website record. If you leave Markets blank and your language is English, the desk uses English-speaking searchers worldwide. If your site sells in another language, set the markets yourself, or the desk shows **Market not set**.
+
+<Screenshot
+  src="/docs/screens/seo-home.webp"
+  alt="The SEO home screen"
+  width={1280}
+  height={1100}
+  caption="The SEO home screen."
+  markers={[{ x: 95.3, y: 5.5, label: "Ask Meelu" }, { x: 71.2, y: 89.1, label: "Plan a page for a cluster" }, { x: 63.1, y: 273.1, label: "Score the clusters not scored yet" }, { x: 72.9, y: 46.1, label: "Save a prompt of your own" }]}
+/>
+
+Below the header you see four summary cards:
+
+| Card | What it shows |
+| --- | --- |
+| **Clusters** | How many keyword clusters you have, and how many are scored or still waiting. |
+| **Best odds** | The winnability score of your most winnable cluster. Click it to open that cluster. |
+| **Search clicks · 28d** | Clicks from Google in the last 28 days, and the change from the 28 days before. Click it to open Search performance. |
+| **Tracked keywords** | How many keywords you track, and how many moved since the last tracking run. Click it to open Tracked keywords. |
+
+The main part of the screen is the **Keyword clusters** table. It is explained in full on [Keyword clusters](/docs/seo/keyword-clusters).
+
+On the right, four cards link to the other screens:
+
+- **Search performance** shows a badge: **syncing**, **data through** a date, or **not synced**.
+- **Traffic** shows your sessions and the share that came from organic search.
+- **Competitors** shows how many domains you saved, with the first few names.
+- **Backlink opportunities** shows how many sites you saved.
+
+### What each button does
+
+| Button | What it does |
+| --- | --- |
+| **Ask Meelu** (sparkle icon, top right) | Opens a task with Meelu about clusters, search performance, competitors or tracked keywords. Desktop app only. |
+| Task cards under **Start a task** | Start a ready-made task with one click. See [Asking the SEO desk](/docs/seo/asking-the-seo-desk). Desktop app only. |
+| **New prompt** under **Your prompts** | Save your own prompt as a card for this website. Desktop app only. |
+| **All**, **Scored**, **Not scored**, **We rank** | Filter the cluster table. |
+| **Plan a page** (on a cluster row) | Asks Meelu to write a page brief for that cluster. Desktop app only. |
+| **Score them** (below the table) | Asks Meelu to score the clusters that have no score yet. Desktop app only. |
+
+<Callout type="info" title="Web dashboard and desktop app">
+The web dashboard and the desktop app show the same screens. Anything that runs Meelu, or that talks to your Google account, works only in the desktop app. That includes the Ask button, task cards, syncing Search Console and Analytics, and checking index status.
+</Callout>
+
+## SEO words, in plain English
+
+<Accordions>
+  <Accordion title="Impression">
+    One impression is one time your page appeared in someone's Google results. They did not have to scroll to it or click it. Many impressions with few clicks means people see you but choose someone else.
+  </Accordion>
+  <Accordion title="Click">
+    A searcher clicked your result and went to your site.
+  </Accordion>
+  <Accordion title="CTR (click-through rate)">
+    Clicks divided by impressions. If your page showed 1,000 times and got 30 clicks, its CTR is 3%. A low CTR at a good position often means the title or description does not match what people want.
+  </Accordion>
+  <Accordion title="Average position">
+    Where your page sat in Google's results, on average. Position 1 is the top. Positions 1 to 10 are roughly page one. Lower numbers are better. Search Console weights the average by impressions, so it is not a live check.
+  </Accordion>
+  <Accordion title="Search volume (searches per month)">
+    An estimate of how many times people search a phrase in a month, in your market. It tells you how much demand there is, not how much of it you will get.
+  </Accordion>
+  <Accordion title="Keyword difficulty and winnability">
+    Many SEO tools give a keyword one "difficulty" number for everyone. Meelu shows **winnability** instead. It is a score from 0 to 100 for your site: it compares your strength with each page that ranks today and checks whether those pages really answer the search. See [Keyword clusters](/docs/seo/keyword-clusters).
+  </Accordion>
+  <Accordion title="Striking distance">
+    A search where you already rank just outside the top ten, at about positions 8 to 15. A small push, such as better content or more internal links, can move it onto page one. These are often the fastest wins.
+  </Accordion>
+  <Accordion title="Cannibalisation">
+    Two or more of your own pages compete for the same search. Google then splits its attention between them, and often neither ranks well. Keyword clusters help you avoid this: each cluster is meant to be owned by one page.
+  </Accordion>
+  <Accordion title="Backlink">
+    A link from another website to yours. Links from relevant, trusted sites are one of the strongest signals that your page deserves to rank.
+  </Accordion>
+  <Accordion title="Indexed">
+    Google has stored the page and can show it in results. A page that is not indexed cannot get any search traffic at all.
+  </Accordion>
+</Accordions>
+
+## Credits
+
+Reading your own Search Console and Analytics data costs nothing. Actions that need fresh market data use credits. These include building and scoring clusters, tracking rankings, and finding competitors or backlink opportunities. Tasks you run with Meelu also use credits. See [Credits](/docs/concepts/credits).
+
+## Meelu suggests, you decide
+
+Every task on this desk ends with a recommendation and the evidence behind it. Meelu does not publish, rewrite, redirect or delete anything. When it wants to save something, such as a list of competitors, it shows you the list first and saves only what you agree with. See [Suggestions](/docs/concepts/suggestions).

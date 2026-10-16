@@ -1,0 +1,11 @@
+{
+  "title": "Getting started",
+  "pages": [
+    "install",
+    "create-account",
+    "add-a-website",
+    "first-crawl",
+    "connect-google",
+    "tour"
+  ]
+}

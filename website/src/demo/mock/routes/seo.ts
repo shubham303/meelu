@@ -5,7 +5,7 @@ import type {
   SiteSeoLists,
   TrackedKeyword,
   TrackedOverview,
-} from "@/app/demo/dashboard/seo/types";
+} from "@/app/(demo)/demo/dashboard/seo/types";
 import * as search from "../data/search";
 import * as seo from "../data/seo";
 import * as siteData from "../data/site";
