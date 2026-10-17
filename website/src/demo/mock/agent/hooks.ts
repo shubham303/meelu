@@ -4,6 +4,8 @@ import * as seo from "../routes/seo";
 import { chargeCredits, setSiteSummary, siteSummary as accountSiteSummary } from "../routes/account";
 import * as analyticsRoutes from "../routes/analytics";
 import { route } from "../api";
+import { reportHtmlFromAnswer } from "../data/analytics";
+import type { ReportDesk } from "@demo/lib/types";
 
 interface AnalyticsHooks {
   analyticsState?: { chats: Array<{ id: string; sdkSessionId?: string; updatedAt: string }> };
@@ -39,6 +41,22 @@ export function trackKeywords(keywords: string[]): void {
   seo.trackKeywords(keywords);
 }
 
+export function addCompetitors(domains: string[]): void {
+  seo.addCompetitors(domains);
+}
+
+export function removeCompetitors(domains: string[]): void {
+  seo.removeCompetitors(domains);
+}
+
+export function competitorDomains(): string[] {
+  return seo.competitorDomains();
+}
+
+export function opportunityDomains(): string[] {
+  return seo.opportunityDomains();
+}
+
 export function chargeTurn(costUsd: number): void {
   chargeCredits("usage", "llm/anthropic/claude-haiku-5.5", -costUsd);
 }
@@ -62,6 +80,11 @@ export function lastAnalyticsAnswer(sessionId: string | undefined): string | nul
 
 export function saveAnalyticsReport(title: string, answer: string): { id: string; title: string } | null {
   return analytics.addReportFromAnswer?.(title, answer) ?? null;
+}
+
+export function saveDeskReport(desk: ReportDesk, title: string, answer: string): { id: string; title: string } {
+  const meta = desk === "seo" ? "SEO desk · ledgerly.app" : desk === "technical-seo" ? "Technical SEO desk · ledgerly.app" : undefined;
+  return analyticsRoutes.addReport(title, reportHtmlFromAnswer(title, answer, meta, "the SEO desk's keyword clusters and the site's crawled pages"), "agent", desk);
 }
 
 export function call<T = unknown>(method: string, path: string, body?: unknown): T | null {

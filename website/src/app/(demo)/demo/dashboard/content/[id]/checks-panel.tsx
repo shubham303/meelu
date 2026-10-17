@@ -92,7 +92,7 @@ export function ChecksPanel({
         )}
         {canRun && issues.length === 0 && !running && (
           <p className="text-xs leading-relaxed text-faint">
-            Checks run on your device: readability reads the text, similarity compares each paragraph against the crawled pages of this site, and the AI detector scores it with a local classifier (a one-time 150 MB download on the first run). Click an issue to see the passage; fix it yourself or hand it to the agent.
+            Checks run on your device: readability reads the text, similarity compares the whole draft and each paragraph against the crawled pages of this site, and the AI detector scores it with a local classifier (a one-time 150 MB download on the first run). Click an issue to see the passage; fix it yourself or hand it to the agent.
           </p>
         )}
         {shown.map((issue) => {

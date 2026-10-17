@@ -7,13 +7,14 @@ import { PageHeader, Spinner } from "@demo/components/ui";
 import { useApi } from "@demo/lib/use-api";
 import * as chips from "@demo/features/prompt-chips/seo";
 import { SiteAskButton } from "../../site/site-ask";
-import { DomainList } from "../domain-list";
+import { CompetitorList } from "../competitor-list";
 import { SEO_ASK, TaskCards } from "../task-cards";
-import type { SiteSeoLists } from "../types";
+import type { Competitor } from "../types";
 
 export default function CompetitorsPage() {
-  const { data, loading, error, refresh } =
-    useApi<SiteSeoLists>("/api/v1/site/seo");
+  const { data, loading, error, refresh } = useApi<Competitor[]>(
+    "/api/v1/site/seo/competitors",
+  );
   const reload = () => void refresh();
 
   return (
@@ -26,7 +27,7 @@ export default function CompetitorsPage() {
       </Link>
       <PageHeader
         title="Competitors"
-        description="Domains chasing the same searchers for the same thing. Backlink opportunities are found from this list."
+        description="Domains chasing the same searchers for the same thing. Adding one looks up its domain rank and backlinks, which feed your backlink opportunities."
         actions={
           <SiteAskButton
             title="Ask — Competitors"
@@ -49,14 +50,7 @@ export default function CompetitorsPage() {
       )}
       {error && <p className="text-sm text-bad">{error}</p>}
       {data && (
-        <DomainList
-          list="competitors"
-          title="Saved competitors"
-          items={data.competitors}
-          placeholder="competitor.com"
-          emptyHint="No competitors saved yet. Ask Meelu to find them, or add one above."
-          onChanged={reload}
-        />
+        <CompetitorList competitors={data} onChanged={reload} />
       )}
     </PageEnter>
   );

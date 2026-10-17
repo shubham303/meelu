@@ -2,9 +2,11 @@ import type {
   AnalyticsChat,
   AnalyticsChatMessage,
   AnalyticsChatSummary,
-  AnalyticsReport,
-  AnalyticsReportSummary,
+  Report,
+  ReportDesk,
+  ReportSummary,
 } from "@demo/lib/types";
+import { REPORT_DESKS } from "@demo/lib/types";
 import * as siteData from "../data/site";
 import * as analytics from "../data/analytics";
 import { b, MockHttpError, newId, now, ok, paginate, type Route } from "../core";
@@ -14,7 +16,7 @@ export const analyticsState = {
   messages: Object.fromEntries(
     Object.entries(analytics.MESSAGES).map(([id, list]) => [id, list.map((m) => ({ ...m }))]),
   ) as Record<string, AnalyticsChatMessage[]>,
-  reports: analytics.REPORTS.map((r) => ({ ...r })) as AnalyticsReport[],
+  reports: analytics.REPORTS.map((r) => ({ ...r })) as Report[],
 };
 const state = analyticsState;
 
@@ -37,13 +39,13 @@ function findChat(id: string): AnalyticsChat {
   return chat;
 }
 
-function findReport(id: string): AnalyticsReport {
+function findReport(id: string): Report {
   const report = state.reports.find((r) => r.id === id);
   if (!report) throw new MockHttpError(404, "Not found");
   return report;
 }
 
-function summary({ html, ...r }: AnalyticsReport): AnalyticsReportSummary {
+function summary({ html, ...r }: Report): ReportSummary {
   return { ...r, htmlBytes: new TextEncoder().encode(html).length };
 }
 
@@ -69,32 +71,39 @@ export function lastAssistantMessage(chatId: string): AnalyticsChatMessage | nul
   return null;
 }
 
-export function addReport(title: string, html: string, createdBy: "agent" | "user" = "agent"): AnalyticsReport {
+export function addReport(title: string, html: string, createdBy: "agent" | "user" = "agent", desk: ReportDesk = "analytics"): Report {
   const at = now();
-  const report: AnalyticsReport = { id: newId("rp"), createdAt: at, updatedAt: at, siteId: siteData.SITE_ID, title: required(title, "title"), html: required(html, "html"), createdBy };
+  const report: Report = { id: newId("rp"), createdAt: at, updatedAt: at, siteId: siteData.SITE_ID, desk, title: required(title, "title"), html: required(html, "html"), createdBy };
   state.reports.unshift(report);
   return report;
 }
 
-export function addReportFromAnswer(title: string, answer: string): AnalyticsReport {
+export function addReportFromAnswer(title: string, answer: string): Report {
   return addReport(title, analytics.reportHtmlFromAnswer(title, answer));
+}
+
+function reportDesk(value: unknown): ReportDesk {
+  if ((REPORT_DESKS as readonly unknown[]).includes(value)) return value as ReportDesk;
+  throw new MockHttpError(422, `desk must be one of ${REPORT_DESKS.join(", ")}.`);
 }
 
 const byNewest = (a: { updatedAt: string }, c: { updatedAt: string }) => c.updatedAt.localeCompare(a.updatedAt);
 
 export const ROUTES: Route[] = [
-  ["GET", /^\/api\/v1\/analytics\/reports$/, (_m, q) => {
+  ["GET", /^\/api\/v1\/reports$/, (_m, q) => {
     const search = q.get("q")?.trim().toLowerCase();
+    const desk = q.get("desk");
     const rows = state.reports
+      .filter((r) => !desk || r.desk === desk)
       .filter((r) => !search || r.title.toLowerCase().includes(search))
       .sort((a, c) => c.createdAt.localeCompare(a.createdAt))
       .map(summary);
     return paginate(rows, q);
   }],
-  ["POST", /^\/api\/v1\/analytics\/reports$/, (_m, _q, body) =>
-    ok(summary(addReport(String(b(body, "title") ?? ""), String(b(body, "html") ?? ""), b(body, "createdBy") === "user" ? "user" : "agent")))],
-  ["GET", /^\/api\/v1\/analytics\/reports\/([^/]+)$/, (m) => ok(findReport(m[1]))],
-  ["PUT", /^\/api\/v1\/analytics\/reports\/([^/]+)$/, (m, _q, body) => {
+  ["POST", /^\/api\/v1\/reports$/, (_m, _q, body) =>
+    ok(summary(addReport(String(b(body, "title") ?? ""), String(b(body, "html") ?? ""), b(body, "createdBy") === "user" ? "user" : "agent", reportDesk(b(body, "desk")))))],
+  ["GET", /^\/api\/v1\/reports\/([^/]+)$/, (m) => ok(findReport(m[1]))],
+  ["PUT", /^\/api\/v1\/reports\/([^/]+)$/, (m, _q, body) => {
     const report = findReport(m[1]);
     const title = b(body, "title");
     const html = b(body, "html");
@@ -103,7 +112,7 @@ export const ROUTES: Route[] = [
     report.updatedAt = now();
     return ok(summary(report));
   }],
-  ["DELETE", /^\/api\/v1\/analytics\/reports\/([^/]+)$/, (m) => {
+  ["DELETE", /^\/api\/v1\/reports\/([^/]+)$/, (m) => {
     const report = findReport(m[1]);
     state.reports = state.reports.filter((r) => r.id !== report.id);
     return ok({ id: report.id, deleted: true });

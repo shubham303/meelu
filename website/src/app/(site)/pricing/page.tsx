@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 const services = [
   {
     name: "DataForSEO",
-    what: "Keyword volumes, rankings and search results pages.",
+    what: "Keyword volumes, rankings, backlinks and search results pages.",
   },
   {
     name: "Apify",
