@@ -3,23 +3,28 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Download, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { PageEnter } from "@demo/components/animate";
-import { Button, Card, ConfirmDelete, Field, Input, Modal, PageHeader, Spinner } from "@demo/components/ui";
+import { Button, Card, ConfirmDelete, Field, IconButton, Input, Modal, PageHeader, Spinner } from "@demo/components/ui";
 import { ChartFrame } from "@demo/components/agent/chart-frame";
 import { api, useApi } from "@demo/lib/use-api";
 import { formatRelative } from "@demo/lib/utils";
-import type { AnalyticsReport } from "@demo/lib/types";
+import { REPORT_DESK_LABEL } from "@demo/features/reports/desks";
+import { useIsApp } from "@demo/lib/use-app-mode";
+import { useAgentTasks } from "../../agent-tasks";
+import type { Report } from "@demo/lib/types";
 
 function fileName(title: string): string {
   return `${title.replace(/[^\w -]+/g, "").trim() || "report"}.html`;
 }
 
-export default function AnalyticsReportPage() {
+export default function ReportPage() {
   const { reportId } = useParams<{ reportId: string }>();
   const router = useRouter();
-  const { data: report, loading, error, refresh } = useApi<AnalyticsReport>(
-    `/api/v1/analytics/reports/${reportId}`,
+  const isApp = useIsApp();
+  const { launchTask } = useAgentTasks();
+  const { data: report, loading, error, refresh } = useApi<Report>(
+    `/api/v1/reports/${reportId}`,
   );
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState("");
@@ -60,7 +65,7 @@ export default function AnalyticsReportPage() {
     if (!next) return;
     setActionError(null);
     try {
-      await api(`/api/v1/analytics/reports/${report.id}`, { method: "PUT", body: { title: next } });
+      await api(`/api/v1/reports/${report.id}`, { method: "PUT", body: { title: next } });
       setRenaming(false);
       await refresh();
     } catch (e) {
@@ -73,11 +78,29 @@ export default function AnalyticsReportPage() {
       <BackLink />
       <PageHeader
         title={report.title}
-        description={`Saved ${formatRelative(report.createdAt)}${
+        description={`${REPORT_DESK_LABEL[report.desk]} · saved ${formatRelative(report.createdAt)}${
           report.updatedAt !== report.createdAt ? ` · changed ${formatRelative(report.updatedAt)}` : ""
         } · by ${report.createdBy === "agent" ? "Meelu" : "you"}`}
         actions={
           <>
+            {isApp && (
+              <IconButton
+                title="Ask Meelu about this report"
+                aria-label="Ask Meelu about this report"
+                className="border border-accent/30 bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent"
+                onClick={() =>
+                  launchTask({
+                    title: `Report: ${report.title}`,
+                    endpoint: "/api/agent/ask-report",
+                    emptyHint: "Ask about this report, or say how to change it. It reads only your saved reports.",
+                    draft: { report: `"${report.title}" (id ${report.id})` },
+                    onWrote: () => refresh(),
+                  })
+                }
+              >
+                <Sparkles size={16} />
+              </IconButton>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -125,8 +148,8 @@ export default function AnalyticsReportPage() {
         onClose={() => setDeleting(false)}
         what="this report"
         onConfirm={async () => {
-          await api(`/api/v1/analytics/reports/${report.id}`, { method: "DELETE" });
-          router.push("/demo/dashboard/analytics/reports");
+          await api(`/api/v1/reports/${report.id}`, { method: "DELETE" });
+          router.push("/demo/dashboard/reports");
         }}
       />
     </PageEnter>
@@ -136,7 +159,7 @@ export default function AnalyticsReportPage() {
 function BackLink() {
   return (
     <Link
-      href="/demo/dashboard/analytics/reports"
+      href="/demo/dashboard/reports"
       className="mb-4 inline-flex items-center gap-1.5 text-sm text-sub transition-colors hover:text-ink"
     >
       <ArrowLeft size={14} /> Reports

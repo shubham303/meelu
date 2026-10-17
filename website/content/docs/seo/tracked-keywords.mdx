@@ -1,9 +1,9 @@
 ---
 title: Tracked keywords
-description: Follow where you rank and how search demand moves for the keywords that matter to you.
+description: Follow how search demand moves for the keywords that matter to you, next to where you rank for them in Search Console.
 ---
 
-Search Console tells you about searches where you already appear. **Tracked keywords** follows specific keywords you choose, whether you rank for them yet or not. For each one it records your position in Google and how many people search it each month.
+**Tracked keywords** follows specific keywords you choose, whether you rank for them yet or not. For each one it shows twelve months of search demand (how many people search it each month) next to your position for it in Search Console.
 
 Open it from the **Tracked keywords** card on the SEO home screen.
 
@@ -11,25 +11,25 @@ Open it from the **Tracked keywords** card on the SEO home screen.
 
 There are two ways to add keywords:
 
-- **From a cluster.** Open a [keyword cluster](/docs/seo/keyword-clusters) and click **Track its ranking**. This tracks the cluster's main keyword in every one of your markets.
-- **By asking Meelu.** Click the **Track my main keywords** task card. Meelu tracks rankings and search volume for the main keyword of every cluster with a winnability of 50 or more. It tells you how many keywords that is before it starts.
+- **From a cluster.** Open a [keyword cluster](/docs/seo/keyword-clusters) and click **Track this keyword**. This tracks the cluster's main keyword in every one of your markets.
+- **By asking Meelu.** Click the **Track my main keywords** task card. Meelu tracks search volume for the main keyword of every cluster with a winnability of 50 or more. It tells you how many keywords that is before it starts.
 
 Tracking uses credits, so Meelu always tells you the count first. Up to 50 keywords can be tracked in one go. See [Credits](/docs/concepts/credits).
 
-The first time you track a keyword, Meelu also fills in its past positions for about the last twelve months, so you get a history straight away.
+When you track a keyword, Meelu fetches its monthly search volume for about the last twelve months, so you see the demand history straight away. Track it again later to add the newest months.
 
-<Callout type="info" title="When positions update">
-Each tracking run records Google's top 30 results on desktop at that moment. A run happens when you or Meelu start one. Run it again when you want fresh positions.
+<Callout type="info" title="Where positions come from">
+Meelu does not check Google's results for tracked keywords. Your position is your own Search Console data: the average position for searchers in that market, weighted by impressions, for each month. It updates when your Search Console data syncs. See [Search performance](/docs/seo/search-performance).
 </Callout>
 
 ## Reading the screen
 
 <Screenshot
   src="/docs/screens/seo-tracked.webp"
-  alt="Tracked keywords with 12 months of positions"
+  alt="Tracked keywords with 12 months of positions and demand"
   width={1280}
   height={1000}
-  caption="Tracked keywords with 12 months of positions."
+  caption="Tracked keywords with 12 months of positions and demand."
 />
 
 ### Summary cards
@@ -37,19 +37,19 @@ Each tracking run records Google's top 30 results on desktop at that moment. A r
 | Card | Meaning |
 | --- | --- |
 | **Tracked** | How many keywords you track in the chosen market. |
-| **In the top 10** | How many ranked on page one on the last run. |
-| **Moved** | How many changed position since the run before. |
-| **Not ranking yet** | How many are outside the top 30. |
+| **In the top 10** | How many have an average position of 10 or better in the last month with data. |
+| **Moved** | How many moved by a position or more since the month before. |
+| **Not ranking yet** | How many have no Search Console impressions. |
 
 ### The Keywords table
 
 | Column | Meaning |
 | --- | --- |
 | **Keyword** | The tracked search. Under it: your page that ranks for it. |
-| **You rank** | Your position on the last run, or **not in top 30**. |
-| **Change** | Positions gained (▲, green) or lost (▼, red) since the run before. |
-| **12-month position** | One bar per month. A taller bar means a better position. Green is the top 10, blue is 11 to 30, and a short grey bar is a month outside the top 30. Hover a bar to see the month and position. |
-| **Searches / mo** | Estimated monthly searches. |
+| **You rank** | Your Search Console position in the last month with data, or **no impressions**. |
+| **Change** | Positions gained (▲, green) or lost (▼, red) since the month before. |
+| **12-month position** | One bar per month. A taller bar means a better position. Green is the top 10, blue is below it, and a short grey bar is a month with no impressions. Hover a bar to see the month and position. |
+| **Searches / mo** | Estimated monthly searches, for the latest month. |
 | **Demand** | How search interest is moving (see below). |
 
 ### Demand labels
@@ -76,9 +76,8 @@ Meelu labels demand once it has at least six months of search volume:
 | Task card | What Meelu does |
 | --- | --- |
 | **Track my main keywords** | Starts tracking the main keyword of every cluster with winnability 50 or more. |
-| **Which pages are going up or down?** | Reads the ranking history and names the pages that moved most. For big drops, it names the result that moved above you. |
+| **Which pages are going up or down?** | Reads your Search Console position for the tracked keywords, month by month in each market, and names the pages that moved most, up and down. |
 | **Is demand seasonal?** | Says which keywords are seasonal, when each peaks, and how far ahead a page should be ready. |
-| **Who overtook me?** | For each keyword you lost since the last run, names the result that moved above you and what changed. |
 
 ## Tips
 

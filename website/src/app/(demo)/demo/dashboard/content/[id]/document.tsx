@@ -82,7 +82,10 @@ export function Document({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
+      StarterKit.configure({
+        heading: { levels: [2, 3, 4] },
+        link: { openOnClick: false },
+      }),
       Image.configure({ allowBase64: false }),
       Placeholder.configure({ placeholder: "Start writing, or hand the agent a brief…" }),
       Markdown,

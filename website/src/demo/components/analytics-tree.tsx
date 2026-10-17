@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { apiPaged, useCurrentSite } from "@demo/lib/use-api";
 import { cn } from "@demo/lib/utils";
 import { CHATS_PAGE_SIZE, chatHref, onChatsChanged, startNewChat } from "@demo/features/analytics/chats";
 import type { AnalyticsChatSummary } from "@demo/lib/types";
 
 const NEW_CHAT = "/demo/dashboard/analytics";
-const REPORTS = "/demo/dashboard/analytics/reports";
 
 export function AnalyticsTree({ canChat }: { canChat: boolean }) {
   const pathname = usePathname();
@@ -81,9 +80,6 @@ export function AnalyticsTree({ canChat }: { canChat: boolean }) {
           {loading ? "Loading…" : "Show more"}
         </button>
       )}
-      <Link href={REPORTS} className={row(REPORTS, pathname.startsWith(REPORTS))}>
-        <FileText size={13} className="shrink-0" /> Reports
-      </Link>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import type {
+  BacklinkOpportunity,
+  Competitor,
+  CompetitorsChange,
   KeywordCluster,
-  SeoListChange,
-  SeoListName,
-  SiteSeoLists,
   TrackedKeyword,
   TrackedOverview,
 } from "@/app/(demo)/demo/dashboard/seo/types";
@@ -10,19 +10,25 @@ import * as search from "../data/search";
 import * as seo from "../data/seo";
 import * as siteData from "../data/site";
 import * as traffic from "../data/traffic";
-import { b, MockHttpError, now, num, ok, paginate, slice, type Route } from "../core";
+import { ago, DAY } from "../rand";
+import { b, MockHttpError, newId, now, num, ok, paginate, slice, type Route } from "../core";
 
-const MAX_LIST_ITEMS = 500;
+const MAX_COMPETITORS = 50;
 const MAX_ITEMS_PER_CALL = 100;
 
 const state = {
   gscProperty: siteData.SITE.gscProperty ?? null,
   gaProperty: siteData.SITE.gaProperty ?? null,
   clusters: seo.CLUSTERS.map((c) => ({ ...c })) as KeywordCluster[],
-  lists: {
-    competitors: [...seo.COMPETITORS],
-    backlink_opportunities: [...seo.BACKLINK_OPPORTUNITIES],
-  } as Record<SeoListName, string[]>,
+  competitors: seo.COMPETITOR_SEEDS.map((c, i): Competitor => ({
+    id: `cmp_${i + 1}`,
+    domain: c.domain,
+    domainRank: seo.domainRankOf(c.domain),
+    backlinksFetchedAt: c.fetchedDaysAgo === undefined ? undefined : ago(c.fetchedDaysAgo * DAY),
+    createdAt: ago(c.addedDaysAgo * DAY),
+    backlinks: c.backlinks,
+  })),
+  dismissed: new Set<string>(),
   tracked: new Map<string, TrackedKeyword[]>(),
   sync: {
     search: { active: null as SyncRecord | null, last: null as SyncRecord | null },
@@ -86,7 +92,15 @@ export function addKeywordClusters(source: string, topic: string | null): number
 }
 
 export function trackKeywords(keywords: string[]): void {
-  trackRankings({ keywords });
+  trackVolumes({ keywords });
+}
+
+export function competitorDomains(): string[] {
+  return state.competitors.map((c) => c.domain);
+}
+
+export function opportunityDomains(): string[] {
+  return opportunities().map((o) => o.domain);
 }
 
 function belongsTo(domain: string, owner: string): boolean {
@@ -97,7 +111,7 @@ function withCompetitors(cluster: KeywordCluster): KeywordCluster {
   const serp = cluster.climb.map((r) => r.domain);
   return {
     ...cluster,
-    competitors: state.lists.competitors.filter((c) => serp.some((d) => belongsTo(d, c))),
+    competitors: competitorDomains().filter((c) => serp.some((d) => belongsTo(d, c))),
   };
 }
 
@@ -135,7 +149,12 @@ function rescore(id: string): KeywordCluster {
   const seed = seo.CLUSTER_SEEDS.get(id);
   if (!seed) throw new MockHttpError(404, "No such keyword cluster on this website.");
   const stamp = now();
-  const scored = { ...cluster, ...seo.scoreCluster(seed), metricsAt: stamp, updatedAt: stamp };
+  if (seed.verdict === "poisoned") {
+    const cleared = { ...cluster, metricsAt: stamp, updatedAt: stamp };
+    state.clusters = state.clusters.map((c) => (c.id === id ? cleared : c));
+    return withCompetitors(cleared);
+  }
+  const scored = { ...cluster, ...seo.scoreCluster(seed), serpVerdict: seo.verdictOf({ ...seed, scoredDaysAgo: 0 }), metricsAt: stamp, updatedAt: stamp };
   if (scored.ourPosition !== undefined) scored.isRanked = true;
   state.clusters = state.clusters.map((c) => (c.id === id ? scored : c));
   return withCompetitors(scored);
@@ -189,32 +208,30 @@ function normalizeKeyword(raw: unknown): string {
   return String(raw ?? "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
 }
 
-function trackRankings(body: Record<string, unknown>) {
+function trackVolumes(body: Record<string, unknown>) {
   const keywords = [...new Set((Array.isArray(b(body, "keywords")) ? (b(body, "keywords") as unknown[]) : []).map(normalizeKeyword))].filter(Boolean);
   if (!keywords.length) throw new MockHttpError(422, "Pass at least one keyword.");
   const markets = siteMarkets();
-  const backfilled: string[] = [];
-  const siteRanked: string[] = [];
+  const withoutData: string[] = [];
+  let found = 0;
   for (const market of markets) {
     const rows = trackedRows(market.country);
     for (const keyword of keywords) {
       const cluster = state.clusters.find((c) => c.mainKeyword === keyword && c.country === market.country);
       const existing = rows.find((r) => r.keyword === keyword);
-      if (existing) {
-        existing.lastTracked = now().slice(0, 10);
-      } else {
-        rows.push(seo.newTrackedRow(keyword, cluster));
-        if (market === markets[0]) backfilled.push(keyword);
+      if (!existing) rows.push(seo.newTrackedRow(keyword, cluster));
+      if (market === markets[0]) {
+        if (cluster || existing) found += 1;
+        else if (keyword.split(" ").length > 6) withoutData.push(keyword);
+        else found += 1;
       }
-      if (cluster?.ourPosition && !siteRanked.includes(keyword)) siteRanked.push(keyword);
     }
   }
   return {
     keywords: keywords.length,
-    backfilled,
-    snapshots: keywords.length * markets.length,
-    rows: keywords.length * markets.length * 30,
-    siteRanked,
+    months: seo.MONTHS.length,
+    rows: found * markets.length * seo.MONTHS.length,
+    withoutData,
   };
 }
 
@@ -239,28 +256,59 @@ function cleanDomains(raw: unknown): string[] {
   return cleaned;
 }
 
-function siteSeo(): SiteSeoLists {
-  return {
-    siteId: siteData.SITE_ID,
-    competitors: [...state.lists.competitors],
-    backlinkOpportunities: [...state.lists.backlink_opportunities],
-  };
+function findCompetitor(id: string): Competitor {
+  const competitor = state.competitors.find((c) => c.id === id);
+  if (!competitor) throw new MockHttpError(404, "No such competitor on this website.");
+  return competitor;
 }
 
-function changeList(name: SeoListName, verb: string, body: Record<string, unknown>): SeoListChange {
-  const items = cleanDomains(b(body, "items"));
-  const current = state.lists[name];
-  if (verb === "add") {
-    const added = items.filter((i) => !current.includes(i));
-    if (current.length + added.length > MAX_LIST_ITEMS) {
-      throw new MockHttpError(409, `The ${name} list holds at most ${MAX_LIST_ITEMS} entries.`);
-    }
-    state.lists[name] = [...current, ...added];
-    return { list: name, added, removed: [], unchanged: items.filter((i) => current.includes(i)), items: [...state.lists[name]] };
+export function addCompetitors(domains: string[]): CompetitorsChange {
+  const current = competitorDomains();
+  const added = domains.filter((d) => !current.includes(d) && d !== siteData.SITE.domain);
+  if (current.length + added.length > MAX_COMPETITORS) {
+    throw new MockHttpError(409, `A website keeps at most ${MAX_COMPETITORS} competitors.`);
   }
-  const removed = items.filter((i) => current.includes(i));
-  state.lists[name] = current.filter((i) => !removed.includes(i));
-  return { list: name, added: [], removed, unchanged: items.filter((i) => !current.includes(i)), items: [...state.lists[name]] };
+  const stamp = now();
+  state.competitors.push(
+    ...added.map((domain): Competitor => ({ id: newId("cmp"), domain, domainRank: seo.domainRankOf(domain) ?? 300, createdAt: stamp, backlinks: 0 })),
+  );
+  return { added, removed: [], unchanged: domains.filter((d) => !added.includes(d)), competitors: competitorDomains() };
+}
+
+export function removeCompetitors(domains: string[]): CompetitorsChange {
+  const current = competitorDomains();
+  const removed = domains.filter((d) => current.includes(d));
+  state.competitors = state.competitors.filter((c) => !removed.includes(c.domain));
+  return { added: [], removed, unchanged: domains.filter((d) => !removed.includes(d)), competitors: competitorDomains() };
+}
+
+export function fetchBacklinks(domains: string[]) {
+  const stamp = now();
+  const fetched: Array<{ domain: string; backlinks: number }> = [];
+  const notSaved: string[] = [];
+  for (const domain of domains) {
+    const competitor = state.competitors.find((c) => c.domain === domain);
+    if (!competitor) {
+      notSaved.push(domain);
+      continue;
+    }
+    competitor.backlinks = competitor.backlinks || seo.backlinkCountFor(domain);
+    competitor.backlinksFetchedAt = stamp;
+    fetched.push({ domain, backlinks: competitor.backlinks });
+  }
+  return { fetched, notSaved };
+}
+
+function opportunities(): BacklinkOpportunity[] {
+  const fetched = new Set(state.competitors.filter((c) => c.backlinksFetchedAt).map((c) => c.domain));
+  return seo.opportunitiesFor(fetched, state.dismissed);
+}
+
+export function dismissOpportunities(domains: string[]) {
+  const known = new Set(opportunities().map((o) => o.domain));
+  const dismissed = domains.filter((d) => known.has(d));
+  for (const d of dismissed) state.dismissed.add(d);
+  return { dismissed, notFound: domains.filter((d) => !known.has(d)) };
 }
 
 function pageRowsSorted(days: number, q: URLSearchParams) {
@@ -347,9 +395,18 @@ function trafficOverview(q: URLSearchParams) {
 }
 
 export const ROUTES: Route[] = [
-  ["GET", /^\/api\/v1\/site\/seo$/, () => ok(siteSeo())],
-  ["POST", /^\/api\/v1\/site\/seo\/(competitors|backlink_opportunities)\/(add|remove)$/, (m, _q, body) =>
-    ok(changeList(m[1] as SeoListName, m[2], body))],
+  ["GET", /^\/api\/v1\/site\/seo\/competitors$/, () =>
+    ok([...state.competitors].sort((a, c) => (c.domainRank ?? 0) - (a.domainRank ?? 0)))],
+  ["POST", /^\/api\/v1\/site\/seo\/competitors$/, (_m, _q, body) => ok(addCompetitors(cleanDomains(b(body, "domains"))))],
+  ["DELETE", /^\/api\/v1\/site\/seo\/competitors\/([^/]+)$/, (m) => {
+    const competitor = findCompetitor(m[1]);
+    state.competitors = state.competitors.filter((c) => c.id !== competitor.id);
+    return ok(null);
+  }],
+  ["POST", /^\/api\/v1\/site\/seo\/backlinks\/fetch$/, (_m, _q, body) => ok(fetchBacklinks(cleanDomains(b(body, "domains"))))],
+  ["GET", /^\/api\/v1\/site\/seo\/backlink-opportunities$/, (_m, q) => paginate(opportunities(), q)],
+  ["POST", /^\/api\/v1\/site\/seo\/backlink-opportunities\/dismiss$/, (_m, _q, body) =>
+    ok(dismissOpportunities(cleanDomains(b(body, "domains"))))],
 
   ["GET", /^\/api\/v1\/site\/seo\/clusters$/, (_m, q) => listClusters(q)],
   ["GET", /^\/api\/v1\/site\/seo\/clusters\/([^/]+)$/, (m) => ok(withCompetitors(findCluster(m[1])))],
@@ -361,7 +418,7 @@ export const ROUTES: Route[] = [
   }],
 
   ["GET", /^\/api\/v1\/site\/seo\/tracked$/, (_m, q) => ok(trackedOverview(q))],
-  ["POST", /^\/api\/v1\/site\/seo\/tracked\/rankings$/, (_m, _q, body) => ok(trackRankings(body))],
+  ["POST", /^\/api\/v1\/site\/seo\/tracked\/volumes$/, (_m, _q, body) => ok(trackVolumes(body))],
 
   ["GET", /^\/api\/v1\/site\/search-data$/, () => ok(searchOverview())],
   ["GET", /^\/api\/v1\/site\/search-data\/series$/, (_m, q) => {

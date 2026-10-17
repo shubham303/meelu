@@ -1,4 +1,4 @@
-import type { AnalyticsChat, AnalyticsChatMessage, AnalyticsReport } from "@demo/lib/types";
+import type { AnalyticsChat, AnalyticsChatMessage, Report } from "@demo/lib/types";
 import { ago, DAY, HOUR, NOW, seeded } from "../rand";
 import { SITE_ID } from "./site";
 
@@ -315,11 +315,65 @@ ${hbar(queriesTable.flatMap((r) => [{ label: `${r.q} · before`, value: r.ctr0 }
 <div class="source">Source: Search Console query × page rows for two 28-day windows, in <code>gsc_query_compare_28d</code>; queries with fewer than 5,000 impressions left out.</div>`,
 );
 
-export const REPORTS: AnalyticsReport[] = [
-  { id: "rp_signups", createdAt: ago(9 * DAY + 2 * HOUR), updatedAt: ago(9 * DAY + 2 * HOUR), siteId: SITE_ID, title: "Which site sections drive trial signups", html: SIGNUP_REPORT, createdBy: "agent" },
-  { id: "rp_clicks", createdAt: ago(3 * DAY + 5 * HOUR), updatedAt: ago(2 * DAY + 1 * HOUR), siteId: SITE_ID, title: `Organic clicks changepoint, ${day(CHANGE_DAY)}`, html: CLICKS_REPORT, createdBy: "agent" },
-  { id: "rp_forecast", createdAt: ago(1 * DAY + 3 * HOUR), updatedAt: ago(1 * DAY + 3 * HOUR), siteId: SITE_ID, title: "Organic clicks forecast, next 8 weeks", html: FORECAST_REPORT, createdBy: "agent" },
-  { id: "rp_queries", createdAt: ago(6 * DAY), updatedAt: ago(6 * DAY), siteId: SITE_ID, title: "Queries gaining impressions but losing clicks", html: QUERIES_REPORT, createdBy: "agent" },
+export const REPORTS: Report[] = [
+  { id: "rp_signups", createdAt: ago(9 * DAY + 2 * HOUR), updatedAt: ago(9 * DAY + 2 * HOUR), siteId: SITE_ID, desk: "analytics", title: "Which site sections drive trial signups", html: SIGNUP_REPORT, createdBy: "agent" },
+  { id: "rp_clicks", createdAt: ago(3 * DAY + 5 * HOUR), updatedAt: ago(2 * DAY + 1 * HOUR), siteId: SITE_ID, desk: "analytics", title: `Organic clicks changepoint, ${day(CHANGE_DAY)}`, html: CLICKS_REPORT, createdBy: "agent" },
+  { id: "rp_forecast", createdAt: ago(1 * DAY + 3 * HOUR), updatedAt: ago(1 * DAY + 3 * HOUR), siteId: SITE_ID, desk: "analytics", title: "Organic clicks forecast, next 8 weeks", html: FORECAST_REPORT, createdBy: "agent" },
+  { id: "rp_queries", createdAt: ago(6 * DAY), updatedAt: ago(6 * DAY), siteId: SITE_ID, desk: "analytics", title: "Queries gaining impressions but losing clicks", html: QUERIES_REPORT, createdBy: "agent" },
+  {
+    id: "rp_seo_plan",
+    createdAt: ago(4 * DAY + 6 * HOUR),
+    updatedAt: ago(4 * DAY + 6 * HOUR),
+    siteId: SITE_ID,
+    desk: "seo",
+    title: "Content plan: getting paid on time",
+    html: reportHtmlFromAnswer(
+      "Content plan: getting paid on time",
+      [
+        "Built 9 keyword clusters for getting paid on time, added 2 you already had, and kept 7 that fit.",
+        "",
+        "**Hub page (new):** /guides/getting-paid — targets *how to get clients to pay* (2,900/mo) and links every page below.",
+        "",
+        "**Pages to update**",
+        "- /blog/invoice-payment-terms — add the *net 30 meaning* and *due on receipt* clusters; it already ranks 12.",
+        "- /blog/late-fee-invoice — add the *late fee wording* cluster as its own section.",
+        "",
+        "**New pages**",
+        "- Deposit invoice template — the transactional cluster no page covers (720/mo).",
+        "- What to do when a client will not pay — the step after the reminder emails.",
+        "",
+        "Nothing is written; which pages to create is for the owner to decide.",
+      ].join("\n"),
+      "SEO desk · ledgerly.app",
+      "keyword clusters built from DataForSEO keyword data, and the site's crawled pages",
+    ),
+    createdBy: "agent",
+  },
+  {
+    id: "rp_tech_review",
+    createdAt: ago(2 * DAY + 4 * HOUR),
+    updatedAt: ago(2 * DAY + 4 * HOUR),
+    siteId: SITE_ID,
+    desk: "technical-seo",
+    title: "Technical review: what is worth fixing first",
+    html: reportHtmlFromAnswer(
+      "Technical review: what is worth fixing first",
+      [
+        "Reviewed the open technical findings with the owner. Three are worth the time; the rest are cosmetic.",
+        "",
+        "| Finding | Pages | Why it matters |",
+        "|---|---|---|",
+        "| Orphan pages | 3 | /compare/bonsai gets no internal links, so Google has not crawled it. |",
+        "| Duplicate titles | 6 | Help articles share one title, so search results cannot tell them apart. |",
+        "| Redirect chains | 4 | Old /pricing URLs hop twice before landing. |",
+        "",
+        "Rejected as cosmetic: missing alt text on decorative icons, and two meta descriptions a few characters over length.",
+      ].join("\n"),
+      "Technical SEO desk · ledgerly.app",
+      "the technical audit of the latest crawl",
+    ),
+    createdBy: "agent",
+  },
 ];
 
 type Turn = [role: "user" | "assistant", text: string];
@@ -453,7 +507,7 @@ for (const seed of CHATS_SEED) {
   });
 }
 
-export function reportHtmlFromAnswer(title: string, markdown: string): string {
+export function reportHtmlFromAnswer(title: string, markdown: string, meta = "Analytics chat · ledgerly.app", source = "the site's Search Console and Analytics tables in the analytics workspace"): string {
   const blocks = markdown
     .replace(/```chart\n([\s\S]*?)\n```/g, (_m, html: string) => {
       const body = html.match(/<body>([\s\S]*)<\/body>/);
@@ -479,5 +533,5 @@ export function reportHtmlFromAnswer(title: string, markdown: string): string {
       return `<p>${inline(raw.replace(/\n/g, " "))}</p>`;
     })
     .join("\n");
-  return page(title, "Analytics chat · ledgerly.app", `${html}<div class="source">Source: the site's Search Console and Analytics tables in the analytics workspace.</div>`);
+  return page(title, meta, `${html}<div class="source">Source: ${esc(source)}.</div>`);
 }

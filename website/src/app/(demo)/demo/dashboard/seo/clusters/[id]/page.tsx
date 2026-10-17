@@ -22,6 +22,12 @@ import { countryName } from "../../market";
 import { SEO_ASK, TaskCards } from "../../task-cards";
 import type { ClimbResult, KeywordCluster } from "../../types";
 import { percent, position } from "../../winnability";
+import {
+  IMPORTANCE_MEANING,
+  INTENT_MEANING,
+  ImportanceBadge,
+  IntentBadge,
+} from "../../signals";
 
 const FIT: Record<
   string,
@@ -101,15 +107,15 @@ export default function ClusterDetailPage() {
               disabled={busy !== null}
               onClick={() =>
                 void run("track", async () => {
-                  await api("/api/v1/site/seo/tracked/rankings", {
+                  await api("/api/v1/site/seo/tracked/volumes", {
                     method: "POST",
                     body: { keywords: [cluster.mainKeyword] },
                   });
-                  return "Tracking started. Rankings land on the Tracked keywords page.";
+                  return "Tracked. Its demand and your Search Console position are on the Tracked keywords page.";
                 })
               }
             >
-              Track its ranking
+              Track this keyword
             </Button>
             <Button
               variant="outline"
@@ -176,7 +182,7 @@ export default function ClusterDetailPage() {
         <StatCard
           label="Searches / mo"
           value={cluster.volume.toLocaleString()}
-          hint="main keyword, clickstream"
+          hint="all keywords, clickstream"
         />
       </Stagger>
 
@@ -190,7 +196,20 @@ export default function ClusterDetailPage() {
                 : `A new page starts below the top 10 with your domain's strength (${cluster.ourStrength ?? 0}). Each result above it, and the chance of passing it.`}
             </p>
           </div>
-          {scored ? (
+          {cluster.serpVerdict === "suspect" ? (
+            <div className="mx-4 mt-4 flex gap-2 rounded-lg border border-warn/40 bg-warn/5 p-3 text-sm text-ink">
+              Some results for this keyword look out of line. Google sometimes
+              shows rank trackers fake results, so this page and the score
+              built on it may be wrong. Check the keyword in Google yourself
+              before acting on it.
+            </div>
+          ) : null}
+          {cluster.serpVerdict === "poisoned" ? (
+            <p className="px-4 py-8 text-center text-sm text-sub">
+              Google appears to be showing rank trackers fake results for this
+              keyword, so it was not scored. Check it in Google yourself.
+            </p>
+          ) : scored ? (
             <Climb results={cluster.climb} />
           ) : (
             <p className="px-4 py-8 text-center text-sm text-sub">
@@ -205,6 +224,19 @@ export default function ClusterDetailPage() {
         </Card>
 
         <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5">
+          <Card className="flex flex-col gap-2.5">
+            <span className="text-sm font-medium text-ink">Who searches this</span>
+            <span className="flex items-center gap-2 text-xs text-sub">
+              <ImportanceBadge importance={cluster.importance} />
+              {cluster.importance
+                ? IMPORTANCE_MEANING[cluster.importance]
+                : "not labelled yet"}
+            </span>
+            <span className="flex items-center gap-2 text-xs text-sub">
+              <IntentBadge intent={cluster.intent} />
+              {cluster.intent ? INTENT_MEANING[cluster.intent] : "not labelled yet"}
+            </span>
+          </Card>
           <Card className="flex flex-col gap-2.5">
             <span className="text-sm font-medium text-ink">
               Keywords in this cluster

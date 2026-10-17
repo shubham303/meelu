@@ -788,13 +788,18 @@ export interface ContentPiece extends ContentPieceSlim, PieceMedia {
   sourcePageId?: string | null;
 }
 
-export interface AnalyticsReport extends BaseEntity, SiteScoped {
+export const REPORT_DESKS = ["analytics", "seo", "technical-seo"] as const;
+
+export type ReportDesk = (typeof REPORT_DESKS)[number];
+
+export interface Report extends BaseEntity, SiteScoped {
+  desk: ReportDesk;
   title: string;
   html: string;
   createdBy: "agent" | "user";
 }
 
-export type AnalyticsReportSummary = Omit<AnalyticsReport, "html"> & { htmlBytes: number };
+export type ReportSummary = Omit<Report, "html"> & { htmlBytes: number };
 
 export interface AnalyticsChat {
   id: string;
