@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import random
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
@@ -10,43 +12,53 @@ from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller
 from src.providers.seo_data.service import seo_data
 from src.providers.seo_data.shape import own_domain
-from src.seo.keyword_clusters.cluster_competitor_repository import seo_cluster_competitors
 from src.seo.keyword_clusters.constants import (
     CLUSTER_NOT_FOUND,
-    DISCOVERED_PER_SOURCE,
-    MAX_COMPETITORS_READ,
+    COMPETITOR_KEYWORDS_PER_CLUSTER,
+    DISCOVERED_FROM_SEEDS,
+    KEYWORD_NOT_IN_CLUSTER,
+    MAIN_KEYWORD_STAYS,
+    MAX_COMPETITOR_KEYWORDS_PER_DOMAIN,
     METRICS_TTL,
-    MIN_COMPETITORS_FOR_GAP,
+    MIN_COMPETITOR_KEYWORDS_PER_DOMAIN,
+    NO_SAVED_COMPETITORS,
     NOISE_SHARE_OF_CORE,
     PAGE_WEIGHT,
-    RANKED_PULL,
-    SERP_DEPTH,
-    SERP_DEVICE,
-    SERP_TTL,
+    RELEVANCE_ROUND,
     TOP_N,
 )
-from src.seo.keyword_clusters.judging import intent_fits, relevant_keywords, split_groups
+from src.seo.keyword_clusters.judging import (
+    intent_fits,
+    label_keywords,
+    relevant_keywords,
+    split_groups,
+)
 from src.seo.keyword_clusters.repository import seo_keyword_clusters
 from src.seo.keyword_clusters.schemas import (
     ClusterBrief,
+    ClusterDeleted,
     ClusterDraft,
     ClusterFilters,
     ClusterMetrics,
     ClusterRecord,
-    ClustersCreated,
-    CreateClustersRequest,
+    ClustersDeleted,
+    ClustersDeleteRequest,
+    CompetitorClustersRequest,
     KeywordFacts,
+    KeywordsClusterRequest,
     MetricsComputed,
+    SearchConsoleClustersRequest,
+    SeedClustersRequest,
     normalize_keyword,
 )
 from src.seo.keyword_clusters.winnability import climb, pass_chance, smoothed, strength
 from src.seo.market import markets
+from src.seo.serp_results.constants import Verdict
+from src.seo.serp_results.schemas import SerpPull
+from src.seo.serp_results.service import serp_results_service
 from src.seo.site_search.repositories.site_search_daily import site_search_dailies
-from src.seo.site_seo.competitor_repository import seo_competitors
-from src.seo.site_seo.schemas import CompetitorRecord
+from src.seo.site_seo.competitor_repository import site_competitors
 from src.sites.schemas import SiteRecord
-
-TOP_CLUSTERS = 20
 
 
 def whole(value) -> int | None:
@@ -63,19 +75,67 @@ def keyword_facts(item: dict) -> KeywordFacts:
     )
 
 
+def website_of(site: SiteRecord) -> dict[str, str]:
+    return {"domain": site.domain, "about": site.summary or ""}
+
+
 def belongs_to(domain: str, site_domain: str) -> bool:
     return domain == site_domain or domain.endswith(f".{site_domain}")
 
 
-def gap_keywords(
-    rivals: list[tuple[CompetitorRecord, set[str]]], ours: set[str], limit: int
-) -> list[str]:
-    counts: dict[str, int] = {}
-    for _, keywords in rivals:
-        for keyword in keywords:
-            counts[keyword] = counts.get(keyword, 0) + 1
-    gaps = [k for k, n in counts.items() if n >= MIN_COMPETITORS_FOR_GAP and k not in ours]
-    return sorted(gaps, key=lambda k: (-counts[k], k))[:limit]
+def cluster_volume(
+    members: list[str], existing: ClusterRecord | None, facts: dict[str, KeywordFacts]
+) -> int:
+    added = members[1:] if existing else members
+    return (existing.volume if existing else 0) + sum(
+        facts[k].clickstream_volume or 0 for k in added
+    )
+
+
+def cluster_ids_of(keywords: list[str], records: list[ClusterRecord]) -> dict[str, str]:
+    wanted = set(keywords)
+    found: dict[str, str] = {}
+    for record in records:
+        for keyword in record.keywords:
+            if keyword in wanted:
+                found.setdefault(keyword, record.id)
+    return found
+
+
+def serp_targets(serp: dict, site_domain: str) -> tuple[list[dict], dict | None, list[dict], str]:
+    organic = sorted(
+        (
+            {
+                "position": int(i["rank_group"]),
+                "url": str(i["url"]),
+                "domain": own_domain(i["url"]),
+                "title": i.get("title"),
+                "description": i.get("description"),
+            }
+            for i in serp.get("items") or []
+            if isinstance(i, dict)
+            and i.get("type") == "organic"
+            and i.get("url")
+            and isinstance(i.get("rank_group"), int)
+        ),
+        key=lambda r: r["position"],
+    )
+    ours = next((r for r in organic if belongs_to(r["domain"], site_domain)), None)
+    start = ours["position"] if ours else TOP_N + 1
+    above = [
+        r for r in organic if r["position"] < start and not belongs_to(r["domain"], site_domain)
+    ]
+    our_target = ours["url"] if ours else f"https://{site_domain}/"
+    return organic, ours, above, our_target
+
+
+def rows_per_competitor(limit: int, competitors: int) -> int:
+    wanted = math.ceil(COMPETITOR_KEYWORDS_PER_CLUSTER * limit / max(competitors, 1))
+    return min(MAX_COMPETITOR_KEYWORDS_PER_DOMAIN, max(MIN_COMPETITOR_KEYWORDS_PER_DOMAIN, wanted))
+
+
+def by_volume(records: list[ClusterRecord]) -> list[ClusterRecord]:
+    return sorted(records, key=lambda r: (-r.volume, r.main_keyword))
 
 
 def brief(record: ClusterRecord) -> ClusterBrief:
@@ -93,116 +153,291 @@ class KeywordClusterService:
         found = await seo_keyword_clusters.get(db, site_id, cluster_id)
         if found is None:
             raise HTTPException(404, CLUSTER_NOT_FOUND)
-        return (await self._with_competitors(db, [found]))[0]
+        return found
 
     async def list(
         self, db: AsyncSession, site_id: str, filters: ClusterFilters, paging: PaginationParams
     ) -> PaginatedApiResponse[ClusterRecord]:
-        page = await seo_keyword_clusters.list(db, site_id, filters, paging)
-        page.data = await self._with_competitors(db, page.data)
-        return page
+        return await seo_keyword_clusters.list(db, site_id, filters, paging)
 
     async def delete(self, db: AsyncSession, site_id: str, cluster_id: str) -> None:
         if not await seo_keyword_clusters.delete(db, site_id, cluster_id):
             raise HTTPException(404, CLUSTER_NOT_FOUND)
 
-    async def create_clusters(
+    async def delete_many(
+        self, db: AsyncSession, site: SiteRecord, body: ClustersDeleteRequest
+    ) -> ClustersDeleted:
+        found = {
+            c.id: c for c in await seo_keyword_clusters.get_many(db, site.id, body.cluster_ids)
+        }
+        unclustered: list[str] = []
+        market = markets(site.markets, site.language)[0]
+        for keyword in body.keywords:
+            cluster = await seo_keyword_clusters.containing(
+                db, site.id, keyword, market["location_code"], market["language_code"]
+            )
+            if cluster is None:
+                unclustered.append(keyword)
+            else:
+                found.setdefault(cluster.id, cluster)
+        await seo_keyword_clusters.delete_many(db, site.id, list(found))
+        return ClustersDeleted(
+            deleted=[
+                ClusterDeleted(id=c.id, main_keyword=c.main_keyword, keywords=c.keywords)
+                for c in found.values()
+            ],
+            missing_ids=[i for i in body.cluster_ids if i not in found],
+            unclustered_keywords=unclustered,
+        )
+
+    async def remove_keywords(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        site_id: str,
+        cluster_id: str,
+        body: KeywordsClusterRequest,
+    ) -> ClusterRecord:
+        cluster = await self.get(db, site_id, cluster_id)
+        keywords = body.keywords
+        absent = [k for k in keywords if k not in cluster.keywords]
+        if absent:
+            raise HTTPException(404, KEYWORD_NOT_IN_CLUSTER.format(keywords=", ".join(absent)))
+        if cluster.main_keyword in keywords:
+            raise HTTPException(409, MAIN_KEYWORD_STAYS.format(keyword=cluster.main_keyword))
+        market = {"location_code": cluster.location_code, "language_code": cluster.language_code}
+        facts = await self._facts(db, caller, keywords, market)
+        removed = sum(facts[k].clickstream_volume or 0 for k in keywords if k in facts)
+        remaining = [k for k in cluster.keywords if k not in keywords]
+        searched = await self._search_console_queries(db, site_id)
+        updated = await seo_keyword_clusters.set_members(
+            db,
+            site_id,
+            cluster_id,
+            remaining,
+            max(cluster.volume - removed, 0),
+            bool(searched.intersection(remaining)) or cluster.our_position is not None,
+        )
+        return updated
+
+    async def from_search_console(
         self,
         db: AsyncSession,
         caller: Caller,
         user_id: str,
         site: SiteRecord,
-        body: CreateClustersRequest,
-    ) -> ClustersCreated:
+        body: SearchConsoleClustersRequest,
+    ) -> list[str]:
+        totals = await site_search_dailies.query_window_totals(db, site.id)
+        ordered = sorted(
+            totals,
+            key=lambda t: -(t.impressions_28d + t.impressions_prev_28d + t.impressions_ly_28d),
+        )
+        raw = [t.query for t in ordered][: body.limit]
+        saved = await self._cluster(db, caller, user_id, site, raw, [], body.min_volume)
+        return [r.main_keyword for r in by_volume(saved)]
+
+    async def from_seeds(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        body: SeedClustersRequest,
+    ) -> list[str]:
         market = markets(site.markets, site.language)[0]
-        searched = await self._search_console_queries(db, site.id)
-        ours = searched | await self._ranked(db, caller, site.domain, market)
-        rivals = await self._competitor_keywords(db, caller, site.id, market)
+        await db.commit()
+        discovered = await seo_data.discover_keywords(
+            caller, body.seeds, DISCOVERED_FROM_SEEDS, market
+        )
+        raw = [*body.seeds, *discovered]
+        saved = await self._cluster(db, caller, user_id, site, raw, body.seeds, body.min_volume)
+        return [r.main_keyword for r in by_volume(saved)]
 
-        if body.source == "seeds":
-            await db.commit()
-            discovered = await seo_data.discover_keywords(
-                caller, body.seeds, DISCOVERED_PER_SOURCE, market
-            )
-            raw = [*body.seeds, *discovered]
-        elif body.source == "search_console":
-            raw = await self._top_search_console_queries(db, site.id, body.limit)
-        elif body.source == "ranked_keywords":
-            raw = await self._ranked_by_traffic(db, caller, site.domain, market, body.limit)
-        else:
-            raw = gap_keywords(rivals, ours, body.limit)
-
+    async def _cluster(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        raw: list[str],
+        seeds: list[str],
+        min_volume: int | None,
+    ) -> list[ClusterRecord]:
+        market = markets(site.markets, site.language)[0]
         candidates = [k for k in dict.fromkeys(normalize_keyword(r) for r in raw) if k]
         clustered = await seo_keyword_clusters.clustered_keywords(
             db, site.id, market["location_code"], market["language_code"]
         )
         fresh = [k for k in candidates if k not in clustered]
 
-        facts = await self._facts(db, caller, fresh, market)
-        cores = {f.core_keyword or f.keyword for f in facts.values()}
-        missing_cores = [c for c in cores if c not in facts]
-        core_facts = {**facts, **await self._facts(db, caller, missing_cores, market)}
-
-        def threshold(fact: KeywordFacts) -> float:
-            if body.min_volume is not None:
-                return body.min_volume
-            core = core_facts.get(fact.core_keyword or fact.keyword)
-            core_volume = (core.ads_volume if core else None) or fact.ads_volume or 0
-            return max(NOISE_SHARE_OF_CORE * core_volume, 1)
-
-        meaningful = [
-            f.keyword
-            for f in facts.values()
-            if f.clickstream_volume is not None and f.clickstream_volume >= threshold(f)
-        ]
-        website = {"domain": site.domain, "about": site.summary or ""}
         await db.commit()
-        relevant = await relevant_keywords(caller, website, body.seeds, meaningful)
+        relevant = await relevant_keywords(caller, website_of(site), seeds, fresh)
+        facts, meaningful = await self._meaningful(db, caller, relevant, market, min_volume)
 
-        groups: dict[str, list[str]] = {}
-        for keyword in relevant:
-            groups.setdefault(facts[keyword].core_keyword or keyword, []).append(keyword)
-        ordered = [
-            sorted(members, key=lambda k: (-(facts[k].clickstream_volume or 0), k))
-            for members in groups.values()
+        return await self._place(db, caller, user_id, site, market, meaningful, facts, seeds)
+
+    async def from_competitors(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        body: CompetitorClustersRequest,
+    ) -> list[str]:
+        competitors = await site_competitors.list(db, site.id)
+        if not competitors:
+            raise HTTPException(409, NO_SAVED_COMPETITORS)
+        market = markets(site.markets, site.language)[0]
+        await db.commit()
+        rows = rows_per_competitor(body.limit, len(competitors))
+        ranked: dict[str, None] = {}
+        for competitor in competitors:
+            pulled = await seo_data.ranked_keywords(
+                caller,
+                competitor.domain,
+                rows,
+                [],
+                market["location_code"],
+                market["language_code"],
+            )
+            ranked.update(
+                dict.fromkeys(normalize_keyword(r["keyword"]) for r in pulled["rankings"])
+            )
+        candidates = [k for k in ranked if k]
+
+        impressed = {
+            normalize_keyword(q)
+            for q in await site_search_dailies.queries_with_impressions(db, site.id, body.lookback)
+        }
+        unseen = [k for k in candidates if k not in impressed]
+        clustered = await seo_keyword_clusters.clustered_keywords(
+            db, site.id, market["location_code"], market["language_code"]
+        )
+        fresh = [k for k in unseen if k not in clustered]
+
+        random.shuffle(fresh)
+        website = website_of(site)
+        facts: dict[str, KeywordFacts] = {}
+        picked: list[str] = []
+        judged = 0
+        while len(picked) < body.limit and judged < len(fresh):
+            batch = fresh[judged : judged + RELEVANCE_ROUND]
+            judged += len(batch)
+            await db.commit()
+            relevant = await relevant_keywords(caller, website, [], batch)
+            found, meaningful = await self._meaningful(
+                db, caller, relevant, market, body.min_volume
+            )
+            facts.update(found)
+            picked.extend(meaningful)
+        picked = picked[: body.limit]
+
+        drafts = [
+            ClusterDraft(
+                main_keyword=k,
+                keywords=[k],
+                core_keyword=facts[k].core_keyword,
+                seeds=[],
+                location_code=market["location_code"],
+                language_code=market["language_code"],
+                volume=facts[k].clickstream_volume or 0,
+            )
+            for k in picked
         ]
+        saved = await self._save(db, caller, user_id, site, drafts)
+        searched = await self._search_console_queries(db, site.id)
+        await seo_keyword_clusters.mark_ranked(
+            db, site.id, [r.id for r in saved if searched.intersection(r.keywords)]
+        )
+        return [r.main_keyword for r in by_volume(saved)]
+
+    async def add_keywords(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        body: KeywordsClusterRequest,
+    ) -> list[tuple[str, str]]:
+        market = markets(site.markets, site.language)[0]
+        location_code, language_code = market["location_code"], market["language_code"]
+        keywords = body.keywords
+        existing = await seo_keyword_clusters.containing_any(
+            db, site.id, keywords, location_code, language_code
+        )
+        placed = cluster_ids_of(keywords, existing)
+        missing = [k for k in keywords if k not in placed]
+        if missing:
+            facts = await self._facts(db, caller, missing, market)
+            for keyword in missing:
+                facts.setdefault(keyword, KeywordFacts(keyword=keyword))
+            cores = {facts[k].core_keyword for k in missing} - {None, *missing}
+            clustered = await seo_keyword_clusters.clustered_keywords(
+                db, site.id, location_code, language_code
+            )
+            new_cores = sorted(c for c in cores if c not in clustered)
+            facts.update(await self._facts(db, caller, new_cores, market))
+            for core in new_cores:
+                facts.setdefault(core, KeywordFacts(keyword=core, core_keyword=core))
+            members = [*missing, *new_cores]
+            saved = await self._place(db, caller, user_id, site, market, members, facts, [])
+            placed.update(cluster_ids_of(missing, saved))
+        return [(k, placed[k]) for k in keywords]
+
+    async def _place(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        market: dict,
+        keywords: list[str],
+        facts: dict[str, KeywordFacts],
+        seeds: list[str],
+    ) -> list[ClusterRecord]:
+        groups: dict[str, list[str]] = {}
+        for keyword in keywords:
+            groups.setdefault(facts[keyword].core_keyword or keyword, []).append(keyword)
+        existing = await seo_keyword_clusters.with_cores(
+            db, site.id, market["location_code"], market["language_code"], list(groups)
+        )
+        by_main = {c.main_keyword: c for c in existing}
+        leaders: dict[str, list[str]] = {}
+        for cluster in existing:
+            leaders.setdefault(cluster.core_keyword or "", []).append(cluster.main_keyword)
+        ordered = [
+            (
+                sorted(members, key=lambda k: (-(facts[k].clickstream_volume or 0), k)),
+                leaders.get(core, []),
+            )
+            for core, members in groups.items()
+        ]
+        await db.commit()
         clusters = await split_groups(caller, ordered)
 
         drafts = [
             ClusterDraft(
                 main_keyword=cluster[0],
                 keywords=cluster,
-                core_keyword=facts[cluster[0]].core_keyword,
-                seeds=body.seeds,
+                core_keyword=(
+                    by_main[cluster[0]].core_keyword
+                    if cluster[0] in by_main
+                    else facts[cluster[0]].core_keyword
+                ),
+                seeds=seeds,
                 location_code=market["location_code"],
                 language_code=market["language_code"],
-                volume=facts[cluster[0]].clickstream_volume or 0,
+                volume=cluster_volume(cluster, by_main.get(cluster[0]), facts),
             )
             for cluster in clusters
         ]
-        saved = await seo_keyword_clusters.upsert_many(db, user_id, site.id, drafts)
+        saved = await self._save(db, caller, user_id, site, drafts)
+        searched = await self._search_console_queries(db, site.id)
         await seo_keyword_clusters.mark_ranked(
-            db, site.id, [r.id for r in saved if ours.intersection(r.keywords)]
+            db, site.id, [r.id for r in saved if searched.intersection(r.keywords)]
         )
-        await seo_cluster_competitors.link(
-            db,
-            [
-                (r.id, competitor.id)
-                for r in saved
-                for competitor, keywords in rivals
-                if keywords.intersection(r.keywords)
-            ],
-        )
-        top = sorted(saved, key=lambda r: (-r.volume, r.main_keyword))[:TOP_CLUSTERS]
-        return ClustersCreated(
-            source=body.source,
-            candidates=len(candidates),
-            already_clustered=len(candidates) - len(fresh),
-            noise=len(fresh) - len(meaningful),
-            irrelevant=len(meaningful) - len(relevant),
-            clusters=len(saved),
-            top=[brief(r) for r in top],
-        )
+        return saved
 
     async def compute_metrics(
         self,
@@ -218,98 +453,162 @@ class KeywordClusterService:
         )
         done: list[ClusterRecord] = []
         failed: list[str] = []
-        for cluster in clusters:
-            try:
-                scored = await self._score(db, caller, site, cluster)
-            except ProviderRequestError:
+        poisoned: list[str] = []
+        for cluster, scored in await self._score(db, caller, site, clusters):
+            if not isinstance(scored, ClusterRecord):
                 failed.append(cluster.main_keyword)
                 continue
-            if scored is None:
-                failed.append(cluster.main_keyword)
+            if scored.serp_verdict == "poisoned":
+                poisoned.append(cluster.main_keyword)
                 continue
             done.append(scored)
-        return MetricsComputed(computed=len(done), failed=failed, clusters=[brief(r) for r in done])
+        return MetricsComputed(
+            computed=len(done),
+            failed=failed,
+            poisoned=poisoned,
+            clusters=[brief(r) for r in done],
+        )
 
     async def rescore(
         self, db: AsyncSession, caller: Caller, site: SiteRecord, cluster_id: str
     ) -> ClusterRecord:
         cluster = await self.get(db, site.id, cluster_id)
-        scored = await self._score(db, caller, site, cluster)
+        [(_, scored)] = await self._score(db, caller, site, [cluster])
+        if isinstance(scored, ProviderRequestError):
+            raise scored
         if scored is None:
             raise HTTPException(502, f"No results page came back for {cluster.main_keyword}.")
-        return (await self._with_competitors(db, [scored]))[0]
+        return scored
 
     async def _score(
-        self, db: AsyncSession, caller: Caller, site: SiteRecord, cluster: ClusterRecord
-    ) -> ClusterRecord | None:
-        found = await self._metrics(db, caller, own_domain(site.domain), cluster)
-        if found is None:
-            return None
-        metrics, serp_domains = found
-        saved = await seo_competitors.list(db, site.id)
-        await seo_cluster_competitors.link(
-            db,
-            [
-                (cluster.id, c.id)
-                for c in saved
-                if any(belongs_to(d, c.domain) for d in serp_domains)
-            ],
-        )
-        return await seo_keyword_clusters.set_metrics(db, site.id, cluster.id, metrics)
+        self, db: AsyncSession, caller: Caller, site: SiteRecord, clusters: list[ClusterRecord]
+    ) -> list[tuple[ClusterRecord, ClusterRecord | ProviderRequestError | None]]:
+        site_domain = own_domain(site.domain)
+        pulls: dict[str, SerpPull | ProviderRequestError] = {}
+        for cluster in clusters:
+            market = {
+                "location_code": cluster.location_code,
+                "language_code": cluster.language_code,
+            }
+            try:
+                pulls[cluster.id] = await serp_results_service.pull(
+                    db, caller, site, cluster.main_keyword, market, refresh=False
+                )
+            except ProviderRequestError as err:
+                pulls[cluster.id] = err
 
-    async def _with_competitors(
-        self, db: AsyncSession, records: list[ClusterRecord]
+        urls: list[str] = []
+        for pulled in pulls.values():
+            if not isinstance(pulled, SerpPull):
+                continue
+            urls += [r["url"] for r in pulled.main]
+            if pulled.serp is not None:
+                _, _, above, our_target = serp_targets(pulled.serp, site_domain)
+                urls += [r["url"] for r in above] + [our_target]
+        await db.commit()
+        try:
+            ranks = await seo_data.pages_summary(caller, urls)
+        except ProviderRequestError as err:
+            return [
+                (c, pulls[c.id] if isinstance(pulls[c.id], Exception) else err) for c in clusters
+            ]
+
+        saved = await site_competitors.list(db, site.id)
+        scored: list[tuple[ClusterRecord, ClusterRecord | ProviderRequestError | None]] = []
+        for cluster in clusters:
+            pulled = pulls[cluster.id]
+            if not isinstance(pulled, SerpPull):
+                scored.append((cluster, pulled))
+                continue
+            check = serp_results_service.judge(pulled, ranks, site.domain)
+            if check.verdict == "poisoned":
+                cleared = await seo_keyword_clusters.clear_metrics(
+                    db, site.id, cluster.id, check.verdict
+                )
+                scored.append((cluster, cleared))
+                continue
+            try:
+                found = await self._metrics(
+                    db, caller, site_domain, cluster, pulled.serp, ranks, check.verdict
+                )
+            except ProviderRequestError as err:
+                scored.append((cluster, err))
+                continue
+            if found is None:
+                scored.append((cluster, None))
+                continue
+            metrics, serp_domains = found
+            ranking = sorted(
+                c.domain for c in saved if any(belongs_to(d, c.domain) for d in serp_domains)
+            )
+            scored.append(
+                (
+                    cluster,
+                    await seo_keyword_clusters.set_metrics(
+                        db, site.id, cluster.id, metrics, ranking
+                    ),
+                )
+            )
+        return scored
+
+    async def _save(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site: SiteRecord,
+        drafts: list[ClusterDraft],
     ) -> list[ClusterRecord]:
-        domains = await seo_cluster_competitors.domains_by_cluster(db, [r.id for r in records])
-        return [r.model_copy(update={"competitors": domains.get(r.id, [])}) for r in records]
+        if not drafts:
+            return []
+        labelled = await seo_keyword_clusters.labelled_mains(
+            db,
+            site.id,
+            drafts[0].location_code,
+            drafts[0].language_code,
+            [d.main_keyword for d in drafts],
+        )
+        unlabelled = [d.main_keyword for d in drafts if d.main_keyword not in labelled]
+        await db.commit()
+        labels = await label_keywords(caller, website_of(site), unlabelled) if unlabelled else {}
+        drafts = [
+            d.model_copy(update=labels[d.main_keyword].model_dump())
+            if d.main_keyword in labels
+            else d
+            for d in drafts
+        ]
+        return await seo_keyword_clusters.upsert_many(db, user_id, site.id, drafts)
 
     async def _search_console_queries(self, db: AsyncSession, site_id: str) -> set[str]:
         totals = await site_search_dailies.query_window_totals(db, site_id)
         return {normalize_keyword(t.query) for t in totals}
 
-    async def _top_search_console_queries(
-        self, db: AsyncSession, site_id: str, limit: int
-    ) -> list[str]:
-        totals = await site_search_dailies.query_window_totals(db, site_id)
-        ordered = sorted(
-            totals,
-            key=lambda t: -(t.impressions_28d + t.impressions_prev_28d + t.impressions_ly_28d),
-        )
-        return [t.query for t in ordered][:limit]
+    async def _meaningful(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        keywords: list[str],
+        market: dict,
+        min_volume: int | None,
+    ) -> tuple[dict[str, KeywordFacts], list[str]]:
+        facts = await self._facts(db, caller, keywords, market)
+        cores = {f.core_keyword or f.keyword for f in facts.values()}
+        missing_cores = [c for c in cores if c not in facts]
+        core_facts = {**facts, **await self._facts(db, caller, missing_cores, market)}
 
-    async def _ranked(
-        self, db: AsyncSession, caller: Caller, domain: str, market: dict
-    ) -> set[str]:
-        return {
-            normalize_keyword(r["keyword"])
-            for r in await self._rankings(db, caller, domain, market)
-        }
+        def threshold(fact: KeywordFacts) -> float:
+            if min_volume is not None:
+                return min_volume
+            core = core_facts.get(fact.core_keyword or fact.keyword)
+            core_volume = (core.ads_volume if core else None) or fact.ads_volume or 0
+            return max(NOISE_SHARE_OF_CORE * core_volume, 1)
 
-    async def _ranked_by_traffic(
-        self, db: AsyncSession, caller: Caller, domain: str, market: dict, limit: int
-    ) -> list[str]:
-        rankings = await self._rankings(db, caller, domain, market)
-        ordered = sorted(rankings, key=lambda r: -(r.get("etv") or 0))
-        return [r["keyword"] for r in ordered][:limit]
-
-    async def _rankings(
-        self, db: AsyncSession, caller: Caller, domain: str, market: dict
-    ) -> list[dict]:
-        await db.commit()
-        pulled = await seo_data.ranked_keywords(
-            caller,
-            domain,
-            RANKED_PULL,
-            location_code=market["location_code"],
-            language_code=market["language_code"],
-        )
-        return pulled["rankings"]
-
-    async def _competitor_keywords(
-        self, db: AsyncSession, caller: Caller, site_id: str, market: dict
-    ) -> list[tuple[CompetitorRecord, set[str]]]:
-        saved = (await seo_competitors.list(db, site_id))[:MAX_COMPETITORS_READ]
-        return [(c, await self._ranked(db, caller, c.domain, market)) for c in saved]
+        meaningful = [
+            f.keyword
+            for f in facts.values()
+            if f.clickstream_volume is not None and f.clickstream_volume >= threshold(f)
+        ]
+        return facts, meaningful
 
     async def _facts(
         self, db: AsyncSession, caller: Caller, keywords: list[str], market: dict
@@ -322,40 +621,19 @@ class KeywordClusterService:
         return {f.keyword: f for f in facts if f.keyword}
 
     async def _metrics(
-        self, db: AsyncSession, caller: Caller, site_domain: str, cluster: ClusterRecord
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        site_domain: str,
+        cluster: ClusterRecord,
+        serp: dict | None,
+        ranks: dict[str, dict],
+        serp_verdict: Verdict,
     ) -> tuple[ClusterMetrics, set[str]] | None:
-        market = {"location_code": cluster.location_code, "language_code": cluster.language_code}
-        await db.commit()
-        serp = await seo_data.serp_organic(
-            caller, cluster.main_keyword, SERP_DEVICE, SERP_DEPTH, market, ttl=SERP_TTL
-        )
         if serp is None:
             return None
-        organic = sorted(
-            (
-                {
-                    "position": int(i["rank_group"]),
-                    "url": str(i["url"]),
-                    "domain": own_domain(i["url"]),
-                    "title": i.get("title"),
-                    "description": i.get("description"),
-                }
-                for i in serp.get("items") or []
-                if isinstance(i, dict)
-                and i.get("type") == "organic"
-                and i.get("url")
-                and isinstance(i.get("rank_group"), int)
-            ),
-            key=lambda r: r["position"],
-        )
-        ours = next((r for r in organic if belongs_to(r["domain"], site_domain)), None)
+        organic, ours, above, our_target = serp_targets(serp, site_domain)
         start = ours["position"] if ours else TOP_N + 1
-        above = [
-            r for r in organic if r["position"] < start and not belongs_to(r["domain"], site_domain)
-        ]
-
-        our_target = ours["url"] if ours else f"https://{site_domain}/"
-        ranks = await seo_data.pages_summary(caller, [r["url"] for r in above] + [our_target])
 
         def rank_of(url: str) -> dict:
             return (
@@ -410,6 +688,7 @@ class KeywordClusterService:
             our_url=ours["url"] if ours else None,
             our_strength=round(our_strength, 1),
             intent_fit=round(sum(top_fits) / len(top_fits), 3) if top_fits else None,
+            serp_verdict=serp_verdict,
             climb=climb_rows,
         )
         return metrics, {r["domain"] for r in organic}

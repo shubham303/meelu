@@ -3,6 +3,7 @@ import re
 from datetime import date, datetime
 from typing import Any, ClassVar, Literal
 
+import pycountry
 from pydantic import Field, field_validator
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
@@ -11,6 +12,8 @@ DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_DAYS_PER_BATCH = 31
 MAX_TEXT_CHARS = 2048
 DEVICES = ("desktop", "mobile", "tablet")
+UNKNOWN_COUNTRY_ALPHA_3 = "ZZZ"
+UNKNOWN_COUNTRY = "ZZ"
 SYNC_END_STATUSES = ("completed", "failed", "cancelled")
 
 
@@ -61,6 +64,7 @@ class SearchDailyRowInput(RequestModel):
     query: str
     page: str
     device: str
+    country: str
     clicks: int = 0
     impressions: int = 0
     position: float = 0.0
@@ -79,6 +83,17 @@ class SearchDailyRowInput(RequestModel):
         if device not in DEVICES:
             raise ValueError(f'"{v}" is not a device. Allowed values: {", ".join(DEVICES)}.')
         return device
+
+    @field_validator("country", mode="before")
+    @classmethod
+    def _validate_country(cls, v: Any) -> str:
+        code = str(v or "").strip().upper()
+        if code == UNKNOWN_COUNTRY_ALPHA_3:
+            return UNKNOWN_COUNTRY
+        found = pycountry.countries.get(alpha_3=code) if len(code) == 3 else None
+        if found is None:
+            raise ValueError(f'"{v}" is not a Search Console country (ISO 3166-1 alpha-3).')
+        return found.alpha_2
 
     @field_validator("clicks", "impressions", mode="before")
     @classmethod

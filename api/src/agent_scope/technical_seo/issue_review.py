@@ -1,6 +1,8 @@
 from src.agent_scope.lib import AgentScope, SiteRef, desk_guides, desk_tables, fill
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
 from src.render_jobs.models.site_page_render import SitePageRender
+from src.reports.models.report import Report
+from src.reports.tools import save_report, update_report
 from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_link import SitePageLink
@@ -21,6 +23,7 @@ TABLES = desk_tables(
     SitePageIndexStatus,
     SitePageRender,
     SiteCrawlJob,
+    Report,
 )
 GUIDES = desk_guides("workflow", "technical-seo", "pages")
 
@@ -60,6 +63,9 @@ If the fix lives outside the site's code, in hosting, DNS, a CDN or a third part
 ## Boundaries
 You fix nothing yourself. No tool here touches the site or its code. Never claim you made a fix. You do not re-run the checks. If the crawl covered few pages, say the audit judged only those, and how many.
 
+## Keeping a result
+Nothing is saved as a report unless the user asks. When they want to keep the audit or a brief, save it with save_report, desk "technical-seo": self-contained HTML with inline CSS only, real counts and URLs from what you read, and the run it came from. The app rejects markup that loads anything over the network. To change a saved report, use update_report with its id from the reports table.
+
 ## Finishing
 Finish with a short report. Say what you put back and why, what you turned down and why, how many briefs you drafted and which p0s lead. Note that each open issue on the Technical SEO desk now carries its copy-ready message. The desk is the deliverable; keep the chat lean."""
 
@@ -72,7 +78,7 @@ scope = AgentScope(
     desk=DESK,
     tables=TABLES,
     guides=GUIDES,
-    writes=[reject_issue, restore_issue],
+    writes=[reject_issue, restore_issue, save_report, update_report],
     limits={"maxTurns": 80, "maxBudgetUsd": 5},
     system_prompt=system_prompt,
 )

@@ -1,181 +1,213 @@
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.pagination import PaginatedApiResponse, PaginationMeta, PaginationParams
 from src.providers.registry import Caller
 from src.providers.seo_data.service import seo_data
-from src.providers.seo_data.shape import own_domain
-from src.seo.site_search.repositories.site_search_daily import site_search_dailies
-from src.seo.site_seo.competitor_repository import seo_competitors
+from src.providers.seo_data.shape import own_domain, pick
+from src.seo.site_seo.backlink_repository import site_backlinks
+from src.seo.site_seo.competitor_repository import site_competitors
 from src.seo.site_seo.constants import (
-    COMPETITOR_SAMPLE_QUERIES,
-    GAP_DOMAINS_PER_COMPETITOR,
-    MAX_GAP_COMPETITORS,
-    MAX_LIST_ITEMS,
-    SeoList,
+    BACKLINKS_PER_DOMAIN,
+    COMPETITOR_NOT_FOUND,
+    MAX_COMPETITORS,
+    TOO_MANY_COMPETITORS,
 )
-from src.seo.site_seo.repository import site_seo
+from src.seo.site_seo.models.site_backlink import is_genuine
 from src.seo.site_seo.schemas import (
-    BacklinkOpportunities,
+    BacklinkDomainRemoved,
+    BacklinkDraft,
     BacklinkOpportunity,
-    FoundCompetitor,
-    FoundCompetitors,
-    SeoListChange,
-    SiteSeoRecord,
+    BacklinksFetched,
+    BacklinksOfDomain,
+    Competitor,
+    CompetitorsChange,
+    OpportunitiesDismissed,
 )
 
 
-def add_source(row: FoundCompetitor, source: str) -> None:
-    if source not in row.sources:
-        row.sources.append(source)
+def whole(value: Any) -> int | None:
+    number = pick(value)
+    return None if number is None else round(number)
 
 
-def best(current: float | None, found: float | None) -> float | None:
-    values = [v for v in (current, found) if v is not None]
-    return min(values) if values else None
+def when(value: Any) -> datetime | None:
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S %z") if value else None
+    except ValueError:
+        return None
 
 
-NO_COMPETITORS = (
-    "No competitors to compare against. Pass some, or save the site's competitors first."
-)
+def strings(value: Any) -> list[str]:
+    return [str(v) for v in value or [] if isinstance(v, str) and v]
+
+
+def backlink_draft(
+    item: dict, site_domain: str, spam: dict[str, int], dismissed: set[str]
+) -> BacklinkDraft | None:
+    backlinking_url = item.get("url_from")
+    backlink_url = item.get("url_to")
+    backlinking_domain = own_domain(item.get("domain_from") or backlinking_url)
+    if not backlinking_url or not backlink_url or not backlinking_domain:
+        return None
+    draft = BacklinkDraft(
+        site_domain=site_domain,
+        backlink_url=str(backlink_url),
+        backlinking_domain=backlinking_domain,
+        backlinking_url=str(backlinking_url),
+        anchor=item.get("anchor") or None,
+        item_type=item.get("item_type"),
+        dofollow=item.get("dofollow"),
+        link_attributes=strings(item.get("attributes")),
+        semantic_location=item.get("semantic_location"),
+        links_from_domain=whole(item.get("group_count")),
+        is_lost=item.get("is_lost"),
+        is_broken=item.get("is_broken"),
+        first_seen=when(item.get("first_seen")),
+        last_seen=when(item.get("last_seen")),
+        backlink_spam_score=whole(item.get("backlink_spam_score")),
+        domain_spam_score=spam.get(backlinking_domain),
+        domain_rank=whole(item.get("domain_from_rank")),
+        page_rank=whole(item.get("page_from_rank")),
+        is_ip=item.get("domain_from_is_ip"),
+        platform_type=strings(item.get("domain_from_platform_type")),
+        country=item.get("domain_from_country"),
+        page_title=item.get("page_from_title"),
+        page_language=item.get("page_from_language"),
+        page_status_code=whole(item.get("page_from_status_code")),
+        page_external_links=whole(item.get("page_from_external_links")),
+        dismissed=backlinking_domain in dismissed,
+    )
+    return draft if is_genuine(draft.model_dump()) else None
 
 
 class SiteSeoService:
-    async def get(self, db: AsyncSession, site_id: str) -> SiteSeoRecord:
-        return SiteSeoRecord(
-            site_id=site_id,
-            competitors=[c.domain for c in await seo_competitors.list(db, site_id)],
-            backlink_opportunities=await site_seo.backlink_opportunities(db, site_id),
-        )
+    async def list_competitors(self, db: AsyncSession, site_id: str) -> list[Competitor]:
+        counts = await site_backlinks.counts_by_domain(db, site_id)
+        return [
+            Competitor(**c.model_dump(), backlinks=counts.get(c.domain, 0))
+            for c in await site_competitors.list(db, site_id)
+        ]
 
-    async def add_items(
-        self, db: AsyncSession, user_id: str, site_id: str, name: SeoList, items: list[str]
-    ) -> SeoListChange:
-        current = getattr(await self.get(db, site_id), name)
-        added = [i for i in items if i not in current]
-        if len(current) + len(added) > MAX_LIST_ITEMS:
-            raise HTTPException(409, f"The {name} list holds at most {MAX_LIST_ITEMS} entries.")
-        if name == "competitors":
-            await seo_competitors.add_many(db, user_id, site_id, added)
-        else:
-            await site_seo.set_backlink_opportunities(db, user_id, site_id, [*current, *added])
-        return SeoListChange(
-            list=name,
+    async def add_competitors(
+        self,
+        db: AsyncSession,
+        caller: Caller,
+        user_id: str,
+        site_id: str,
+        site_domain: str,
+        domains: list[str],
+    ) -> CompetitorsChange:
+        own = own_domain(site_domain)
+        saved = {c.domain for c in await site_competitors.list(db, site_id)}
+        fresh = [d for d in domains if d not in saved and d != own]
+        if len(saved) + len(fresh) > MAX_COMPETITORS:
+            raise HTTPException(409, TOO_MANY_COMPETITORS)
+        ranks: dict[str, int] = {}
+        if fresh:
+            await db.commit()
+            ranks = await seo_data.domain_ranks(caller, fresh)
+        added = await site_competitors.add_many(
+            db, user_id, site_id, {d: ranks.get(d) for d in fresh}
+        )
+        return CompetitorsChange(
             added=added,
-            unchanged=[i for i in items if i in current],
-            items=getattr(await self.get(db, site_id), name),
+            unchanged=[d for d in domains if d not in added],
+            competitors=[c.domain for c in await site_competitors.list(db, site_id)],
         )
 
-    async def remove_items(
-        self, db: AsyncSession, user_id: str, site_id: str, name: SeoList, items: list[str]
-    ) -> SeoListChange:
-        current = getattr(await self.get(db, site_id), name)
-        removed = [i for i in items if i in current]
-        if name == "competitors":
-            await seo_competitors.delete_domains(db, site_id, removed)
-        else:
-            await site_seo.set_backlink_opportunities(
-                db, user_id, site_id, [i for i in current if i not in removed]
-            )
-        return SeoListChange(
-            list=name,
+    async def remove_competitors(
+        self, db: AsyncSession, site_id: str, domains: list[str]
+    ) -> CompetitorsChange:
+        removed = await site_competitors.delete_domains(db, site_id, domains)
+        await site_backlinks.delete_for_domains(db, site_id, removed)
+        return CompetitorsChange(
             removed=removed,
-            unchanged=[i for i in items if i not in current],
-            items=getattr(await self.get(db, site_id), name),
+            unchanged=[d for d in domains if d not in removed],
+            competitors=[c.domain for c in await site_competitors.list(db, site_id)],
         )
 
-    async def find_competitors(
+    async def delete_competitor(self, db: AsyncSession, site_id: str, competitor_id: str) -> None:
+        found = await site_competitors.get(db, site_id, competitor_id)
+        if found is None:
+            raise HTTPException(404, COMPETITOR_NOT_FOUND)
+        await self.remove_competitors(db, site_id, [found.domain])
+
+    async def fetch_backlinks(
         self,
         db: AsyncSession,
         caller: Caller,
+        user_id: str,
         site_id: str,
-        domain: str,
-        limit: int,
-        targets: list[dict],
-    ) -> FoundCompetitors:
-        own = own_domain(domain)
-        saved = set((await self.get(db, site_id)).competitors)
-        found: dict[str, FoundCompetitor] = {}
-
-        def entry(name: str) -> FoundCompetitor | None:
-            key = own_domain(name)
-            if not key or key == own:
-                return None
-            return found.setdefault(
-                key, FoundCompetitor(domain=key, sources=[], saved=key in saved)
-            )
-
-        totals = await site_search_dailies.query_window_totals(db, site_id)
-        queries = [
-            t.query
-            for t in sorted(totals, key=lambda t: -t.impressions_28d)
-            if t.impressions_28d > 0
-        ][:COMPETITOR_SAMPLE_QUERIES]
+        site_domain: str,
+        domains: list[str],
+    ) -> BacklinksFetched:
+        own = own_domain(site_domain)
+        saved = {c.domain for c in await site_competitors.list(db, site_id)}
+        wanted = [d for d in domains if d in saved]
+        stored = await site_backlinks.counts_by_domain(db, site_id)
+        targets = [*wanted, *([own] if wanted and own not in stored else [])]
+        dismissed = await site_backlinks.dismissed_domains(db, site_id)
         await db.commit()
-
-        for market in targets:
-            code, language = market["location_code"], market["language_code"]
-            rivals = await seo_data.rival_domains(caller, own, limit, code, language)
-            for rival in rivals["rivals"]:
-                if (row := entry(rival["domain"])) is not None:
-                    add_source(row, "shared_keywords")
-                    row.shared_keywords = (row.shared_keywords or 0) + (rival["intersections"] or 0)
-                    row.avg_position = best(row.avg_position, rival["avgPosition"])
-            if queries:
-                serp = await seo_data.serp_competitors(caller, queries, limit, code, language)
-                for competitor in serp["competitors"]:
-                    if (row := entry(competitor["domain"])) is not None:
-                        add_source(row, "search_console_serps")
-                        row.visibility = max(row.visibility or 0, competitor["visibility"] or 0)
-                        row.avg_position = best(row.avg_position, competitor["avgPosition"])
-
-        ranked = sorted(
-            found.values(),
-            key=lambda c: (-len(c.sources), -(c.shared_keywords or 0), -(c.visibility or 0)),
+        items_of = {
+            target: await seo_data.backlinks(caller, target, BACKLINKS_PER_DOMAIN)
+            for target in targets
+        }
+        spam = await seo_data.domain_spam_scores(
+            caller,
+            [own_domain(i.get("domain_from")) for items in items_of.values() for i in items],
         )
-        return FoundCompetitors(sampled_queries=len(queries), competitors=ranked[:limit])
+        fetched: list[BacklinksOfDomain] = []
+        for target, items in items_of.items():
+            drafts = [
+                d
+                for d in (backlink_draft(i, target, spam, dismissed) for i in items)
+                if d is not None
+            ]
+            await site_backlinks.replace_for_domain(db, user_id, site_id, target, drafts)
+            if target != own:
+                await site_competitors.mark_fetched(db, site_id, target)
+            await db.commit()
+            fetched.append(BacklinksOfDomain(domain=target, backlinks=len(drafts)))
+        return BacklinksFetched(fetched=fetched, not_saved=[d for d in domains if d not in saved])
 
-    async def find_backlink_opportunities(
-        self,
-        db: AsyncSession,
-        caller: Caller,
-        site_id: str,
-        domain: str,
-        competitors: list[str] | None,
-        limit: int,
-    ) -> BacklinkOpportunities:
-        record = await self.get(db, site_id)
-        own = own_domain(domain)
-        targets = [
-            c
-            for c in dict.fromkeys(own_domain(c) for c in (competitors or record.competitors))
-            if c and c != own
-        ][:MAX_GAP_COMPETITORS]
-        if not targets:
-            raise HTTPException(409, NO_COMPETITORS)
-        saved = set(record.backlink_opportunities)
-        found: dict[str, BacklinkOpportunity] = {}
-        await db.commit()
-        for target in targets:
-            for referrer in await seo_data.referring_domains_gap(
-                caller, target, [own], GAP_DOMAINS_PER_COMPETITOR
-            ):
-                key = own_domain(referrer["target"])
-                if not key or key == own or key in targets:
-                    continue
-                row = found.setdefault(
-                    key, BacklinkOpportunity(domain=key, links_to=[], saved=key in saved)
-                )
-                row.links_to.append(target)
-                row.backlinks_to_competitors += int(referrer.get("backlinks") or 0)
-                row.rank = max(row.rank or 0, int(referrer.get("rank") or 0)) or None
-                spam = referrer.get("backlinks_spam_score")
-                if isinstance(spam, int):
-                    row.spam_score = spam if row.spam_score is None else min(row.spam_score, spam)
-        ranked = sorted(found.values(), key=lambda o: (-len(o.links_to), -(o.rank or 0)))
-        return BacklinkOpportunities(
-            competitors=targets, total=len(ranked), opportunities=ranked[:limit]
+    async def opportunities(
+        self, db: AsyncSession, site_id: str, site_domain: str, paging: PaginationParams
+    ) -> PaginatedApiResponse[BacklinkOpportunity]:
+        params = paging.validate()
+        rows, total = await site_backlinks.opportunities(
+            db, site_id, own_domain(site_domain), params.offset, params.page_size
+        )
+        total_pages = (total + params.page_size - 1) // params.page_size
+        return PaginatedApiResponse[BacklinkOpportunity](
+            data=[BacklinkOpportunity.model_validate(r) for r in rows],
+            pagination=PaginationMeta(
+                page=params.page,
+                page_size=params.page_size,
+                total=total,
+                total_pages=total_pages,
+                has_next=params.page < total_pages,
+                has_prev=params.page > 1,
+            ),
+        )
+
+    async def remove_backlink_domain(
+        self, db: AsyncSession, site_id: str, domain: str
+    ) -> BacklinkDomainRemoved:
+        removed = await site_backlinks.delete_backlinking_domain(db, site_id, domain)
+        return BacklinkDomainRemoved(domain=domain, backlinks_removed=removed)
+
+    async def dismiss_opportunities(
+        self, db: AsyncSession, site_id: str, domains: list[str]
+    ) -> OpportunitiesDismissed:
+        dismissed = await site_backlinks.dismiss(db, site_id, domains)
+        return OpportunitiesDismissed(
+            dismissed=dismissed, not_found=[d for d in domains if d not in dismissed]
         )
 
 

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { messagesEndpoint, messagesJudge } from "./messages.js";
 import { anthropicBaseUrl, ownAnthropic, ownModelOf } from "../integrations/llm/own-key.js";
 import { REVIEW_SERVER, reviewMcpServer } from "./review.js";
+import { WEB_PAGE_SERVER, webPageMcpServer } from "./web-page.js";
 import { ENV_DEFAULTS, meeluAuthHeaders } from "../config.js";
 import { cachedWorkspaceKey, rememberWorkspaceKey } from "./workspace-key.js";
 import { apiFetch } from "../net.js";
@@ -326,7 +327,9 @@ function sitePrompt(siteId) {
   return `\n\n## The website this task is about\n\nThis task is pinned to website \`${siteId}\`. The tools already know which website you mean; there is nothing to pass or choose. When you write SQL over site-scoped tables, filter with \`site_id = '${siteId}'\`. The database holds this user's other websites too.\n\n## Read the user's notes before you start\n\nBefore any other work, run \`SELECT note, kind FROM notes WHERE site_id = '${siteId}'\`. Notes are standing rules ('note') and past corrections ('feedback'). A note that contradicts your plan is the answer, not an obstacle. The user should never have to repeat one.`;
 }
 
-const LINKS_PROMPT = `\n\n## Linking to Meelu screens\n\nWhen you point the user at a record in Meelu, link with a path that starts with \`/dashboard\`, never a full URL or a domain: the chat opens it inside the app. A content piece is \`/dashboard/content/<id>\`, a crawled page \`/dashboard/site/pages/<id>\`, a keyword cluster \`/dashboard/seo/clusters/<id>\`, an analytics report \`/dashboard/analytics/reports/<id>\`. Use the row's id, never a slug or URL. Link nothing else inside Meelu; name the screen instead.`;
+const LINKS_PROMPT = `\n\n## Linking to Meelu screens\n\nWhen you point the user at a record in Meelu, link with a path that starts with \`/dashboard\`, never a full URL or a domain: the chat opens it inside the app. A content piece is \`/dashboard/content/<id>\`, a crawled page \`/dashboard/site/pages/<id>\`, a keyword cluster \`/dashboard/seo/clusters/<id>\`, a saved report \`/dashboard/reports/<id>\`. Use the row's id, never a slug or URL. Link nothing else inside Meelu; name the screen instead.`;
+
+const CHARTS_PROMPT = `\n\n## Charts in the conversation\n\nThe chat draws charts for you. When the user asks for a chart or graph, or one answers better than a sentence, put it in a fenced code block whose language is exactly \`chart\`. Its body is one self-contained HTML fragment: inline SVG and inline CSS, real numbers from tool results, no scripts, nothing loaded over the network. One chart per block, with a title and labelled axes. Any other fence language, such as \`svg\` or \`html\`, shows as raw code. Never draw a chart with text characters, and never say you cannot draw one.`;
 
 function writesPrompt(writes, readOnly) {
   if (readOnly || writes.length === 0) return "";
@@ -581,6 +584,7 @@ async function buildConfig(session) {
     progress: (data) => session.turn?.emit("progress", data),
   });
   const reviewTools = reviewServer ? reviewServer.allowed : new Set();
+  const webPageServer = webPageMcpServer(scope.localTools);
 
   const withWeb = webAllowed(scope);
   const agents = {
@@ -602,6 +606,7 @@ async function buildConfig(session) {
     const inScope =
       toolName.startsWith("mcp__meelu__") ||
       reviewTool ||
+      (webPageServer && toolName.startsWith(`mcp__${WEB_PAGE_SERVER}__`)) ||
       (addDeskServer && toolName === "mcp__desks__add_desk") ||
       (withWeb && (toolName === "WebSearch" || toolName === "WebFetch")) ||
       toolName === "Agent" ||
@@ -665,12 +670,14 @@ async function buildConfig(session) {
       vendorPrompt +
       sitePrompt(siteId) +
       LINKS_PROMPT +
+      CHARTS_PROMPT +
       writesPrompt(writes, readOnly) +
       (readOnly ? readOnlyPrompt() : "") +
       desksPrompt(deskOffers),
     mcpServers: {
       [MEELU_SERVER]: session.meeluServer.config,
       ...(reviewServer ? { [REVIEW_SERVER]: reviewServer.server } : {}),
+      ...(webPageServer ? { [WEB_PAGE_SERVER]: webPageServer.server } : {}),
       ...(addDeskServer ? { desks: addDeskServer } : {}),
     },
     agents,

@@ -2,7 +2,6 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.analytics.repositories.chats import analytics_chat_messages, analytics_chats
-from src.analytics.repositories.reports import analytics_reports
 from src.analytics.schemas import (
     AnalyticsChatCreateRequest,
     AnalyticsChatMessageRecord,
@@ -10,61 +9,11 @@ from src.analytics.schemas import (
     AnalyticsChatRecord,
     AnalyticsChatSummaryRecord,
     AnalyticsChatUpdateRequest,
-    AnalyticsReportCreateRequest,
-    AnalyticsReportRecord,
-    AnalyticsReportSummaryRecord,
-    AnalyticsReportUpdateRequest,
 )
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 
 
 class AnalyticsService:
-    async def list_reports(
-        self,
-        db: AsyncSession,
-        user_id: str,
-        site_id: str,
-        paging: PaginationParams,
-        search: str | None = None,
-    ) -> PaginatedApiResponse[AnalyticsReportSummaryRecord]:
-        return await analytics_reports.page_summaries(db, user_id, site_id, search, paging)
-
-    async def create_report(
-        self, db: AsyncSession, user_id: str, site_id: str, body: AnalyticsReportCreateRequest
-    ) -> AnalyticsReportRecord:
-        return await analytics_reports.create(
-            db, user_id, site_id, body.title, body.html, body.created_by
-        )
-
-    async def get_report(
-        self, db: AsyncSession, user_id: str, site_id: str, report_id: str
-    ) -> AnalyticsReportRecord:
-        record = await analytics_reports.get(db, user_id, site_id, report_id)
-        if record is None:
-            raise HTTPException(404, "Not found")
-        return record
-
-    async def update_report(
-        self,
-        db: AsyncSession,
-        user_id: str,
-        site_id: str,
-        report_id: str,
-        body: AnalyticsReportUpdateRequest,
-    ) -> AnalyticsReportRecord:
-        values = body.changes()
-        if not values:
-            raise HTTPException(400, "Nothing to update — send `title` and/or `html`.")
-        record = await self.get_report(db, user_id, site_id, report_id)
-        return await analytics_reports.update(db, record.id, values)
-
-    async def delete_report(
-        self, db: AsyncSession, user_id: str, site_id: str, report_id: str
-    ) -> AnalyticsReportRecord:
-        record = await self.get_report(db, user_id, site_id, report_id)
-        await analytics_reports.delete(db, record.id)
-        return record
-
     async def list_chats(
         self, db: AsyncSession, user_id: str, site_id: str, paging: PaginationParams
     ) -> PaginatedApiResponse[AnalyticsChatSummaryRecord]:

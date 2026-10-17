@@ -1,6 +1,11 @@
 from datetime import date
 
-from src.seo.keyword_tracking.constants import DEMAND_SHIFT, HISTORY_MONTHS, SEASONAL_SWING
+from src.seo.keyword_tracking.constants import (
+    DEMAND_SHIFT,
+    HISTORY_MONTHS,
+    MOVED_POSITIONS,
+    SEASONAL_SWING,
+)
 from src.seo.keyword_tracking.schemas import TrackedKeyword, TrackedStats
 
 
@@ -32,49 +37,36 @@ def demand(volumes: list[int]) -> str | None:
 
 def tracked_keywords(
     months: list[date],
-    days: list[tuple[str, date]],
-    ranks: list[tuple[str, date, int, str]],
+    positions: list[tuple[str, date, float, str]],
     volumes: list[tuple[str, date, int | None]],
 ) -> list[TrackedKeyword]:
-    snapshot_days: dict[str, set[date]] = {}
-    for keyword, day in days:
-        snapshot_days.setdefault(keyword, set()).add(day)
-    best: dict[tuple[str, date], tuple[int, str]] = {}
-    for keyword, day, rank, url in ranks:
-        found = best.get((keyword, day))
-        if found is None or rank < found[0]:
-            best[(keyword, day)] = (rank, url)
+    ranked: dict[str, dict[date, tuple[float, str]]] = {}
+    for keyword, month, position, page in positions:
+        ranked.setdefault(keyword, {})[month] = (position, page)
     monthly: dict[str, dict[date, int]] = {}
     for keyword, month, volume in volumes:
         if volume is not None:
             monthly.setdefault(keyword, {})[month] = volume
 
     rows = []
-    for keyword in sorted(snapshot_days.keys() | monthly.keys()):
-        ordered = sorted(snapshot_days.get(keyword, ()))
-        latest = best.get((keyword, ordered[-1])) if ordered else None
-        previous = best.get((keyword, ordered[-2])) if len(ordered) > 1 else None
-        history = []
-        for month in months:
-            in_month = [
-                best[(keyword, d)][0]
-                for d in ordered
-                if month_start(d) == month and (keyword, d) in best
-            ]
-            history.append(min(in_month) if in_month else None)
-        series = [monthly.get(keyword, {}).get(m) for m in months]
+    for keyword in sorted(monthly.keys()):
+        by_month = ranked.get(keyword, {})
+        history = [round(by_month[m][0], 1) if m in by_month else None for m in months]
+        seen = [m for m in months if m in by_month]
+        latest = by_month[seen[-1]] if seen else None
+        previous = by_month[seen[-2]] if len(seen) > 1 else None
+        series = [monthly[keyword].get(m) for m in months]
         known = [v for v in series if v is not None]
         rows.append(
             TrackedKeyword(
                 keyword=keyword,
-                position=latest[0] if latest else None,
-                previous_position=previous[0] if previous else None,
-                change=previous[0] - latest[0] if latest and previous else None,
+                position=round(latest[0], 1) if latest else None,
+                previous_position=round(previous[0], 1) if previous else None,
+                change=round(previous[0] - latest[0], 1) if latest and previous else None,
                 url=latest[1] if latest else None,
                 history=history,
                 volume=known[-1] if known else None,
                 demand=demand(known[-HISTORY_MONTHS:]),
-                last_tracked=ordered[-1] if ordered else None,
             )
         )
     return sorted(
@@ -87,6 +79,6 @@ def stats(rows: list[TrackedKeyword]) -> TrackedStats:
     return TrackedStats(
         tracked=len(rows),
         top_ten=sum(1 for r in rows if r.position is not None and r.position <= 10),
-        moved=sum(1 for r in rows if r.change),
+        moved=sum(1 for r in rows if r.change is not None and abs(r.change) >= MOVED_POSITIONS),
         not_ranking=sum(1 for r in rows if r.position is None),
     )
