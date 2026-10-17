@@ -3,20 +3,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, Layers, Trash2 } from "lucide-react";
 import { PageEnter, Stagger } from "@demo/components/animate";
 import {
   Badge,
   Button,
   Card,
+  ConfirmDelete,
   EmptyState,
+  IconButton,
   Input,
   PageHeader,
   Spinner,
   StatCard,
 } from "@demo/components/ui";
 import { useIsApp } from "@demo/lib/use-app-mode";
-import { useApi, usePagedApi } from "@demo/lib/use-api";
+import { api, useApi, usePagedApi, type Pagination } from "@demo/lib/use-api";
 import { cn } from "@demo/lib/utils";
 import type { SiteProfile } from "@demo/lib/types";
 import * as chips from "@demo/features/prompt-chips/seo";
@@ -25,8 +27,14 @@ import { useAgentTasks } from "../agent-tasks";
 import { marketLabel } from "./market";
 import { SEO_ASK, TaskCards } from "./task-cards";
 import { YourPrompts } from "@demo/features/user-prompts/your-prompts";
-import type { KeywordCluster, SiteSeoLists, TrackedOverview } from "./types";
+import type {
+  BacklinkOpportunity,
+  Competitor,
+  KeywordCluster,
+  TrackedOverview,
+} from "./types";
 import { WinnabilityBar, position } from "./winnability";
+import { ImportanceBadge, IntentBadge } from "./signals";
 
 type Filter = "all" | "scored" | "unscored" | "ranked";
 
@@ -66,6 +74,7 @@ function clickChange(search: SearchSummary | null): string {
 export default function SeoPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const query = FILTERS.find((f) => f.key === filter)?.query ?? "";
   const term = search.trim()
     ? `&search=${encodeURIComponent(search.trim())}`
@@ -73,7 +82,7 @@ export default function SeoPage() {
 
   const { data: site } = useApi<SiteProfile>("/api/v1/site");
   const clusters = usePagedApi<KeywordCluster>(
-    `/api/v1/site/seo/clusters?page_size=${PAGE_SIZE}${query}${term}`,
+    `/api/v1/site/seo/clusters?page=${page}&page_size=${PAGE_SIZE}${query}${term}`,
   );
   const { data: all } = usePagedApi<KeywordCluster>(
     "/api/v1/site/seo/clusters?page_size=1",
@@ -89,7 +98,15 @@ export default function SeoPage() {
   );
   const { data: traffic } = useApi<TrafficSummary>("/api/v1/site/traffic");
   const { data: tracked } = useApi<TrackedOverview>("/api/v1/site/seo/tracked");
-  const { data: lists } = useApi<SiteSeoLists>("/api/v1/site/seo");
+  const { data: competitors } = useApi<Competitor[]>(
+    "/api/v1/site/seo/competitors",
+  );
+  const { data: opportunities } = usePagedApi<BacklinkOpportunity>(
+    "/api/v1/site/seo/backlink-opportunities?page_size=1",
+  );
+
+  const lastPage = Math.max(1, clusters.data?.pagination.total_pages ?? 1);
+  if (clusters.data && page > lastPage) setPage(lastPage);
 
   const total = all?.pagination.total ?? 0;
   const waiting = unscored?.pagination.total ?? 0;
@@ -165,128 +182,140 @@ export default function SeoPage() {
             label="Tracked keywords"
             value={tracked?.stats.tracked ?? 0}
             hint={
-              tracked ? `${tracked.stats.moved} moved since the last run` : "—"
+              tracked ? `${tracked.stats.moved} moved since last month` : "—"
             }
           />
         </Link>
       </Stagger>
 
-      <div className="flex flex-wrap items-start gap-5">
-        <section id="clusters" className="min-w-0 flex-[999_1_640px]">
-          <Card className="overflow-hidden p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-4">
-              <h2 className="font-display text-lg text-ink">
-                Keyword clusters
-              </h2>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="sr-only" htmlFor="cluster-search">
-                  Search clusters
-                </label>
-                <Input
-                  id="cluster-search"
-                  type="search"
-                  className="w-56"
-                  placeholder="Search a topic or phrase"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {FILTERS.map((f) => (
-                  <button
-                    key={f.key}
-                    type="button"
-                    onClick={() => setFilter(f.key)}
-                    className={cn(
-                      "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                      filter === f.key
-                        ? "border-accent bg-accent text-white"
-                        : "border-edge bg-panel text-ink hover:bg-panel2",
-                    )}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <ClusterTable
-              loading={clusters.loading && !clusters.data}
-              error={clusters.error}
-              rows={clusters.data?.data ?? []}
-              empty={total === 0}
-              onRan={reload}
-            />
-            {waiting > 0 && <ScoreFooter waiting={waiting} onRan={reload} />}
-          </Card>
-        </section>
-
-        <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5">
-          <SourceCard
-            href="/demo/dashboard/seo/search"
-            title="Search performance"
-            active={Boolean(searchData?.active)}
-            lastDay={searchData?.hasData ? searchData.lastDay : undefined}
-            line={
-              searchData?.hasData
-                ? `${(searchData.current?.clicks ?? 0).toLocaleString()} clicks · ${(searchData.current?.impressions ?? 0).toLocaleString()} impressions in the last 28 days`
-                : "Connect Search Console to see the queries Google sends."
-            }
-          />
-          <SourceCard
-            href="/demo/dashboard/seo/traffic"
-            title="Traffic"
-            active={Boolean(traffic?.active)}
-            lastDay={
-              traffic?.hasData ? (traffic.lastDay ?? undefined) : undefined
-            }
-            line={
-              traffic?.hasData
-                ? `${traffic.totals.current.sessions.toLocaleString()} sessions · ${organicShare(traffic)}% from organic search`
-                : "Connect Analytics to see what visitors do."
-            }
-          />
-          <Link href="/demo/dashboard/seo/competitors" className="block">
-            <Card className="flex flex-col gap-2.5 transition-colors hover:border-edge2">
-              <span className="flex items-center justify-between">
-                <span className="text-sm font-medium text-ink">
-                  Competitors
-                </span>
-                <span className="text-xs text-sub">
-                  {lists?.competitors.length ?? 0} saved
-                </span>
-              </span>
-              {lists?.competitors.length ? (
-                <span className="flex flex-wrap gap-1.5">
-                  {lists.competitors.slice(0, 8).map((d) => (
-                    <span
-                      key={d}
-                      className="rounded-full border border-edge bg-bg px-2.5 py-0.5 text-xs text-ink"
-                    >
-                      {d}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span className="text-xs text-sub">None saved yet.</span>
-              )}
-            </Card>
-          </Link>
-          <Link href="/demo/dashboard/seo/backlinks" className="block">
-            <Card className="flex flex-col gap-1.5 transition-colors hover:border-edge2">
-              <span className="flex items-center justify-between">
-                <span className="text-sm font-medium text-ink">
-                  Backlink opportunities
-                </span>
-                <span className="font-display text-xl text-ink">
-                  {lists?.backlinkOpportunities.length ?? 0}
-                </span>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <SourceCard
+          href="/demo/dashboard/seo/search"
+          title="Search performance"
+          active={Boolean(searchData?.active)}
+          lastDay={searchData?.hasData ? searchData.lastDay : undefined}
+          line={
+            searchData?.hasData
+              ? `${(searchData.current?.clicks ?? 0).toLocaleString()} clicks · ${(searchData.current?.impressions ?? 0).toLocaleString()} impressions in the last 28 days`
+              : "Connect Search Console to see the queries Google sends."
+          }
+        />
+        <SourceCard
+          href="/demo/dashboard/seo/traffic"
+          title="Traffic"
+          active={Boolean(traffic?.active)}
+          lastDay={
+            traffic?.hasData ? (traffic.lastDay ?? undefined) : undefined
+          }
+          line={
+            traffic?.hasData
+              ? `${traffic.totals.current.sessions.toLocaleString()} sessions · ${organicShare(traffic)}% from organic search`
+              : "Connect Analytics to see what visitors do."
+          }
+        />
+        <Link href="/demo/dashboard/seo/competitors" className="block h-full">
+          <Card className="flex h-full flex-col gap-2.5 transition-colors hover:border-edge2">
+            <span className="flex items-center justify-between">
+              <span className="text-sm font-medium text-ink">
+                Competitors
               </span>
               <span className="text-xs text-sub">
-                Sites worth asking for a link, saved from your competitors&apos;
-                backlinks.
+                {competitors?.length ?? 0} saved
               </span>
-            </Card>
-          </Link>
-        </aside>
+            </span>
+            {competitors?.length ? (
+              <span className="flex flex-wrap gap-1.5">
+                {competitors.slice(0, 8).map((c) => (
+                  <span
+                    key={c.id}
+                    className="rounded-full border border-edge bg-bg px-2.5 py-0.5 text-xs text-ink"
+                  >
+                    {c.domain}
+                    {c.domainRank !== undefined && (
+                      <span className="text-faint"> · {c.domainRank}</span>
+                    )}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="text-xs text-sub">None saved yet.</span>
+            )}
+          </Card>
+        </Link>
+        <Link href="/demo/dashboard/seo/backlinks" className="block h-full">
+          <Card className="flex h-full flex-col gap-1.5 transition-colors hover:border-edge2">
+            <span className="flex items-center justify-between">
+              <span className="text-sm font-medium text-ink">
+                Backlink opportunities
+              </span>
+              <span className="font-display text-xl text-ink">
+                {opportunities?.pagination.total ?? 0}
+              </span>
+            </span>
+            <span className="text-xs text-sub">
+              Genuine sites linking to your competitors but not to you.
+            </span>
+          </Card>
+        </Link>
       </div>
+
+      <section id="clusters" className="min-w-0">
+        <Card className="overflow-hidden p-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-4">
+            <h2 className="font-display text-lg text-ink">
+              Keyword clusters
+            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor="cluster-search">
+                Search clusters
+              </label>
+              <Input
+                id="cluster-search"
+                type="search"
+                className="w-56"
+                placeholder="Search a topic or phrase"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+              {FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => {
+                    setFilter(f.key);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs transition-colors",
+                    filter === f.key
+                      ? "border-accent bg-accent text-white"
+                      : "border-edge bg-panel text-ink hover:bg-panel2",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <ClusterTable
+            loading={clusters.loading && !clusters.data}
+            error={clusters.error}
+            rows={clusters.data?.data ?? []}
+            empty={total === 0}
+            onRan={reload}
+          />
+          {clusters.data && (
+            <ClusterPager
+              pagination={clusters.data.pagination}
+              onPage={setPage}
+            />
+          )}
+          {waiting > 0 && <ScoreFooter waiting={waiting} onRan={reload} />}
+        </Card>
+      </section>
     </PageEnter>
   );
 }
@@ -310,10 +339,12 @@ function SourceCard({
   line: string;
 }) {
   return (
-    <Link href={href} className="block">
-      <Card className="flex flex-col gap-1.5 transition-colors hover:border-edge2">
-        <span className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium text-ink">{title}</span>
+    <Link href={href} className="block h-full">
+      <Card className="flex h-full flex-col gap-1.5 transition-colors hover:border-edge2">
+        <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span className="text-sm font-medium whitespace-nowrap text-ink">
+            {title}
+          </span>
           {active && <Badge tone="accent">syncing</Badge>}
           {!active && lastDay && (
             <Badge tone="good">data through {lastDay}</Badge>
@@ -342,6 +373,7 @@ function ClusterTable({
   const router = useRouter();
   const isApp = useIsApp();
   const { launchTask } = useAgentTasks();
+  const [deleting, setDeleting] = useState<KeywordCluster | null>(null);
 
   if (loading) {
     return (
@@ -371,10 +403,12 @@ function ClusterTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] border-collapse text-sm">
+      <table className="w-full min-w-[840px] border-collapse text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-sub">
             <th className="px-4 py-2.5 font-medium">Main keyword</th>
+            <th className="px-3 py-2.5 font-medium">Importance</th>
+            <th className="px-3 py-2.5 font-medium">Intent</th>
             <th className="px-3 py-2.5 font-medium">Winnability</th>
             <th className="px-3 py-2.5 text-right font-medium">
               Searches / mo
@@ -407,7 +441,16 @@ function ClusterTable({
                 </span>
               </td>
               <td className="px-3 py-3">
-                <WinnabilityBar score={c.winnability} />
+                <ImportanceBadge importance={c.importance} />
+              </td>
+              <td className="px-3 py-3">
+                <IntentBadge intent={c.intent} />
+              </td>
+              <td className="px-3 py-3">
+                <WinnabilityBar
+                  score={c.winnability}
+                  poisoned={c.serpVerdict === "poisoned"}
+                />
               </td>
               <td className="px-3 py-3 text-right tabular-nums">
                 {c.volume.toLocaleString()}
@@ -423,33 +466,99 @@ function ClusterTable({
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-right">
-                {isApp && (
-                  <Button
-                    variant="outline"
-                    size="sm"
+              <td className="px-4 py-3">
+                <span className="flex items-center justify-end gap-1.5">
+                  {isApp && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const plan = chips.cluster(c.mainKeyword)[0];
+                        launchTask({
+                          title: `SEO — ${plan.label}`,
+                          endpoint: SEO_ASK,
+                          emptyHint: plan.blurb ?? plan.label,
+                          suggestions: chips.cluster(c.mainKeyword),
+                          draft: {},
+                          autoStart: plan.prompt,
+                          onCreated: onRan,
+                        });
+                      }}
+                    >
+                      Plan a page
+                    </Button>
+                  )}
+                  <IconButton
+                    aria-label="Delete cluster"
+                    title="Delete cluster"
+                    className="hover:text-bad"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const plan = chips.cluster(c.mainKeyword)[0];
-                      launchTask({
-                        title: `SEO — ${plan.label}`,
-                        endpoint: SEO_ASK,
-                        emptyHint: plan.blurb ?? plan.label,
-                        suggestions: chips.cluster(c.mainKeyword),
-                        draft: {},
-                        autoStart: plan.prompt,
-                        onCreated: onRan,
-                      });
+                      setDeleting(c);
                     }}
                   >
-                    Plan a page
-                  </Button>
-                )}
+                    <Trash2 size={13} />
+                  </IconButton>
+                </span>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <ConfirmDelete
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        what={`the cluster "${deleting?.mainKeyword ?? ""}"`}
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api(`/api/v1/site/seo/clusters/${deleting.id}`, {
+            method: "DELETE",
+          });
+          setDeleting(null);
+          onRan();
+        }}
+      />
+    </div>
+  );
+}
+
+function ClusterPager({
+  pagination,
+  onPage,
+}: {
+  pagination: Pagination;
+  onPage: (page: number) => void;
+}) {
+  const { page, page_size, total, total_pages, has_prev, has_next } =
+    pagination;
+  if (total_pages <= 1) return null;
+  const first = (page - 1) * page_size + 1;
+  const last = Math.min(page * page_size, total);
+  return (
+    <div className="flex items-center justify-end gap-2 border-t border-edge px-4 py-2.5 text-xs text-sub">
+      <span className="tabular-nums">
+        {first}–{last} of {total}
+      </span>
+      <IconButton
+        aria-label="Previous page"
+        disabled={!has_prev}
+        className="disabled:pointer-events-none disabled:opacity-40"
+        onClick={() => onPage(page - 1)}
+      >
+        <ChevronLeft size={14} />
+      </IconButton>
+      <span className="tabular-nums">
+        {page} / {total_pages}
+      </span>
+      <IconButton
+        aria-label="Next page"
+        disabled={!has_next}
+        className="disabled:pointer-events-none disabled:opacity-40"
+        onClick={() => onPage(page + 1)}
+      >
+        <ChevronRight size={14} />
+      </IconButton>
     </div>
   );
 }
@@ -463,7 +572,7 @@ function ScoreFooter({
 }) {
   const isApp = useIsApp();
   const { launchTask } = useAgentTasks();
-  const target = chips.desk()[0];
+  const target = chips.SCORE_CLUSTERS;
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge px-4 py-3 text-xs text-sub">
       <span>

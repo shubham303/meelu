@@ -111,12 +111,12 @@ export function analyticsAnswer(ctx: Ctx): Script {
     return [
       {
         kind: "write",
-        tool: "analytics_save_report",
-        input: { title },
+        tool: "save_report",
+        input: { desk: "analytics", title },
         apply: () => {
           saveAnalyticsReport(title, answer);
         },
-        after: `Saved as **${title}** — it is under Reports on the Analytics desk, with the numbers, the charts and where the data came from.`,
+        after: `Saved as **${title}** — it is on the Reports screen under Analytics, with the numbers, the charts and where the data came from.`,
         declined: "Not saved. The answer stays in this chat.",
       },
     ];

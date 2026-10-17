@@ -1,43 +1,47 @@
-import { addKeywordClusters, call, trackKeywords } from "../hooks";
+import { addCompetitors, addKeywordClusters, call, competitorDomains, opportunityDomains, removeCompetitors, saveDeskReport, trackKeywords } from "../hooks";
 import { cap, chartBars, chartLine, fence, lines, link, quoted, text, tool, topicFrom, type Ctx, type Script, type Step } from "./common";
 
-function listWrite(list: "competitors" | "backlink_opportunities", verb: "add" | "remove", items: string[], after: string): Step {
+const bare = (d: string) => d.replace(/^www\./, "").toLowerCase();
+
+function competitorWrite(verb: "add" | "remove", domains: string[], after: string): Step {
   return {
     kind: "write",
-    tool: verb === "add" ? "add_to_seo_list" : "remove_from_seo_list",
-    input: { list, items },
+    tool: verb === "add" ? "add_competitors" : "remove_competitors",
+    input: { domains },
     apply: () => {
-      call("POST", `/api/v1/site/seo/${list}/${verb}`, { items });
+      if (verb === "add") addCompetitors(domains);
+      else removeCompetitors(domains);
     },
     after,
-    declined: "Fine — the list is unchanged.",
+    declined: "Fine — the saved competitors are unchanged.",
   };
 }
 
-function changed(): Script {
-  return [
-    tool("run_sql"),
-    tool("compare_periods"),
-    tool("search_page"),
-    text(
-      lines(
-        "Last 90 days against the 90 before, from Search Console. Clicks 4,812 → 5,930 (+23%), impressions 212k → 268k, average position 18.4 → 16.9. Enough volume for the page-level movements below to mean something.",
-        "",
-        fence("chart", chartBars("Click change by page, last 90 days", [["/templates/invoice", 412], ["/blog/quarterly-estimated…", 288], ["/compare/quickbooks", 141], ["/tools/tax-estimator", 96], ["/blog/wave-shutting-down…", -118], ["/blog/best-bookkeeping…", -164]])),
-        "",
-        "**Gained**",
-        `- ${link("/templates/invoice")} +412 clicks — 'free invoice template' moved 7.2 → 4.1.`,
-        `- ${link("/blog/quarterly-estimated-taxes-explained")} +288 — seasonal; the September 15 deadline. Expect it to fall back in October.`,
-        `- ${link("/compare/quickbooks")} +141 — 'quickbooks alternative' 14.8 → 11.3.`,
-        "",
-        "**Lost**",
-        `- ${link("/blog/best-bookkeeping-software-freelancers")} −164. Position held (6.8 → 7.1) but click-through halved. The title still says \"in 2025\" — the likeliest reason, since searchers skip a dated list.`,
-        `- ${link("/blog/wave-shutting-down-features")} −118. The news is a year old; the query volume itself dropped 60%. Nothing to fix.`,
-        "",
-        "Only the first loser looks fixable, and it is a one-line title change you can make yourself.",
-      ),
-    ),
-  ];
+function clusterWrite(source: "seeds" | "search_console" | "competitors", topic: string | null, summary: string, input: Record<string, unknown> = {}): Step {
+  const tool = source === "seeds" ? "create_keyword_clusters_from_seeds" : source === "search_console" ? "create_keyword_clusters_from_search_console" : "create_keyword_clusters_from_competitors";
+  return {
+    kind: "write",
+    tool,
+    input: topic ? { seeds: topic, ...input } : input,
+    apply: () => {
+      addKeywordClusters(source === "competitors" ? "competitor_keywords" : source, topic);
+    },
+    after: summary,
+    declined: "Not built — no vendor credit spent.",
+  };
+}
+
+function reportWrite(title: string, answer: string): Step {
+  return {
+    kind: "write",
+    tool: "save_report",
+    input: { desk: "seo", title },
+    apply: () => {
+      saveDeskReport("seo", title, answer);
+    },
+    after: `Saved as **${title}** — it is on the Reports screen under SEO.`,
+    declined: "Not saved. The plan stays in this chat.",
+  };
 }
 
 function striking(): Script {
@@ -45,17 +49,18 @@ function striking(): Script {
     tool("run_sql"),
     text(
       lines(
-        "Queries where Ledgerly already ranks 8–15 with real impressions (last 28 days):",
+        "Searches where ledgerly.app sits at position 8 or lower with more than 10 impressions and a click-through under 5%, last 28 days of Search Console:",
         "",
-        "| Query | Pos. | Impr. | Page | Inlinks | Needs |",
-        "|---|---|---|---|---|---|",
-        `| quickbooks alternative | 11.3 | 6,210 | ${link("/compare/quickbooks")} | 4 | **Links** |`,
-        `| invoice payment terms | 11.4 | 3,870 | ${link("/blog/invoice-payment-terms")} | 2 | **Links** |`,
-        `| self employed tax calculator | 9.6 | 2,940 | ${link("/tools/tax-estimator")} | 11 | **Content** |`,
-        `| late fee on invoice | 12.8 | 1,620 | ${link("/blog/late-fee-invoice")} | 3 | **Links** |`,
-        `| freshbooks alternative | 8.9 | 1,410 | ${link("/compare/freshbooks")} | 9 | **Content** |`,
+        "| Search | Pos. | Impr. | CTR | Page |",
+        "|---|---|---|---|---|",
+        `| quickbooks alternative | 11.3 | 6,210 | 1.1% | ${link("/compare/quickbooks")} |`,
+        `| invoice payment terms | 11.4 | 3,870 | 0.9% | ${link("/blog/invoice-payment-terms")} |`,
+        `| self employed tax calculator | 9.6 | 2,940 | 2.4% | ${link("/tools/tax-estimator")} |`,
+        `| late fee on invoice | 12.8 | 1,620 | 0.6% | ${link("/blog/late-fee-invoice")} |`,
+        `| freshbooks alternative | 8.9 | 1,410 | 3.8% | ${link("/compare/freshbooks")} |`,
+        `| bank reconciliation | 21.4 | 1,180 | 0 clicks | ${link("/blog/bank-reconciliation-basics")} |`,
         "",
-        "The two with almost no inlinks are the cheap wins — the Structure desk's \"Send authority to money pages\" strategy would find sources for both. The tax calculator is already well linked; it ranks 9.6 because the page around the tool is 420 words against competitors' 1,500, so it needs content, not links.",
+        "The first two have real demand and pages that already rank — those are the cheapest to move. Whether to strengthen them with links or with more content is yours to pick; the Site desk can suggest internal links for either.",
       ),
     ),
   ];
@@ -176,49 +181,160 @@ function traffic(l: string): Script {
   ];
 }
 
-function targetNext(): Script {
+function longTailFollowUp(ctx: Ctx): Script {
+  const kw = topicFrom(ctx.message).toLowerCase();
+  const answer = lines(
+    `What Google shows around **${kw}** (US): 8 People Also Ask questions and 10 autocomplete suggestions, turned into 14 long-tail keywords in 6 clusters.`,
+    "",
+    "| Cluster | Intent | Searches/mo |",
+    "|---|---|---|",
+    `| best ${kw} app for freelancers | commercial | 1,300 |`,
+    `| ${kw} free download | transactional | 880 |`,
+    `| ${kw} vs spreadsheet | commercial | 390 |`,
+    `| how does ${kw} work | informational | 720 |`,
+    `| is ${kw} worth it | informational | 260 |`,
+    `| ${kw} for self employed | informational | 210 |`,
+    "",
+    "Commercial and transactional first, as asked. Two of the questions had no measurable volume and are left out.",
+  );
+  ctx.memory.pending = () => [
+    clusterWrite("seeds", kw, `Saved the 6 clusters for **${kw}**. They are on the SEO screen, not scored yet.`),
+  ];
+  return [tool("get_search_suggestions"), tool("get_serp_results"), tool("seo_trend"), text(lines(answer, "", "Say **yes** to save these as keyword clusters (about $0.10 of vendor credit), or tell me which to drop."))];
+}
+
+function seedIdeasFollowUp(ctx: Ctx): Script {
+  const kw = topicFrom(ctx.message).toLowerCase();
+  ctx.memory.pending = () => [
+    clusterWrite("seeds", kw, `Saved them. **${kw}** now has 11 clusters on the SEO screen; score them when you want to see which are winnable.`),
+  ];
+  return [
+    tool("seo_ranked_keywords"),
+    tool("get_search_suggestions"),
+    text(
+      lines(
+        `Related keywords for **${kw}**: 640 came back, 214 dropped as noise, and 14 clusters formed. 3 of those were off-intent (job searches and a course) and are removed, leaving 11:`,
+        "",
+        "- **Informational:** 6 — led by *what is " + kw + "* (2,400/mo)",
+        "- **Commercial:** 3 — led by *best " + kw + " software* (1,600/mo)",
+        "- **Transactional:** 2 — led by *" + kw + " template* (1,100/mo)",
+        "",
+        "Say **yes** to save the 11 clusters, or name the ones to leave out.",
+      ),
+    ),
+  ];
+}
+
+function matchCompetitorFollowUp(ctx: Ctx): Script {
+  const domain = bare(ctx.message.match(/[a-z0-9-]+(\.[a-z0-9-]+)+/i)?.[0] ?? "freshbooks.com");
+  ctx.memory.pending = () => [
+    clusterWrite("competitors", null, `Saved the 10 clusters from ${domain}. They are on the SEO screen, each as its own cluster.`, { domains: [domain] }),
+  ];
+  return [
+    tool("seo_ranked_keywords"),
+    tool("run_sql"),
+    tool("search_page"),
+    text(
+      lines(
+        `${domain} ranks for 3,420 keywords that ledgerly.app got no impressions for. After the noise filter, 10 clusters picked at random:`,
+        "",
+        "| Cluster | Searches/mo | Your nearest page | Suggestion | Link it from |",
+        "|---|---|---|---|---|",
+        `| estimate vs quote | 1,600 | ${link("/templates/quote")} | Edit — add a short comparison section | ${link("/templates/invoice")} |`,
+        `| time tracking for freelancers | 2,400 | none | New page | ${link("/features/invoicing")} |`,
+        `| how to send an invoice by email | 1,900 | ${link("/blog/how-to-invoice-as-a-freelancer")} | Edit — add the email step | ${link("/templates/invoice")} |`,
+        `| freelance contract template | 4,400 | none | New page | ${link("/templates/quote")} |`,
+        `| accounting for photographers | 880 | ${link("/for/freelancers")} | New page — the audience page is too general | ${link("/for/freelancers")} |`,
+        `| client portal for freelancers | 590 | none | New page, only if the product has one | — |`,
+        `| invoice in pounds | 320 | ${link("/blog/multi-currency-invoicing")} | Edit | ${link("/features/multi-currency")} |`,
+        `| deposit invoice | 720 | ${link("/blog/deposit-before-starting")} | Edit — retitle around the search | ${link("/templates/invoice")} |`,
+        `| retainer agreement | 1,000 | none | New page | ${link("/templates/quote")} |`,
+        `| mileage deduction rate | 6,600 | ${link("/blog/deductible-expenses-freelancers")} | New page — a section will not hold it | ${link("/blog/deductible-expenses-freelancers")} |`,
+        "",
+        "These are suggestions; which to write is yours. Say **yes** to save the 10 as keyword clusters so you can score them.",
+      ),
+    ),
+  ];
+}
+
+const TOPIC_PLAN = (topic: string) =>
+  lines(
+    `**Content plan: ${topic}**`,
+    "",
+    `Built 9 keyword clusters for ${topic}, added 3 related ones you already had, and kept 8 that truly fit.`,
+    "",
+    "**Hub page (new):** " + cap(topic) + " for freelancers — targets the main cluster (5,400/mo) and links every page below.",
+    "",
+    "**Pages to update**",
+    `- ${link("/blog/quarterly-estimated-taxes-explained")} — add the *when are quarterly taxes due* and *safe harbor rule* clusters; it already ranks 9 for the first.`,
+    `- ${link("/blog/deductible-expenses-freelancers")} — add the *home office deduction* cluster as its own section.`,
+    "",
+    "**New pages**",
+    "- How to pay quarterly taxes online — the payment steps, with screenshots.",
+    "- Self-employed tax calculator guide — what each field means, linking the existing tool.",
+    "- Freelance tax checklist by month — the calendar, one line per deadline.",
+    "",
+    "Nothing is written; this is for you to decide which pages to create.",
+  );
+
+function topicPlanFollowUp(ctx: Ctx): Script {
+  const asked = typeof ctx.memory.data.topic === "string" ? ctx.memory.data.topic : ctx.message;
+  const topic = topicFrom(asked).toLowerCase() || "freelance taxes";
+  const plan = TOPIC_PLAN(topic);
+  ctx.memory.pending = () => [reportWrite(`Content plan: ${topic}`, plan)];
+  return [
+    tool("create_keyword_clusters_from_seeds"),
+    tool("run_sql"),
+    tool("search_page"),
+    text(lines(plan, "", "Say **yes** to save this plan as a report.")),
+  ];
+}
+
+function topicPlanQuestions(ctx: Ctx): Script {
+  ctx.memory.data.topic = ctx.message;
+  ctx.memory.awaiting = topicPlanFollowUp;
+  return [
+    text(
+      lines(
+        `Before I plan **${topicFrom(ctx.message)}**, three questions:`,
+        "",
+        "1. What is the content for — bringing in new visitors, or helping people who already use Ledgerly?",
+        "2. What should a reader be able to do after reading it?",
+        "3. One page, or a series?",
+      ),
+    ),
+  ];
+}
+
+function scoreClusters(): Script {
   return [
     tool("run_sql"),
     {
       kind: "write",
       tool: "compute_metrics_for_cluster",
       input: { clusters: 6 },
-      apply: () => {},
-      after: "",
-      declined: "Understood — I will rank only the clusters that already have a score.",
-    },
-    tool("seo_ranked_keywords"),
-    text(
-      lines(
-        "I scored the 6 unscored clusters (most searched first) and ranked all 23 by winnability, then volume. The best five:",
+      apply: () => {
+        for (const c of call<Array<{ id: string }>>("GET", "/api/v1/site/seo/clusters?scored=false&page_size=6") ?? []) {
+          call("POST", `/api/v1/site/seo/clusters/${c.id}/metrics`);
+        }
+      },
+      after: lines(
+        "Scored the 6 unscored clusters, most searched first. The best to target now, by winnability then volume:",
         "",
-        "| Cluster (main keyword) | Searches/mo | Winnable | Page that wins it |",
+        "| Cluster | Searches/mo | Winnable | Where you stand |",
         "|---|---|---|---|",
-        "| invoice payment terms | 4,400 | 78 | A guide — **/blog/invoice-payment-terms could own it** with a rewrite |",
-        "| freelance tax deductions | 9,900 | 71 | A long list post — /blog/deductible-expenses-freelancers is close |",
-        "| how to invoice as a freelancer | 3,600 | 69 | Step-by-step how-to — already yours at 6.2 |",
-        "| quickbooks import | 1,300 | 66 | A help-style page — **new** |",
-        "| 1099 contractor payments | 2,900 | 61 | A guide for people who *send* 1099s — **new** |",
+        "| invoice payment terms | 3,600 | 78 | /blog/invoice-payment-terms at 12 |",
+        "| freelance hourly rate calculator | 1,900 | 74 | your tool at 5 |",
+        "| late payment reminder email | 2,900 | 69 | your template at 6 |",
+        "| freshbooks alternative | 2,400 | 66 | /compare/freshbooks at 6 |",
         "",
-        "Why these are winnable: the results above position 5 for each have weaker link profiles than Ledgerly's domain, and two are forum threads, which usually means search engines have nothing better.",
+        "**receipt scanner app** got no score: Google served fake-looking results for it to the rank tracker, so its vendor data is not trustworthy. Check it by hand before planning anything there.",
         "",
-        "What the score cannot see is quality. I would start with the payment-terms page since it already exists — you decide whether to rewrite it or brief a new one on the Content desk.",
+        "What the score cannot see is content quality. Which to pursue is yours to decide.",
       ),
-    ),
-  ];
-}
-
-function clusterWrite(source: string, topic: string | null, summary: string): Step {
-  return {
-    kind: "write",
-    tool: "create_keyword_clusters",
-    input: topic ? { source, seeds: topic } : { source },
-    apply: () => {
-      addKeywordClusters(source, topic);
+      declined: "Not scored — no vendor credit spent.",
     },
-    after: summary,
-    declined: "Not built — no vendor credit spent.",
-  };
+  ];
 }
 
 function buildClustersFollowUp(ctx: Ctx): Script {
@@ -233,7 +349,7 @@ function buildClustersFollowUp(ctx: Ctx): Script {
         "",
         `Biggest by monthly searches: **${topic}** (8,100), **${topic} for freelancers** (2,400), **best ${topic} app** (1,900).`,
         "",
-        "They are on the SEO screen with a winnability score each. Pick the ones worth a page — I have not planned any.",
+        "They are on the SEO screen. Score them when you want to see which are winnable — I have not planned any.",
       ),
     ),
   ];
@@ -251,86 +367,48 @@ function buildClustersFollowUp(ctx: Ctx): Script {
   ];
 }
 
-interface SavedLists {
-  competitors: string[];
-  backlinkOpportunities: string[];
-}
+const KEYWORD_SHARERS = new Set(["canva.com"]);
 
-function saved(): SavedLists {
-  const lists = call<SavedLists>("GET", "/api/v1/site/seo");
-  return { competitors: lists?.competitors ?? [], backlinkOpportunities: lists?.backlinkOpportunities ?? [] };
-}
-
-const bare = (d: string) => d.replace(/^www\./, "").toLowerCase();
-
-const COMPETITOR_CANDIDATES: Array<[string, number, string]> = [
-  ["freshbooks.com", 1840, "Invoicing-first bookkeeping for freelancers. Direct."],
-  ["waveapps.com", 1410, "Free bookkeeping for very small businesses; same templates intent."],
-  ["hellobonsai.com", 930, "Freelancer suite with invoicing and tax estimates."],
-  ["xero.com", 2120, "Broader, but competes on every 'small business bookkeeping' query."],
-  ["freeagent.com", 760, "Bookkeeping and tax for freelancers; strong on the same how-to queries."],
-  ["honeybook.com", 540, "Client management with invoicing; overlaps on contracts and payments."],
-  ["invoiceninja.com", 480, "Invoice generator and templates — same top-of-funnel."],
+const HOLDERS: Array<[string, number, string]> = [
+  ["freshbooks.com", 12, "1–3"],
+  ["quickbooks.intuit.com", 12, "2–5"],
+  ["invoicesimple.com", 11, "3–7"],
+  ["canva.com", 10, "4–8"],
+  ["invoice-generator.com", 9, "5–9"],
+  ["honeybook.com", 4, "8–10"],
 ];
 
-function table(rows: Array<[string, number, string]>): string[] {
-  return ["| Domain | Shared keywords | Why it counts |", "|---|---|---|", ...rows.map(([d, n, why]) => `| ${d} | ${n.toLocaleString("en-US")} | ${why} |`)];
-}
-
-function findCompetitors(ctx: Ctx): Script {
-  const have = new Set(saved().competitors.map(bare));
-  const fresh = COMPETITOR_CANDIDATES.filter(([d]) => !have.has(d));
-  const already = COMPETITOR_CANDIDATES.filter(([d]) => have.has(d));
-  const steps: Step[] = [tool("find_competitors"), tool("seo_ranked_keywords")];
-  const intro = [
-    "Domains that chase the same searchers for the same thing, across the US market:",
-    "",
-    ...table(COMPETITOR_CANDIDATES),
-    "",
-    "Left out: nerdwallet.com, forbes.com/advisor (review sites), reddit.com, irs.gov — they share keywords with everyone.",
-    "",
-  ];
-  if (fresh.length === 0) return [...steps, text(lines(...intro, "All of them are already saved, so there is nothing to add."))];
-  const keep = fresh.map(([d]) => d);
-  ctx.memory.pending = () => [listWrite("competitors", "add", keep, `Saved ${keep.join(", ")}. Backlink opportunities and keyword gaps now compare against them too.`)];
+function whoHolds(ctx: Ctx): Script {
+  const kw = quoted(ctx.message) ?? "this keyword";
+  const saved = new Set(competitorDomains().map(bare));
+  const consistent = HOLDERS.filter(([, months]) => months >= 9);
+  const fresh = consistent.filter(([d]) => !saved.has(d) && !KEYWORD_SHARERS.has(d)).map(([d]) => d);
+  if (fresh.length) {
+    ctx.memory.pending = () => [competitorWrite("add", fresh, `Saved ${fresh.join(" and ")} as competitors. Fetch their backlinks from the Competitors screen when you want them in the backlink opportunities.`)];
+  }
   return [
-    ...steps,
+    tool("keyword_serp_history"),
+    tool("run_sql"),
     text(
       lines(
-        ...intro,
-        already.length ? `${already.map(([d]) => d).join(", ")} ${already.length === 1 ? "is" : "are"} already saved.` : "",
-        `Say **yes** to save ${keep.length === 1 ? keep[0] : `the ${keep.length} new ones (${keep.join(", ")})`}, or tell me which to drop.`,
+        `Twelve months of results for **${kw}** (US):`,
+        "",
+        "| Domain | Months in the top 10 | Usual position |",
+        "|---|---|---|",
+        ...HOLDERS.map(([d, m, p]) => `| ${d}${saved.has(d) ? " *(saved)*" : ""} | ${m} of 12 | ${p} |`),
+        "",
+        "Left out: 7 domains that appeared in only one or two months, including a forum thread and two news pieces.",
+        "",
+        "ledgerly.app was in the top 10 for 8 of the 12 months, mostly at 7–9, and dropped out in the two months after the March core update.",
+        "",
+        "canva.com holds it too, but it sells design tools; it shares the template searches, not your customers, so I would not save it.",
+        "",
+        fresh.length
+          ? `${fresh.join(" and ")} ${fresh.length === 1 ? "holds" : "hold"} the keyword consistently but ${fresh.length === 1 ? "is" : "are"} not saved as competitors. Say **yes** to save ${fresh.length === 1 ? "it" : "them"}.`
+          : "Every consistent holder is already a saved competitor.",
       ),
     ),
   ];
-}
-
-const BACKLINK_CANDIDATES: Array<[string, string, string]> = [
-  ["freelancersunion.org", "4 of 5", "Resource page: 'tools for getting paid'"],
-  ["creativeboom.com", "3 of 5", "'Best invoicing apps for creatives' roundup"],
-  ["smallbiztrends.com", "3 of 5", "Reviews of each tool"],
-  ["aiga.org", "2 of 5", "Design business resources page"],
-  ["contentfolks.com", "2 of 5", "Freelance writers' toolkit"],
-  ["accountingtoday.com", "2 of 5", "News on Wave's free-tier changes"],
-];
-
-function findBacklinks(ctx: Ctx): Script {
-  const have = new Set(saved().backlinkOpportunities.map(bare));
-  const fresh = BACKLINK_CANDIDATES.filter(([d]) => !have.has(d)).map(([d]) => d);
-  const steps: Step[] = [tool("find_backlink_opportunities")];
-  const body = [
-    "Sites linking to two or more of your saved competitors but not to ledgerly.app, most competitors linked first:",
-    "",
-    "| Site | Links to | What they link to |",
-    "|---|---|---|",
-    ...BACKLINK_CANDIDATES.map(([d, n, what]) => `| ${d}${have.has(d) ? " *(saved)*" : ""} | ${n} | ${what} |`),
-    "",
-    "Skipped 41 directories and link farms that link everything, plus the competitors themselves.",
-    "",
-  ];
-  if (fresh.length === 0) return [...steps, text(lines(...body, "Every one of them is already on your list."))];
-  ctx.memory.pending = () => [listWrite("backlink_opportunities", "add", fresh, `Saved ${fresh.join(", ")} to backlink opportunities. Reaching out is yours to do — I only keep the list.`)];
-  return [...steps, text(lines(...body, `Say **yes** to save the ${fresh.length} not on your list yet.`))];
 }
 
 const NOT_COMPETITORS: Record<string, string> = {
@@ -340,18 +418,12 @@ const NOT_COMPETITORS: Record<string, string> = {
   "invoicesimple.com": "an invoice app with no bookkeeping — it overlaps on templates only",
 };
 
-const NOT_WORTH_ASKING: Record<string, string> = {
-  "solopreneurhub.io": "a link directory that lists anything that pays",
-  "paymentsjournal.com": "payments-industry news; it would not link a bookkeeping tool",
-  "doola.com": "sells company formation and its own bookkeeping — a competitor, not a linker",
-};
-
 function cleanCompetitors(ctx: Ctx): Script {
-  const list = saved().competitors;
+  const list = competitorDomains();
   const flagged = list.filter((d) => NOT_COMPETITORS[bare(d)]);
-  const steps: Step[] = [tool("run_sql"), tool("find_competitors")];
+  const steps: Step[] = [tool("run_sql"), tool("seo_ranked_keywords")];
   if (flagged.length === 0) return [...steps, text(`All ${list.length} saved competitors sell what you sell to the same buyer. Nothing to remove.`)];
-  ctx.memory.pending = () => [listWrite("competitors", "remove", flagged, `Removed ${flagged.join(", ")} from competitors.`)];
+  ctx.memory.pending = () => [competitorWrite("remove", flagged, `Removed ${flagged.join(", ")} from competitors, with the backlinks fetched for them.`)];
   return [
     ...steps,
     text(
@@ -366,22 +438,27 @@ function cleanCompetitors(ctx: Ctx): Script {
   ];
 }
 
-function rankBacklinks(ctx: Ctx): Script {
-  const list = saved().backlinkOpportunities;
-  const flagged = list.filter((d) => NOT_WORTH_ASKING[bare(d)]);
-  const good = list.filter((d) => !NOT_WORTH_ASKING[bare(d)]).slice(0, 5);
-  if (flagged.length) ctx.memory.pending = () => [listWrite("backlink_opportunities", "remove", flagged, `Removed ${flagged.join(", ")}.`)];
+const LINK_REASONS: Record<string, string> = {
+  "fitsmallbusiness.com": "links FreshBooks, QuickBooks, Wave and Bonsai from *Best invoicing software* — a roundup that is refreshed every year. Offer: a reviewer account and the comparison table from /compare/freshbooks.",
+  "business.org": "links three of them from *Best accounting software for freelancers*. Offer: the same — they add tools when asked by a vendor with a free tier.",
+  "freelancersunion.org": "links FreshBooks' late payment letter and Wave's invoice template from a *Getting paid* resource page. Offer: your late payment reminder template, which is free and has no signup wall.",
+  "creativeboom.com": "links Bonsai and FreshBooks in *Best invoicing apps for creatives*. Offer: a short note on why designers use Ledgerly.",
+  "smallbiztrends.com": "links Wave's review page. The link is nofollow; a review account is the only ask.",
+  "aiga.org": "links FreshBooks and Bonsai from its design business resources. Offer: the hourly rate calculator, which fits the page better than the product.",
+};
+
+function whyTheyLink(): Script {
+  const top = opportunityDomains().filter((d) => LINK_REASONS[d]).slice(0, 5);
   return [
+    tool("list_backlink_opportunities"),
     tool("run_sql"),
     text(
       lines(
-        `Ranked the ${list.length} saved sites by how plausible a link to Ledgerly is. The top of the list:`,
+        top.length ? "What the top backlink opportunities link to on your competitors, and why:" : "No backlink opportunities yet — fetch a saved competitor's backlinks on the Competitors screen first.",
         "",
-        ...good.map((d, i) => `${i + 1}. **${d}**`),
+        ...top.map((d) => `- **${d}** ${LINK_REASONS[d]}`),
         "",
-        flagged.length
-          ? lines("Not worth asking:", ...flagged.map((d) => `- **${d}** — ${NOT_WORTH_ASKING[bare(d)]}.`), "", "Say **yes** to remove those.")
-          : "Nothing on the list looks like spam.",
+        top.length ? "Writing and sending each ask is yours; the Content desk can help you draft one." : "",
       ),
     ),
   ];
@@ -456,65 +533,103 @@ function clusterChip(ctx: Ctx): Script | null {
   return null;
 }
 
+function trackMainKeywords(ctx: Ctx): Script {
+  const kws = ["invoice payment terms", "freelance hourly rate calculator", "late payment reminder email", "freshbooks alternative", "how to record stripe fees", "wave accounting alternative", "quickbooks alternative"];
+  ctx.memory.pending = () => [
+    {
+      kind: "write",
+      tool: "track_keyword_volumes",
+      input: { keywords: kws },
+      apply: () => trackKeywords(kws),
+      after: `Recorded 12 months of search volume for the ${kws.length} keywords in each of your markets. They are on the Tracked screen; ask whether demand is seasonal when you want a read.`,
+      declined: "Not tracked — no credit spent.",
+    },
+  ];
+  return [tool("run_sql"), text(`${kws.length} clusters have a winnability of 50 or more, so that is ${kws.length} main keywords. Recording their search volume costs about $0.05 per market. Say **yes** to start.`)];
+}
+
+function movers(): Script {
+  return [
+    tool("run_sql"),
+    text(
+      lines(
+        "Search Console position for the tracked keywords, month by month (US):",
+        "",
+        fence("chart", chartLine("Position (lower is better)", [
+          { name: "quickbooks alternative", color: "#0f766e", points: [13, 13, 12, 12, 11, 11, 10, 10, 9, 9, 8, 8] },
+          { name: "best bookkeeping software for freelancers", color: "#c2410c", points: [24, 22, 21, 20, 19, 19, 18, 17, 17, 16, 19, 16] },
+          { name: "home office deduction", color: "#7c3aed", points: [17, 17, 18, 18, 19, 19, 20, 21, 21, 22, 19, 23] },
+        ], ["N", "D", "J", "F", "M", "A", "M", "J", "J", "A", "S", "O"])),
+        "",
+        `- **Up most:** ${link("/compare/quickbooks")} 13 → 8 over twelve months, steady, no single jump.`,
+        `- **Up, unevenly:** ${link("/blog/best-bookkeeping-software-freelancers")} 24 → 16, with a dip in September.`,
+        `- **Down most:** ${link("/blog/home-office-deduction")} 17 → 23 since April. The UK market shows no movers worth naming.`,
+        "",
+        "The data shows when each moved, not why. The home office page last changed 14 months ago; whether to refresh it is your call.",
+      ),
+    ),
+  ];
+}
+
+function seasonal(): Script {
+  return [
+    tool("run_sql"),
+    tool("seo_trend"),
+    text(
+      lines(
+        "- **Seasonal:** 'quarterly estimated taxes', 'freelance tax deductions' and '1099-nec' peak in January–April (3× the summer level), with smaller bumps before each quarterly deadline. A page should be ready by early December.",
+        "- **Flat:** 'invoice payment terms', 'quickbooks alternative' — steady all year.",
+        "- **Slight December dip:** everything invoicing-related, as freelancers stop billing for the holidays.",
+      ),
+    ),
+  ];
+}
+
 export function seoAnswer(ctx: Ctx): Script | null {
   const l = ctx.lower;
   const cluster = clusterChip(ctx);
   if (cluster) return cluster;
-  if (l.includes("what actually changed in the last 90 days")) return changed();
-  if (l.includes("striking-distance list")) return striking();
+  if (l.includes("twelve months of results-page history")) return whoHolds(ctx);
+  if (l.includes("position 8 or lower")) return striking();
   if (l.includes("index status record")) return invisible();
   if (l.includes("i will name a page")) {
     ctx.memory.awaiting = dropFollowUp;
     return [text("Which page? Paste its path, for example /blog/best-bookkeeping-software-freelancers.")];
   }
   if (l.includes("measured traffic") || l.includes("compare this period's traffic")) return traffic(l);
-  if (l.includes("pick what this website should target next")) return targetNext();
+  if (l.includes("people also ask questions")) {
+    ctx.memory.awaiting = longTailFollowUp;
+    return [text("Which keyword? For example \"invoice template\" or \"freelance taxes\".")];
+  }
+  if (l.includes("i will give you a seed keyword or topic")) {
+    ctx.memory.awaiting = seedIdeasFollowUp;
+    return [text("Which seed? A keyword or a topic, for example \"expense tracking\".")];
+  }
+  if (l.includes("i will name a competitor's domain")) {
+    ctx.memory.awaiting = matchCompetitorFollowUp;
+    return [text("Which competitor? Name the domain, for example freshbooks.com.")];
+  }
+  if (l.includes("i will give you a topic. before you start")) {
+    ctx.memory.awaiting = topicPlanQuestions;
+    return [text("Which topic? A few words is enough — for example \"freelance taxes\".")];
+  }
+  if (l.includes("score my keyword clusters that have no score yet")) return scoreClusters();
   if (l.includes("choose a handful of seed keywords")) {
     ctx.memory.awaiting = buildClustersFollowUp;
     return [text("Which topic? A few words is enough — for example \"recurring invoices\" or \"self-employed tax\".")];
   }
   if (l.includes("search console queries")) {
-    return [
-      tool("run_sql"),
+    ctx.memory.pending = () => [
       clusterWrite("search_console", null, lines(
         "Built from your 2,140 Search Console queries with impressions: 386 dropped as noise (brand misspellings, one-off long tails) or off-topic, 41 clusters came out.",
         "",
         "Biggest by monthly searches: **invoice template** (22,000), **freelance tax deductions** (9,900), **quickbooks alternative** (6,600), **invoice payment terms** (4,400).",
         "",
-        "They are on the SEO screen now. None is a recommendation yet — ask me what to target next when you want one.",
+        "They are on the SEO screen now. None is a recommendation yet — score them when you want to see which are winnable.",
       )),
     ];
+    return [tool("run_sql"), text("2,140 Search Console queries have impressions in the last 28 days. Clustering them spends about $0.60 of vendor credit. Say **yes** to build the clusters.")];
   }
-  if (l.includes("already ranks for")) {
-    return [
-      tool("seo_ranked_keywords"),
-      clusterWrite("ranked", null, lines(
-        "Built from the 1,870 keywords ledgerly.app ranks for: 29 clusters.",
-        "",
-        "Worth pushing: **self employed tax calculator** (you rank 9.6, the cluster is 14k searches) and **quickbooks alternative** (11.3, 6.6k). Both sit just off page one with pages that already exist.",
-        "Not worth pushing: **invoice template** — you are already 4.1 and the top three are Microsoft, Canva and Google.",
-      )),
-    ];
-  }
-  if (l.includes("two or more of my saved competitors")) {
-    return [
-      tool("run_sql"),
-      tool("seo_ranked_keywords"),
-      clusterWrite("competitor_gap", null, lines(
-        "Gaps built from freshbooks.com, wave.com and bonsai.io: 640 keywords two or more of them rank for and you do not, 22 clusters.",
-        "",
-        "| Gap | Searches/mo | Owned by |",
-        "|---|---|---|",
-        "| estimate vs quote | 5,400 | FreshBooks, Wave |",
-        "| freelance contract template | 4,100 | Bonsai, FreshBooks |",
-        "| how to pay yourself as a freelancer | 2,900 | Wave, Bonsai |",
-        "",
-        "The contract template is the interesting one: you already have quote and invoice templates, so a contract template fits the set.",
-      )),
-    ];
-  }
-  if (l.includes("find the domains this website competes with")) return findCompetitors(ctx);
-  if (l.includes("link to this website's saved competitors")) return findBacklinks(ctx);
   if (l.includes("saved competitors of this website and tell me which do not belong")) return cleanCompetitors(ctx);
   if (l.includes("i will name one of my competitors")) {
     ctx.memory.awaiting = (c) => [
@@ -536,81 +651,9 @@ export function seoAnswer(ctx: Ctx): Script | null {
     ];
     return [text("Which competitor? Name the domain, for example freshbooks.com.")];
   }
-  if (l.includes("saved backlink opportunities of this website and rank them")) return rankBacklinks(ctx);
-  if (l.includes("find what they link to on my competitors")) {
-    return [
-      tool("find_backlink_opportunities"),
-      text(
-        lines(
-          "- **freelancersunion.org** links FreshBooks' *late payment letter* and Wave's *invoice template* from a 'Getting paid' resource list. Offer: your late payment reminder templates.",
-          "- **creativeboom.com** links Bonsai and FreshBooks in 'Best invoicing apps for creatives (2026)'. Offer: a short note on why designers use Ledgerly, with the Marina Design case study.",
-          "- **smallbiztrends.com** links Wave's review page. Offer: a review account, nothing else.",
-          "",
-          "The ask is yours to write and send; I can draft one on the Content desk if you want.",
-        ),
-      ),
-    ];
-  }
-  if (l.includes("start tracking rankings and search volume")) {
-    const kws = ["invoice payment terms", "freelance tax deductions", "how to invoice as a freelancer", "quickbooks import", "1099 contractor payments", "late fee on invoice", "self employed tax calculator"];
-    ctx.memory.pending = () => [
-      {
-        kind: "write",
-        tool: "track_keyword_rankings",
-        input: { keywords: kws },
-        apply: () => trackKeywords(kws),
-        after: `Tracking ${kws.length} keywords. The first rankings arrive with the next weekly run; history builds from today.`,
-        declined: "Not tracked — no credit spent.",
-      },
-    ];
-    return [tool("run_sql"), text(`${kws.length} clusters have a winnability of 50 or more, so that is ${kws.length} main keywords. Tracking rankings and volume for them costs about $0.35 a week. Say **yes** to start.`)];
-  }
-  if (l.includes("ranking history of the tracked keywords")) {
-    return [
-      tool("run_sql"),
-      tool("seo_trend"),
-      text(
-        lines(
-          "Over the last 8 weekly runs:",
-          "",
-          fence("chart", chartLine("Position (lower is better)", [
-            { name: "quickbooks alternative", color: "#0f766e", points: [16, 15, 15, 14, 13, 12, 12, 11] },
-            { name: "best bookkeeping software", color: "#c2410c", points: [5, 5, 6, 6, 7, 8, 9, 9] },
-          ], ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8"])),
-          "",
-          `- **Up:** ${link("/compare/quickbooks")} 16 → 11 on 'quickbooks alternative'.`,
-          `- **Down:** ${link("/blog/best-bookkeeping-software-freelancers")} 5 → 9. Above you now: forbes.com/advisor (new) and a refreshed capterra.com list.`,
-        ),
-      ),
-    ];
-  }
-  if (l.includes("monthly search volume of the tracked keywords")) {
-    return [
-      tool("seo_trend"),
-      text(
-        lines(
-          "- **Seasonal:** 'self employed tax calculator' and 'freelance tax deductions' peak in January–April (3× the summer level), with a smaller bump before each quarterly deadline. A page should be ready by early December.",
-          "- **Flat:** 'invoice payment terms', 'quickbooks alternative' — steady all year.",
-          "- **Slight December dip:** everything invoicing-related, as freelancers stop billing for the holidays.",
-        ),
-      ),
-    ];
-  }
-  if (l.includes("lost positions since the previous run")) {
-    return [
-      tool("run_sql"),
-      tool("seo_relevant_pages"),
-      text(
-        lines(
-          "Two keywords lost ground since last week:",
-          "",
-          "- **best bookkeeping software** 8 → 9: forbes.com/advisor/business/software/best-bookkeeping-software moved 11 → 6 after a refresh dated this month.",
-          "- **late fee on invoice** 12 → 13: a new invoiced.com guide entered at 7.",
-          "",
-          "Neither is an emergency. The first is the dated-title problem the 90-day review already flagged.",
-        ),
-      ),
-    ];
-  }
+  if (l.includes("find what they link to on my competitors")) return whyTheyLink();
+  if (l.includes("start tracking search volume for the main keyword")) return trackMainKeywords(ctx);
+  if (l.includes("search console position for the tracked keywords")) return movers();
+  if (l.includes("monthly search volume of the tracked keywords")) return seasonal();
   return null;
 }

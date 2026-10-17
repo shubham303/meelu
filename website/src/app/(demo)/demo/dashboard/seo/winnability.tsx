@@ -7,7 +7,15 @@ export function winnabilityTone(score: number | undefined): string {
   return "bg-faint";
 }
 
-export function WinnabilityBar({ score }: { score: number | undefined }) {
+export function WinnabilityBar({
+  score,
+  poisoned = false,
+}: {
+  score: number | undefined;
+  poisoned?: boolean;
+}) {
+  if (poisoned)
+    return <span className="text-xs text-warn">fake results</span>;
   if (score === undefined)
     return <span className="text-xs text-faint">not scored</span>;
   return (
