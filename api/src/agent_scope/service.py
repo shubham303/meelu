@@ -84,7 +84,11 @@ class AgentScopeService:
     def scope_response(
         self, action: str, scope: AgentScope, site: SiteRef | None, desks: str = ""
     ) -> AgentScopeResponse:
-        extra = [desk_addition(name) for name in self.resolve_extra_desks(scope, desks)]
+        extra = (
+            []
+            if scope.standalone
+            else [desk_addition(name) for name in self.resolve_extra_desks(scope, desks)]
+        )
         loaded = {scope.desk, *(a.desk for a in extra)}
 
         writes = list(dict.fromkeys(scope.write_names + [w for a in extra for w in a.write_names]))
@@ -117,7 +121,7 @@ class AgentScopeService:
             desks=[
                 DeskOffer(name=name, blurb=blurb, brief=self.desk_brief(name))
                 for name, blurb in sorted(DESK_BLURBS.items())
-                if name not in loaded
+                if name not in loaded and not scope.standalone
             ],
             system_prompt=scope.system_prompt(site)
             + self.render_tables(tables)

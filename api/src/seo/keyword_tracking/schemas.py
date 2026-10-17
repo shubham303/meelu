@@ -24,20 +24,6 @@ class TrackKeywordsRequest(BaseModel):
         return cleaned
 
 
-class RankRow(BaseModel):
-    keyword: str
-    location_code: int
-    language_code: str
-    observed_on: date
-    source: str
-    url: str
-    domain: str
-    is_site: bool
-    rank_group: int
-    rank_absolute: int | None
-    title: str | None
-
-
 class VolumeRow(BaseModel):
     keyword: str
     location_code: int
@@ -49,14 +35,6 @@ class VolumeRow(BaseModel):
     competition: float | None = None
 
 
-class RankingsTracked(EntityModel):
-    keywords: int
-    backfilled: list[str]
-    snapshots: int
-    rows: int
-    site_ranked: list[str]
-
-
 class VolumesTracked(EntityModel):
     keywords: int
     months: int
@@ -66,14 +44,13 @@ class VolumesTracked(EntityModel):
 
 class TrackedKeyword(EntityModel):
     keyword: str
-    position: int | None = None
-    previous_position: int | None = None
-    change: int | None = None
+    position: float | None = None
+    previous_position: float | None = None
+    change: float | None = None
     url: str | None = None
-    history: list[int | None]
+    history: list[float | None]
     volume: int | None = None
     demand: str | None = None
-    last_tracked: date | None = None
 
 
 class TrackedStats(EntityModel):

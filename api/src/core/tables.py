@@ -11,6 +11,7 @@ from src.payments import models as payments_models
 from src.profile import models as profile_models
 from src.providers import models as providers_models
 from src.render_jobs import models as render_jobs_models
+from src.reports import models as reports_models
 from src.scratchpad import models as scratchpad_models
 from src.seo.keyword_clusters import models as keyword_clusters_models
 from src.seo.keyword_tracking import models as keyword_tracking_models
@@ -40,6 +41,7 @@ __all__ = [
     "profile_models",
     "providers_models",
     "render_jobs_models",
+    "reports_models",
     "scratchpad_models",
     "site_pages_models",
     "site_search_models",

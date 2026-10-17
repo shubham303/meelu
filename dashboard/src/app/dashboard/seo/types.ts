@@ -11,6 +11,14 @@ export interface ClimbResult {
   passChance: number;
 }
 
+export type SearchIntent =
+  | "informational"
+  | "navigational"
+  | "commercial"
+  | "transactional";
+
+export type ClusterImportance = "hot" | "warm" | "cold";
+
 export interface KeywordCluster {
   id: string;
   mainKeyword: string;
@@ -21,6 +29,8 @@ export interface KeywordCluster {
   languageCode: string;
   country?: string;
   volume: number;
+  intent?: SearchIntent;
+  importance?: ClusterImportance;
   winnability?: number;
   pTopThree?: number;
   pPageOne?: number;
@@ -32,25 +42,37 @@ export interface KeywordCluster {
   isRanked: boolean;
   competitors: string[];
   climb: ClimbResult[];
+  serpVerdict?: "clean" | "suspect" | "poisoned";
   metricsAt?: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface SiteSeoLists {
-  siteId: string;
-  competitors: string[];
-  backlinkOpportunities: string[];
+export interface Competitor {
+  id: string;
+  domain: string;
+  domainRank?: number;
+  backlinksFetchedAt?: string;
+  createdAt: string;
+  backlinks: number;
 }
 
-export type SeoListName = "competitors" | "backlink_opportunities";
-
-export interface SeoListChange {
-  list: SeoListName;
+export interface CompetitorsChange {
   added: string[];
   removed: string[];
   unchanged: string[];
-  items: string[];
+  competitors: string[];
+}
+
+export interface BacklinkOpportunity {
+  domain: string;
+  linksTo: string[];
+  domainRank?: number;
+  domainSpamScore?: number;
+  backlinkSpamScore?: number;
+  dofollow: boolean;
+  exampleUrl: string;
+  exampleAnchor?: string;
 }
 
 export interface TrackedKeyword {
@@ -62,7 +84,6 @@ export interface TrackedKeyword {
   history: Array<number | null>;
   volume?: number;
   demand?: "rising" | "steady" | "falling" | "seasonal";
-  lastTracked?: string;
 }
 
 export interface TrackedOverview {

@@ -2,34 +2,11 @@ from src.agent.context import require_site
 from src.agent.server import tool
 from src.core.database import unit_of_work
 from src.providers.registry import Caller
-from src.seo.keyword_tracking.schemas import RankingsTracked, TrackKeywordsRequest, VolumesTracked
+from src.seo.keyword_tracking.schemas import TrackKeywordsRequest, VolumesTracked
 from src.seo.keyword_tracking.service import keyword_tracking_service
 from src.seo.market import site_markets
 
 DESK = "seo"
-
-
-@tool(writes=True, desk=DESK)
-async def track_keyword_rankings(
-    keywords: list[str], location_code: int | None = None
-) -> RankingsTracked:
-    """Record today's top organic results for these keywords in `seo_rank_history`; the
-    first time a keyword is tracked, its last twelve monthly snapshots are backfilled.
-    Covers the site's markets unless one location_code is passed. Query the table with SQL
-    afterwards. Spends vendor credit."""
-    ctx = require_site()
-    body = TrackKeywordsRequest(keywords=keywords)
-    async with unit_of_work() as db:
-        targets = await site_markets(db, ctx.user_id, ctx.site_id, location_code)
-        return await keyword_tracking_service.track_rankings(
-            db,
-            Caller(user_id=ctx.user_id, site_id=ctx.site_id),
-            ctx.user_id,
-            ctx.site_id,
-            ctx.site_domain or "",
-            body,
-            targets,
-        )
 
 
 @tool(writes=True, desk=DESK)

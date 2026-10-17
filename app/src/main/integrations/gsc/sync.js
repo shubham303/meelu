@@ -11,6 +11,7 @@ import {
 const running = new Map();
 
 const POST_BATCH_DAYS = 14;
+const POST_BATCH_ROWS = 50_000;
 const HEARTBEAT_EVERY_DAYS = 7;
 const INSPECT_PER_RUN = 300;
 
@@ -236,12 +237,14 @@ async function drive(syncId, siteId, cookieHeader, broadcast) {
     let daysDone = 0;
     let rowsStored = 0;
     let pending = [];
+    let pendingRows = 0;
     let stopped = false;
 
     const flush = async () => {
       if (pending.length === 0) return;
       const batch = pending;
       pending = [];
+      pendingRows = 0;
       const res = await api("/site/search-data/rows", {
         method: "POST",
         siteId,
@@ -258,8 +261,9 @@ async function drive(syncId, siteId, cookieHeader, broadcast) {
       }
       const rows = await searchAnalyticsDay(property, day);
       pending.push({ day, rows });
+      pendingRows += rows.length;
       daysDone += 1;
-      if (pending.length >= POST_BATCH_DAYS) await flush();
+      if (pending.length >= POST_BATCH_DAYS || pendingRows >= POST_BATCH_ROWS) await flush();
       if (daysDone % HEARTBEAT_EVERY_DAYS === 0) {
         await patch({ daysDone, rowsStored }).catch(() => undefined);
         emit("search:progress", {

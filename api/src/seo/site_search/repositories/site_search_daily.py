@@ -108,6 +108,7 @@ class SiteSearchDailyRepository:
                     "query": r.query,
                     "page": r.page,
                     "device": r.device,
+                    "country": r.country,
                     "clicks": r.clicks,
                     "impressions": r.impressions,
                     "position": r.position,
@@ -555,6 +556,55 @@ class SiteSearchDailyRepository:
             up=[m for m in movers_all if m.clicks > m.prev_clicks][:limit],
             down=[m for m in movers_all if m.clicks < m.prev_clicks][:limit],
         )
+
+    async def monthly_positions(
+        self, db: AsyncSession, site_id: str, queries: list[str], country: str, since: date
+    ) -> list[tuple[str, date, float, str]]:
+        if not queries:
+            return []
+        stmt = text(
+            f"""
+            with by_page as (
+              select {NORMALIZE_QUERY} as q,
+                     date_trunc('month', day)::date as month,
+                     page,
+                     sum(impressions) as impressions,
+                     sum(position * impressions) as weighted
+                from site_search_daily
+               where site_id = :site_id
+                 and country = :country
+                 and day >= :since
+                 and {NORMALIZE_QUERY} in :queries
+               group by 1, 2, 3
+            )
+            select q, month,
+                   sum(weighted) / sum(impressions) as position,
+                   (array_agg(page order by impressions desc))[1] as page
+              from by_page
+             group by q, month
+            having sum(impressions) > 0
+            """
+        ).bindparams(bindparam("queries", expanding=True))
+        rows = (
+            await db.execute(
+                stmt,
+                {"site_id": site_id, "country": country, "since": since, "queries": queries},
+            )
+        ).all()
+        return [(str(q), month, float(position), str(page)) for q, month, position, page in rows]
+
+    async def queries_with_impressions(self, db: AsyncSession, site_id: str, days: int) -> set[str]:
+        rows = await db.execute(
+            text(
+                f"""
+                select distinct {NORMALIZE_QUERY} as q
+                  from site_search_daily
+                 where site_id = :site_id and day > current_date - :days and impressions > 0
+                """
+            ),
+            {"site_id": site_id, "days": days},
+        )
+        return {str(q) for q in rows.scalars()}
 
     async def query_window_totals(self, db: AsyncSession, site_id: str) -> list[QueryWindowTotals]:
         rows = (

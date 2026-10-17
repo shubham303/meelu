@@ -22,7 +22,7 @@ export default function AnalyticsPage() {
         <EmptyState
           icon={BarChart3}
           title="The analyst runs in the Meelu app"
-          hint="Open Meelu on your computer to ask questions. Past chats and saved reports are listed here on the web too."
+          hint="Open Meelu on your computer to ask questions. Past chats are listed here on the web too, and saved reports are on the Reports desk."
         />
       )}
     </PageEnter>

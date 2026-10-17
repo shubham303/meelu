@@ -1,6 +1,7 @@
 import {
   BarChart3,
   FileText,
+  FileChartColumn,
   Globe,
   LayoutDashboard,
   NotebookPen,
@@ -76,6 +77,14 @@ export const WEBSITE_DESKS: Desk[] = [
     icon: BarChart3,
     stage: "measure",
     blurb: "Ask about your Search Console and Analytics data — answers with charts and evidence; keep the ones that matter as reports.",
+    scope: "site",
+  },
+  {
+    id: "reports",
+    href: "/dashboard/reports",
+    label: "Reports",
+    icon: FileChartColumn,
+    blurb: "Results you asked Meelu to keep, from Analytics, SEO and Technical SEO.",
     scope: "site",
   },
   {

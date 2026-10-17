@@ -27,10 +27,14 @@ from src.profile.endpoints import router as profile_router
 from src.providers.endpoints import router as providers_router
 from src.providers.errors import ProviderError
 from src.render_jobs.endpoints import router as render_jobs_router
+from src.reports.endpoints import router as reports_router
 from src.scratchpad import cron as scratchpad_cron
 from src.scratchpad.endpoints import router as scratchpad_router
 from src.seo.keyword_clusters.endpoints import router as keyword_clusters_router
 from src.seo.keyword_tracking.endpoints import router as keyword_tracking_router
+from src.seo.search_suggestions.endpoints import router as search_suggestions_router
+from src.seo.serp_history.endpoints import router as serp_history_router
+from src.seo.serp_results.endpoints import router as serp_results_router
 from src.seo.site_search.endpoints import router as site_search_router
 from src.seo.site_seo.endpoints import router as site_seo_router
 from src.seo.site_traffic.endpoints import router as site_traffic_router
@@ -96,11 +100,15 @@ for desk in (
     site_seo_router,
     keyword_clusters_router,
     keyword_tracking_router,
+    serp_history_router,
+    serp_results_router,
+    search_suggestions_router,
     site_traffic_router,
     technical_seo_router,
     content_router,
     analytics_router,
     notes_router,
+    reports_router,
     user_prompts_router,
     social_listening_router,
     agent_scope_router,
