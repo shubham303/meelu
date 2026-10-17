@@ -1,17 +1,21 @@
 ---
 title: Backlink opportunities
-description: Find sites that link to your competitors but not to you, and keep a shortlist worth contacting.
+description: See the sites that link to your competitors but not to you, with spammy, paid and weak links left out.
 ---
 
-A **backlink** is a link from another website to yours. Links from relevant, trusted sites help your pages rank. The easiest sites to win a link from are often those that already link to your competitors. The **Backlink opportunities** screen keeps a shortlist of them.
+A **backlink** is a link from another website to yours. Links from relevant, trusted sites help your pages rank. The easiest sites to win a link from are often those that already link to your competitors. The **Backlink opportunities** screen lists them.
 
 Open it from the **Backlink opportunities** card on the SEO home screen.
 
-## Before you start
+## Where the list comes from
 
-Opportunities are found from your saved [competitors](/docs/seo/competitors). If you have none, the screen shows a note: **Opportunities are found from your saved competitors. Save some first.** Build that list first.
+Click **Fetch backlinks** next to a [competitor](/docs/seo/competitors) to pull its backlinks, and yours the first time. Only the competitors you fetch count. A site is an opportunity when it links to at least one competitor and never links to you. Sites that link to the most competitors come first.
 
-## Building the shortlist
+Not every backlink is worth chasing. Meelu leaves out links that:
+
+- **Look spammy**: a high spam score for the link or the linking site, a page with hundreds of outbound links, or a site on a bare IP address.
+- **Look paid**: links marked sponsored, pages about sponsored or guest posts, and links repeated across a whole site.
+- **Are too weak to help**: sites with a very low domain rank, dead pages, and redirects instead of real links.
 
 <Screenshot
   src="/docs/screens/seo-backlinks.webp"
@@ -21,38 +25,29 @@ Opportunities are found from your saved [competitors](/docs/seo/competitors). If
   caption="The Backlinks screen."
 />
 
-<Tabs items={["Ask Meelu", "Add by hand"]}>
-  <Tab value="Ask Meelu">
-    Click the **Find backlink opportunities** task card. Meelu finds sites that link to your saved competitors but not to you. It keeps only the ones where a real editor could plausibly link to you for the same reason. It skips spam, directories that link to anything, and the competitors themselves. You see the shortlist first, with the sites that link to the most competitors at the top. Meelu saves only the ones you agree with.
-  </Tab>
-  <Tab value="Add by hand">
-    Type a domain, such as `site.com`, in the box under **Saved opportunities** and click **Add**. You can add several at once, separated by spaces or commas.
-  </Tab>
-</Tabs>
-
-The list holds up to 500 sites.
-
 <Callout type="info" title="You do the outreach">
 Meelu finds and ranks the sites. It does not contact anyone. You decide which sites to approach and what to offer them.
 </Callout>
 
-## What each button does
+## What each column and button shows
 
-| Button | What it does |
+| Column or button | What it shows or does |
 | --- | --- |
-| **Add** | Saves the domains typed in the box. |
-| **Open site** | Opens the site in a new tab. |
-| **Remove** | Removes the site from the list right away. |
+| **Site** | The linking site, with a link to the page that links to a competitor. |
+| **Links to** | Which of your competitors it links to. |
+| **Domain rank** | How strong the linking site is, out of 1000. |
+| **Spam** | The spam score of the linking site, out of 100. Lower is better. |
+| **Link** | Whether the link passes ranking value (follow) or not (nofollow). |
+| **Dismiss** | Hides the site from the list for good, even after backlinks are fetched again. |
+| **Previous** / **Next** | Move through the list, 25 sites at a time. |
 | **Ask Meelu** (sparkle icon) | Opens a task about backlinks. Desktop app only. |
 | Task cards under **Start a task** | Ready-made tasks, listed below. Desktop app only. |
 
 | Task card | What Meelu does |
 | --- | --- |
-| **Find backlink opportunities** | Finds sites linking to your competitors but not to you, and saves the ones you approve. |
-| **Which are worth asking?** | Ranks your saved sites by how likely a link to you is. Suggests removing spam and sites that would never link to a business like yours, once you agree. |
-| **Why do they link to competitors?** | For the top saved sites, finds what they link to on your competitors' sites and why, so your request fits. |
+| **Why do they link to competitors?** | For the top sites, finds what they link to on your competitors' sites and why, so your request fits. |
 
 ## Tips
 
 - Run **Why do they link to competitors?** before you reach out. A request that matches why a site already links (a resource list, a review, a comparison) is far more likely to work.
-- Finding opportunities uses credits. See [Credits](/docs/concepts/credits).
+- Fetching a competitor's backlinks uses credits, so fetch the rivals you care about most. See [Credits](/docs/concepts/credits).

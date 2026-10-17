@@ -113,6 +113,18 @@ function readability(text: string): CheckResult {
 function similarity(text: string): CheckResult {
   const issues: CheckIssue[] = [];
   const lower = text.toLowerCase();
+  if (lower.includes("late fee") && words(text) >= 50) {
+    const page = PAGES.find((p) => p.url.endsWith("/blog/late-fee-invoice"));
+    if (page) {
+      issues.push({
+        code: "duplicate_page",
+        title: `This draft is 68% the same as ${page.title}`,
+        detail: `52% of this draft already appears on ${page.url}, and 68% of that page appears here. Longest shared run: "Invoices that mention a late fee get paid an average of six days sooner, even when the fee is never charged". Two pages on the same thing split the ranking between them. Consider improving that page instead, or make this one cover what it does not.`,
+        anchorText: null,
+        suggestion: null,
+      });
+    }
+  }
   if (lower.includes("net 30") || lower.includes("payment terms")) {
     const paragraph = prose(text).find((p) => /net 30|payment terms/i.test(p));
     const page = PAGES.find((p) => p.url.endsWith("/blog/invoice-payment-terms"));
@@ -126,7 +138,12 @@ function similarity(text: string): CheckResult {
       });
     }
   }
-  return { summary: { pagesCompared: PAGES.filter((p) => p.status === 200).length, flagged: issues.length }, issues };
+  const pagesChecked = PAGES.filter((p) => p.status === 200).length;
+  const duplicatePages = issues.filter((i) => i.code === "duplicate_page").length;
+  return {
+    summary: { pagesChecked, pagesScreened: pagesChecked, pagesCompared: Math.min(20, 3 + duplicatePages), duplicatePages, flagged: issues.length - duplicatePages, maxScore: duplicatePages ? 68 : issues.length ? 41 : 0 },
+    issues,
+  };
 }
 
 function aiDetector(text: string): CheckResult {

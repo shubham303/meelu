@@ -1,6 +1,9 @@
 import type {
+  BacklinkOpportunity,
   ClimbResult,
+  ClusterImportance,
   KeywordCluster,
+  SearchIntent,
   TrackedKeyword,
 } from "@/app/(demo)/demo/dashboard/seo/types";
 import { ago, DAY, hashString, HOUR, NOW, seeded } from "../rand";
@@ -116,6 +119,7 @@ interface ClusterSeed {
   country?: string;
   scoredDaysAgo?: number;
   rankedInSearch?: boolean;
+  verdict?: "suspect" | "poisoned";
   createdDaysAgo: number;
 }
 
@@ -123,7 +127,7 @@ const SEEDS: ClusterSeed[] = [
   { main: "invoice template", keywords: ["free invoice template", "invoice template word", "invoice template pdf", "simple invoice template", "blank invoice template", "invoice template google docs", "invoice format"], seeds: ["invoice"], volume: 49500, theme: "invoice", difficulty: 330, fitFull: 0.85, ours: { path: "/templates/invoice", position: 7, pageRank: 168 }, scoredDaysAgo: 3, createdDaysAgo: 34 },
   { main: "invoice generator", keywords: ["free invoice generator", "invoice maker", "online invoice generator", "create invoice online", "invoice creator"], seeds: ["invoice"], volume: 40500, theme: "invoice", difficulty: 360, fitFull: 0.9, ours: { path: "/tools/invoice-generator", position: 13, pageRank: 121 }, scoredDaysAgo: 3, createdDaysAgo: 34 },
   { main: "quarterly estimated taxes", keywords: ["estimated tax payments", "how to pay quarterly taxes", "estimated taxes self employed", "quarterly tax payments for self employed", "when are quarterly taxes due"], core: "estimated taxes", seeds: ["freelance taxes"], volume: 18100, theme: "tax", difficulty: 300, fitFull: 0.75, ours: { path: "/blog/quarterly-estimated-taxes-explained", position: 9, pageRank: 142 }, scoredDaysAgo: 5, createdDaysAgo: 30 },
-  { main: "1099-nec", keywords: ["1099 nec form", "what is a 1099-nec", "1099-nec explained", "1099 nec vs 1099 misc", "who gets a 1099-nec"], seeds: ["freelance taxes"], volume: 33100, theme: "tax", difficulty: 380, fitFull: 0.9, ours: { path: "/blog/1099-nec-guide", position: 14, pageRank: 104 }, scoredDaysAgo: 5, createdDaysAgo: 30 },
+  { main: "1099-nec", keywords: ["1099 nec form", "what is a 1099-nec", "1099-nec explained", "1099 nec vs 1099 misc", "who gets a 1099-nec"], seeds: ["freelance taxes"], volume: 33100, theme: "tax", difficulty: 380, fitFull: 0.9, ours: { path: "/blog/1099-nec-guide", position: 14, pageRank: 104 }, scoredDaysAgo: 5, verdict: "suspect", createdDaysAgo: 30 },
   { main: "schedule c instructions", keywords: ["how to fill out schedule c", "schedule c form", "schedule c for freelancers", "schedule c expenses"], seeds: ["freelance taxes"], volume: 12100, theme: "tax", difficulty: 360, fitFull: 0.85, scoredDaysAgo: 5, createdDaysAgo: 30 },
   { main: "freelance tax deductions", keywords: ["what can i deduct as a freelancer", "self employed tax deductions", "1099 deductions list", "tax write offs for freelancers", "freelancer tax write offs"], seeds: ["freelance taxes"], volume: 5400, theme: "tax", difficulty: 250, fitFull: 0.7, ours: { path: "/blog/deductible-expenses-freelancers", position: 11, pageRank: 133 }, scoredDaysAgo: 5, createdDaysAgo: 30 },
   { main: "self employed health insurance deduction", keywords: ["health insurance deduction self employed", "can i deduct health insurance as a freelancer", "self employed health insurance tax"], seeds: ["freelance taxes"], volume: 1300, theme: "tax", difficulty: 160, fitFull: 0.55, scoredDaysAgo: 5, createdDaysAgo: 30 },
@@ -133,13 +137,13 @@ const SEEDS: ClusterSeed[] = [
   { main: "best bookkeeping software for freelancers", keywords: ["bookkeeping software freelancers", "best accounting software for freelancers", "freelance accounting app", "accounting software for self employed"], seeds: ["bookkeeping software"], volume: 1600, theme: "software", difficulty: 280, fitFull: 0.85, ours: { path: "/blog/best-bookkeeping-software-freelancers", position: 16, pageRank: 96 }, scoredDaysAgo: 2, createdDaysAgo: 26 },
   { main: "late payment reminder email", keywords: ["payment reminder email", "overdue invoice email", "friendly payment reminder template", "payment reminder template", "invoice reminder email"], seeds: ["late payments"], volume: 2900, theme: "invoice", difficulty: 140, fitFull: 0.6, ours: { path: "/templates/late-payment-reminder", position: 6, pageRank: 118 }, scoredDaysAgo: 8, createdDaysAgo: 22 },
   { main: "invoice payment terms", keywords: ["payment terms on invoice", "net 30 payment terms", "net 30 meaning", "due on receipt meaning"], seeds: ["late payments"], volume: 3600, theme: "cash", difficulty: 190, fitFull: 0.6, ours: { path: "/blog/invoice-payment-terms", position: 12, pageRank: 98 }, scoredDaysAgo: 8, createdDaysAgo: 22 },
-  { main: "invoice factoring for freelancers", keywords: ["freelance invoice factoring", "get paid early on invoices", "invoice financing for freelancers"], seeds: ["late payments"], volume: 480, theme: "cash", difficulty: 70, fitFull: 0.35, scoredDaysAgo: 8, createdDaysAgo: 22 },
+  { main: "invoice factoring for freelancers", keywords: ["freelance invoice factoring", "get paid early on invoices", "invoice financing for freelancers"], seeds: ["late payments"], volume: 480, theme: "cash", difficulty: 70, fitFull: 0.35, scoredDaysAgo: 8, verdict: "suspect", createdDaysAgo: 22 },
   { main: "freelance hourly rate calculator", keywords: ["hourly rate calculator", "how much should i charge per hour freelance", "freelance rate calculator", "contractor rate calculator"], seeds: ["pricing freelance work"], volume: 1900, theme: "cash", difficulty: 110, fitFull: 0.6, ours: { path: "/tools/hourly-rate-calculator", position: 5, pageRank: 131 }, scoredDaysAgo: 11, createdDaysAgo: 19 },
   { main: "how to record stripe fees", keywords: ["stripe fees accounting", "stripe fees bookkeeping", "how to categorize stripe fees", "stripe payout reconciliation"], seeds: ["payment processors"], volume: 880, theme: "cash", difficulty: 90, fitFull: 0.5, ours: { path: "/blog/stripe-fees-bookkeeping", position: 4, pageRank: 109 }, scoredDaysAgo: 11, createdDaysAgo: 19 },
   { main: "profit and loss statement template", keywords: ["profit and loss template", "p&l template", "simple profit and loss statement", "self employed profit and loss statement"], seeds: ["bookkeeping templates"], volume: 8100, theme: "invoice", difficulty: 260, fitFull: 0.8, ours: { path: "/templates/profit-and-loss", position: 10, pageRank: 117 }, scoredDaysAgo: 11, createdDaysAgo: 19 },
   { main: "chart of accounts for freelancers", keywords: ["freelancer chart of accounts", "chart of accounts for sole proprietor", "simple chart of accounts"], seeds: ["bookkeeping basics"], volume: 590, theme: "cash", difficulty: 120, fitFull: 0.55, ours: { path: "/blog/chart-of-accounts-freelancer", position: 9, pageRank: 92 }, scoredDaysAgo: 14, createdDaysAgo: 19 },
   { main: "mileage log template", keywords: ["mileage log", "irs mileage log template", "mileage tracker spreadsheet", "printable mileage log"], seeds: ["bookkeeping templates"], volume: 6600, theme: "expenses", difficulty: 210, fitFull: 0.75, scoredDaysAgo: 14, createdDaysAgo: 19 },
-  { main: "receipt scanner app", keywords: ["receipt tracking app", "best receipt scanner app", "scan receipts for taxes", "receipt organizer app"], seeds: ["expense tracking"], volume: 9900, theme: "expenses", difficulty: 340, fitFull: 0.9, scoredDaysAgo: 14, createdDaysAgo: 19 },
+  { main: "receipt scanner app", keywords: ["receipt tracking app", "best receipt scanner app", "scan receipts for taxes", "receipt organizer app"], seeds: ["expense tracking"], volume: 9900, theme: "expenses", difficulty: 340, fitFull: 0.9, scoredDaysAgo: 14, verdict: "poisoned", createdDaysAgo: 19 },
   { main: "freelance contract template", keywords: ["freelance contract", "freelance agreement template", "independent contractor agreement template", "freelance contract sample"], seeds: ["freelance clients"], volume: 4400, theme: "legal", difficulty: 230, fitFull: 0.8, scoredDaysAgo: 14, createdDaysAgo: 17 },
   { main: "how to pay yourself as a sole proprietor", keywords: ["sole proprietor pay yourself", "owner's draw", "how do freelancers pay themselves", "owner draw vs salary"], seeds: ["bookkeeping basics"], volume: 1000, theme: "cash", difficulty: 130, fitFull: 0.5, scoredDaysAgo: 14, createdDaysAgo: 17 },
   { main: "invoice template uk", keywords: ["uk invoice template", "sole trader invoice template", "vat invoice template", "invoice template uk free"], seeds: ["invoice"], volume: 2900, theme: "uk", difficulty: 180, fitFull: 0.75, ours: { path: "/templates/invoice", position: 9, pageRank: 168 }, country: "GB", scoredDaysAgo: 6, createdDaysAgo: 15 },
@@ -247,12 +251,32 @@ export function scoreCluster(seed: ClusterSeed, pass = 0): Metrics {
 
 export const CLUSTER_SEEDS = new Map<string, ClusterSeed>();
 
+export function intentOf(keyword: string): SearchIntent {
+  if (/\b(ledgerly|login|sign in)\b/.test(keyword)) return "navigational";
+  if (/\b(alternative|alternatives|best|vs|software|app|apps|competitors)\b/.test(keyword)) return "commercial";
+  if (/\b(template|generator|calculator|maker|log)\b/.test(keyword)) return "transactional";
+  return "informational";
+}
+
+export function importanceOf(keyword: string): ClusterImportance {
+  const intent = intentOf(keyword);
+  if (intent === "transactional" || /\b(alternative|alternatives|software|app)\b/.test(keyword)) return "hot";
+  if (intent === "commercial" || /\b(invoice|invoicing|bookkeeping|expense|receipt)\b/.test(keyword)) return "warm";
+  return "cold";
+}
+
+export function verdictOf(seed: ClusterSeed): KeywordCluster["serpVerdict"] {
+  if (seed.scoredDaysAgo === undefined) return undefined;
+  return seed.verdict ?? "clean";
+}
+
 function buildCluster(seed: ClusterSeed): KeywordCluster {
   const id = `kcl_${slug(seed.main).slice(0, 24)}`;
   CLUSTER_SEEDS.set(id, seed);
   const country = seed.country ?? "US";
   const scored = seed.scoredDaysAgo !== undefined;
-  const metrics: Partial<Metrics> = scored ? scoreCluster(seed) : { climb: [] };
+  const poisoned = seed.verdict === "poisoned";
+  const metrics: Partial<Metrics> = scored && !poisoned ? scoreCluster(seed) : { climb: [] };
   const metricsAt = scored ? ago((seed.scoredDaysAgo as number) * DAY + 3 * HOUR) : undefined;
   return {
     id,
@@ -264,8 +288,11 @@ function buildCluster(seed: ClusterSeed): KeywordCluster {
     languageCode: "en",
     country,
     volume: seed.volume,
+    intent: intentOf(seed.main),
+    importance: importanceOf(seed.main),
     ...metrics,
     climb: metrics.climb ?? [],
+    serpVerdict: verdictOf(seed),
     isRanked: Boolean(seed.ours) || Boolean(seed.rankedInSearch),
     competitors: [],
     metricsAt,
@@ -316,34 +343,78 @@ export function discoverClusters(source: string, topic: string | null, existing:
   return bank.filter((seed) => !existing.has(seed.main)).slice(0, 5).map(buildCluster);
 }
 
-export const COMPETITORS = [
-  "freshbooks.com",
-  "quickbooks.intuit.com",
-  "waveapps.com",
-  "xero.com",
-  "hellobonsai.com",
-  "zoho.com",
-  "bench.co",
-  "invoicesimple.com",
-  "indy.fyi",
+interface CompetitorSeed {
+  domain: string;
+  addedDaysAgo: number;
+  backlinks: number;
+  fetchedDaysAgo?: number;
+}
+
+export const COMPETITOR_SEEDS: CompetitorSeed[] = [
+  { domain: "freshbooks.com", addedDaysAgo: 30, backlinks: 1840, fetchedDaysAgo: 6 },
+  { domain: "quickbooks.intuit.com", addedDaysAgo: 30, backlinks: 2960, fetchedDaysAgo: 6 },
+  { domain: "waveapps.com", addedDaysAgo: 30, backlinks: 1310, fetchedDaysAgo: 6 },
+  { domain: "xero.com", addedDaysAgo: 28, backlinks: 0 },
+  { domain: "hellobonsai.com", addedDaysAgo: 28, backlinks: 720, fetchedDaysAgo: 5 },
+  { domain: "zoho.com", addedDaysAgo: 21, backlinks: 0 },
+  { domain: "bench.co", addedDaysAgo: 21, backlinks: 0 },
+  { domain: "invoicesimple.com", addedDaysAgo: 14, backlinks: 0 },
+  { domain: "indy.fyi", addedDaysAgo: 14, backlinks: 0 },
 ];
 
-export const BACKLINK_OPPORTUNITIES = [
-  "fitsmallbusiness.com",
-  "business.org",
-  "freelancersunion.org",
-  "indiehackers.com",
-  "creativeboom.com",
-  "smallbiztrends.com",
-  "thefreelancer.co",
-  "millo.co",
-  "freelancermap.com",
-  "sidehustlenation.com",
-  "doola.com",
-  "solopreneurhub.io",
-  "paymentsjournal.com",
-  "dribbble.com",
+export function domainRankOf(domain: string): number | undefined {
+  return DOMAINS[domain]?.rank;
+}
+
+interface OpportunitySeed {
+  domain: string;
+  linksTo: string[];
+  rank: number;
+  spam: number;
+  dofollow: boolean;
+  path: string;
+  anchor: string;
+}
+
+const OPPORTUNITY_SEEDS: OpportunitySeed[] = [
+  { domain: "fitsmallbusiness.com", linksTo: ["freshbooks.com", "quickbooks.intuit.com", "waveapps.com", "hellobonsai.com"], rank: 538, spam: 2, dofollow: true, path: "/best-invoicing-software/", anchor: "FreshBooks" },
+  { domain: "business.org", linksTo: ["freshbooks.com", "quickbooks.intuit.com", "waveapps.com"], rank: 476, spam: 3, dofollow: true, path: "/finance/accounting/best-accounting-software-for-freelancers/", anchor: "Wave Accounting" },
+  { domain: "freelancersunion.org", linksTo: ["freshbooks.com", "waveapps.com", "hellobonsai.com"], rank: 512, spam: 1, dofollow: true, path: "/resources/getting-paid/", anchor: "late payment letter" },
+  { domain: "creativeboom.com", linksTo: ["freshbooks.com", "hellobonsai.com"], rank: 489, spam: 2, dofollow: true, path: "/tips/best-invoicing-apps-for-creatives/", anchor: "Bonsai" },
+  { domain: "smallbiztrends.com", linksTo: ["waveapps.com", "quickbooks.intuit.com"], rank: 571, spam: 4, dofollow: false, path: "/wave-accounting-review.html", anchor: "Wave" },
+  { domain: "indiehackers.com", linksTo: ["freshbooks.com", "waveapps.com"], rank: 602, spam: 3, dofollow: false, path: "/post/what-do-you-use-for-invoicing", anchor: "waveapps.com" },
+  { domain: "thefreelancer.co", linksTo: ["hellobonsai.com", "freshbooks.com"], rank: 318, spam: 6, dofollow: true, path: "/tools/freelance-finance-stack/", anchor: "Bonsai invoicing" },
+  { domain: "millo.co", linksTo: ["freshbooks.com", "quickbooks.intuit.com"], rank: 402, spam: 5, dofollow: true, path: "/freelance-accounting-software", anchor: "QuickBooks Self-Employed" },
+  { domain: "sidehustlenation.com", linksTo: ["waveapps.com", "quickbooks.intuit.com"], rank: 455, spam: 4, dofollow: true, path: "/best-accounting-software-side-hustle/", anchor: "Wave" },
+  { domain: "aiga.org", linksTo: ["freshbooks.com", "hellobonsai.com"], rank: 548, spam: 1, dofollow: true, path: "/resources/design-business-tools", anchor: "FreshBooks" },
+  { domain: "contentfolks.com", linksTo: ["hellobonsai.com", "waveapps.com"], rank: 336, spam: 3, dofollow: true, path: "/freelance-writer-toolkit/", anchor: "Wave" },
+  { domain: "accountingtoday.com", linksTo: ["waveapps.com", "quickbooks.intuit.com"], rank: 612, spam: 2, dofollow: true, path: "/news/wave-changes-free-tier", anchor: "Wave Financial" },
+  { domain: "solopreneurhub.io", linksTo: ["freshbooks.com", "quickbooks.intuit.com", "waveapps.com", "hellobonsai.com"], rank: 142, spam: 38, dofollow: true, path: "/directory/finance/", anchor: "visit site" },
+  { domain: "paymentsjournal.com", linksTo: ["quickbooks.intuit.com", "waveapps.com"], rank: 377, spam: 7, dofollow: false, path: "/smb-payments-roundup/", anchor: "QuickBooks" },
+  { domain: "doola.com", linksTo: ["freshbooks.com", "waveapps.com"], rank: 431, spam: 4, dofollow: true, path: "/blog/bookkeeping-for-llcs/", anchor: "FreshBooks" },
+  { domain: "dribbble.com", linksTo: ["hellobonsai.com"], rank: 791, spam: 1, dofollow: false, path: "/stories/freelance-finances", anchor: "Bonsai" },
 ];
+
+export function opportunitiesFor(fetched: Set<string>, dismissed: Set<string>): BacklinkOpportunity[] {
+  return OPPORTUNITY_SEEDS.filter((o) => !dismissed.has(o.domain))
+    .map((o) => ({ ...o, linksTo: o.linksTo.filter((d) => fetched.has(d)) }))
+    .filter((o) => o.linksTo.length > 0)
+    .sort((a, c) => c.linksTo.length - a.linksTo.length || c.rank - a.rank)
+    .map((o) => ({
+      domain: o.domain,
+      linksTo: o.linksTo,
+      domainRank: o.rank,
+      domainSpamScore: o.spam,
+      backlinkSpamScore: Math.max(0, o.spam - 1),
+      dofollow: o.dofollow,
+      exampleUrl: `https://${o.domain}${o.path}`,
+      exampleAnchor: o.anchor,
+    }));
+}
+
+export function backlinkCountFor(domain: string): number {
+  return 400 + (hashString(domain) % 2600);
+}
 
 function monthStarts(count: number): string[] {
   const now = new Date(NOW);
@@ -368,7 +439,7 @@ interface TrackSeed {
   demand?: TrackedKeyword["demand"];
 }
 
-function trackedRow(t: TrackSeed, lastRunDaysAgo: number): TrackedKeyword {
+function trackedRow(t: TrackSeed): TrackedKeyword {
   const rng = seeded(hashString(t.keyword));
   const history: Array<number | null> = MONTHS.map((_, i) => {
     const age = MONTHS.length - 1 - i;
@@ -392,7 +463,6 @@ function trackedRow(t: TrackSeed, lastRunDaysAgo: number): TrackedKeyword {
     history,
     volume: t.volume,
     demand: t.demand,
-    lastTracked: new Date(NOW - lastRunDaysAgo * DAY).toISOString().slice(0, 10),
   };
 }
 
@@ -429,7 +499,7 @@ const TRACK_SEEDS: Record<string, TrackSeed[]> = {
 };
 
 export function trackedFor(country: string): TrackedKeyword[] {
-  return (TRACK_SEEDS[country] ?? []).map((t) => trackedRow(t, 3));
+  return (TRACK_SEEDS[country] ?? []).map((t) => trackedRow(t));
 }
 
 export function newTrackedRow(keyword: string, cluster: KeywordCluster | undefined): TrackedKeyword {
@@ -440,6 +510,5 @@ export function newTrackedRow(keyword: string, cluster: KeywordCluster | undefin
     url: position ? cluster?.ourUrl : undefined,
     history: MONTHS.map((_, i) => (i === MONTHS.length - 1 ? (position ?? null) : null)),
     volume: cluster?.volume,
-    lastTracked: new Date(NOW).toISOString().slice(0, 10),
   };
 }
