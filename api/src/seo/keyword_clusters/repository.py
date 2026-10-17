@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, func, literal_column, or_, select, update
+from sqlalchemy import ARRAY, Text, cast, delete, func, literal_column, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +42,18 @@ class KeywordClusterRepository:
         )
         return None if row is None else ClusterRecord.model_validate(row)
 
+    async def get_many(
+        self, db: AsyncSession, site_id: str, cluster_ids: list[str]
+    ) -> list[ClusterRecord]:
+        if not cluster_ids:
+            return []
+        rows = await db.scalars(
+            select(SeoKeywordCluster).where(
+                SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id.in_(cluster_ids)
+            )
+        )
+        return [ClusterRecord.model_validate(r) for r in rows]
+
     async def list(
         self, db: AsyncSession, site_id: str, filters: ClusterFilters, paging: PaginationParams
     ) -> PaginatedApiResponse[ClusterRecord]:
@@ -65,6 +77,85 @@ class KeywordClusterRepository:
         return await PaginationService.paginate_query(
             db, query.order_by(*RANKED), paging.page, paging.page_size, ClusterRecord
         )
+
+    async def containing(
+        self, db: AsyncSession, site_id: str, keyword: str, location_code: int, language_code: str
+    ) -> ClusterRecord | None:
+        row = await db.scalar(
+            select(SeoKeywordCluster)
+            .where(
+                SeoKeywordCluster.site_id == site_id,
+                SeoKeywordCluster.location_code == location_code,
+                SeoKeywordCluster.language_code == language_code,
+                SeoKeywordCluster.keywords.any(keyword),
+            )
+            .order_by(SeoKeywordCluster.volume.desc())
+            .limit(1)
+        )
+        return None if row is None else ClusterRecord.model_validate(row)
+
+    async def containing_any(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        keywords: list[str],
+        location_code: int,
+        language_code: str,
+    ) -> list[ClusterRecord]:
+        rows = await db.scalars(
+            select(SeoKeywordCluster)
+            .where(
+                SeoKeywordCluster.site_id == site_id,
+                SeoKeywordCluster.location_code == location_code,
+                SeoKeywordCluster.language_code == language_code,
+                SeoKeywordCluster.keywords.op("&&")(cast(keywords, ARRAY(Text))),
+            )
+            .order_by(SeoKeywordCluster.volume.desc(), SeoKeywordCluster.main_keyword)
+        )
+        return [ClusterRecord.model_validate(r) for r in rows]
+
+    async def labelled_mains(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        location_code: int,
+        language_code: str,
+        main_keywords: list[str],
+    ) -> set[str]:
+        rows = await db.scalars(
+            select(SeoKeywordCluster.main_keyword).where(
+                SeoKeywordCluster.site_id == site_id,
+                SeoKeywordCluster.location_code == location_code,
+                SeoKeywordCluster.language_code == language_code,
+                SeoKeywordCluster.main_keyword.in_(main_keywords),
+                SeoKeywordCluster.intent.is_not(None),
+                SeoKeywordCluster.importance.is_not(None),
+                SeoKeywordCluster.is_brand_keyword.is_not(None),
+            )
+        )
+        return set(rows)
+
+    async def with_cores(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        location_code: int,
+        language_code: str,
+        cores: list[str],
+    ) -> list[ClusterRecord]:
+        if not cores:
+            return []
+        rows = await db.scalars(
+            select(SeoKeywordCluster)
+            .where(
+                SeoKeywordCluster.site_id == site_id,
+                SeoKeywordCluster.location_code == location_code,
+                SeoKeywordCluster.language_code == language_code,
+                SeoKeywordCluster.core_keyword.in_(cores),
+            )
+            .order_by(SeoKeywordCluster.volume.desc(), SeoKeywordCluster.main_keyword)
+        )
+        return [ClusterRecord.model_validate(r) for r in rows]
 
     async def clustered_keywords(
         self, db: AsyncSession, site_id: str, location_code: int, language_code: str
@@ -103,6 +194,13 @@ class KeywordClusterRepository:
                     **MERGED,
                     "volume": statement.excluded.volume,
                     "core_keyword": statement.excluded.core_keyword,
+                    "intent": func.coalesce(SeoKeywordCluster.intent, statement.excluded.intent),
+                    "importance": func.coalesce(
+                        SeoKeywordCluster.importance, statement.excluded.importance
+                    ),
+                    "is_brand_keyword": func.coalesce(
+                        SeoKeywordCluster.is_brand_keyword, statement.excluded.is_brand_keyword
+                    ),
                     "updated_at": now,
                 },
             )
@@ -146,14 +244,75 @@ class KeywordClusterRepository:
         )
 
     async def set_metrics(
-        self, db: AsyncSession, site_id: str, cluster_id: str, metrics: ClusterMetrics
+        self,
+        db: AsyncSession,
+        site_id: str,
+        cluster_id: str,
+        metrics: ClusterMetrics,
+        competitors: list[str],
     ) -> ClusterRecord:
         now = datetime.now(UTC)
         ranked = {"is_ranked": True} if metrics.our_position is not None else {}
         row = await db.scalar(
             update(SeoKeywordCluster)
             .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id == cluster_id)
-            .values(**metrics.model_dump(), **ranked, metrics_at=now, updated_at=now)
+            .values(
+                **metrics.model_dump(),
+                **ranked,
+                competitors=competitors,
+                metrics_at=now,
+                updated_at=now,
+            )
+            .returning(SeoKeywordCluster)
+            .execution_options(populate_existing=True)
+        )
+        return ClusterRecord.model_validate(row)
+
+    async def clear_metrics(
+        self, db: AsyncSession, site_id: str, cluster_id: str, serp_verdict: str
+    ) -> ClusterRecord:
+        now = datetime.now(UTC)
+        row = await db.scalar(
+            update(SeoKeywordCluster)
+            .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id == cluster_id)
+            .values(
+                winnability=None,
+                p_top_three=None,
+                p_page_one=None,
+                likely_position=None,
+                our_position=None,
+                our_url=None,
+                our_strength=None,
+                intent_fit=None,
+                serp_verdict=serp_verdict,
+                climb=[],
+                competitors=[],
+                metrics_at=now,
+                updated_at=now,
+            )
+            .returning(SeoKeywordCluster)
+            .execution_options(populate_existing=True)
+        )
+        return ClusterRecord.model_validate(row)
+
+    async def set_members(
+        self,
+        db: AsyncSession,
+        site_id: str,
+        cluster_id: str,
+        keywords: list[str],
+        volume: int,
+        is_ranked: bool,
+    ) -> ClusterRecord:
+        row = await db.scalar(
+            update(SeoKeywordCluster)
+            .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id == cluster_id)
+            .values(
+                keywords=keywords,
+                volume=volume,
+                is_ranked=is_ranked,
+                updated_at=datetime.now(UTC),
+            )
             .returning(SeoKeywordCluster)
             .execution_options(populate_existing=True)
         )
@@ -166,6 +325,15 @@ class KeywordClusterRepository:
             )
         )
         return bool(result.rowcount)
+
+    async def delete_many(self, db: AsyncSession, site_id: str, cluster_ids: list[str]) -> None:
+        if not cluster_ids:
+            return
+        await db.execute(
+            delete(SeoKeywordCluster).where(
+                SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id.in_(cluster_ids)
+            )
+        )
 
 
 seo_keyword_clusters = KeywordClusterRepository()

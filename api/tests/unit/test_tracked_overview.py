@@ -16,12 +16,15 @@ def test_demand_labels():
     assert demand([50, 60, 120, 110, 60, 55]) == "seasonal"
 
 
-def test_a_keyword_that_dropped_out_of_the_top_thirty_has_no_position():
+def test_position_is_the_latest_month_with_impressions():
     months = months_back(date(2026, 10, 6), 12)
-    days = [("crm", date(2026, 9, 1)), ("crm", date(2026, 10, 1))]
-    ranks = [("crm", date(2026, 9, 1), 12, "https://ex.com/a")]
-    [row] = tracked_keywords(months, days, ranks, [])
-    assert row.position is None
-    assert row.previous_position == 12
-    assert row.change is None
-    assert row.history[-2:] == [12, None]
+    positions = [
+        ("crm", date(2026, 8, 1), 12.04, "https://ex.com/a"),
+        ("crm", date(2026, 9, 1), 9.46, "https://ex.com/b"),
+    ]
+    volumes = [("crm", date(2026, 9, 1), 500), ("erp", date(2026, 9, 1), 300)]
+    crm, erp = tracked_keywords(months, positions, volumes)
+    assert (crm.position, crm.previous_position, crm.change) == (9.5, 12.0, 2.6)
+    assert crm.url == "https://ex.com/b"
+    assert crm.history[-3:] == [12.0, 9.5, None]
+    assert erp.keyword == "erp" and erp.position is None and erp.volume == 300

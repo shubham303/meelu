@@ -54,9 +54,7 @@ class UserPromptService:
         if changes.is_empty():
             raise HTTPException(400, "Nothing to save.")
         if changes.label is not None and changes.label != existing.label:
-            key = UserPromptLabelKey(
-                site_id=site_id, surface=existing.surface, label=changes.label
-            )
+            key = UserPromptLabelKey(site_id=site_id, surface=existing.surface, label=changes.label)
             await self._require_free_label(db, key, existing.id)
         return await user_prompts.update(db, existing.id, changes)
 

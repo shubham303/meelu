@@ -1,7 +1,10 @@
 import src.agent.tools.core
 import src.data_analytics.tools
 import src.providers.seo_data.tools
-import src.scratchpad.tools  # noqa: F401
+import src.scratchpad.tools
+import src.seo.search_suggestions.tools
+import src.seo.serp_history.tools
+import src.seo.serp_results.tools  # noqa: F401
 from src.agent import server
 from src.agent_scope.analytics import ACTIONS as ANALYTICS_ACTIONS
 from src.agent_scope.content import ACTIONS as CONTENT_ACTIONS
@@ -9,6 +12,7 @@ from src.agent_scope.lib import AgentScope
 from src.agent_scope.pages import ACTIONS as PAGES_ACTIONS
 from src.agent_scope.plan import scope as plan
 from src.agent_scope.profile import ACTIONS as PROFILE_ACTIONS
+from src.agent_scope.reports import ACTIONS as REPORTS_ACTIONS
 from src.agent_scope.seo import ACTIONS as SEO_ACTIONS
 from src.agent_scope.site import ACTIONS as SITE_ACTIONS
 from src.agent_scope.social_listening import ACTIONS as SOCIAL_LISTENING_ACTIONS
@@ -30,6 +34,7 @@ AGENT_SCOPES: dict[str, AgentScope] = {
     **PROFILE_ACTIONS,
     **ANALYTICS_ACTIONS,
     **SOCIAL_LISTENING_ACTIONS,
+    **REPORTS_ACTIONS,
 }
 
 
@@ -40,7 +45,7 @@ DESK_NAMES = frozenset(scope.desk for scope in AGENT_SCOPES.values())
 DESK_BLURBS: dict[str, str] = {
     "profile": "The business profile record — who the user is, what they sell, voice and positioning; save or clear its fields.",
     "site": "The website record and site-wide technical issues — record one the audit missed, reject or restore one.",
-    "seo": "Search Console, Analytics and the saved SEO lists — find and curate competitors and backlink opportunities.",
+    "seo": "Keyword research and search competition — build keyword clusters and score how winnable they are (with intent and importance), read live and past Google results and search suggestions, track search volume, and curate competitors and backlink opportunities over Search Console and Analytics.",
     "pages": "The crawled page corpus — search pages by text or crawl facts.",
     "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
     "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
@@ -75,7 +80,7 @@ def desk_addition(desk_name: str) -> AgentScope:
 
 def _attach_note_tools() -> None:
     for scope in AGENT_SCOPES.values():
-        if scope.desk == WORKSPACE or scope.is_global:
+        if scope.desk == WORKSPACE or scope.is_global or scope.standalone:
             continue
         scope.writes = [w for w in scope.writes if w not in NOTE_TOOLS] + list(NOTE_TOOLS)
 

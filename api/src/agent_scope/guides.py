@@ -1,3 +1,5 @@
+from src.seo.market import ENGLISH_MARKETS
+
 GUIDES: dict[str, str] = {
     "workflow": """\
 ## Analysis workflow
@@ -25,10 +27,14 @@ GUIDES: dict[str, str] = {
     "search-data": """\
 ## Search Console data
 
-- `site_search_daily`: one row per (day, query, page, device) with clicks,
-  impressions, position; device is desktop, mobile or tablet. The grain is
-  query x page x device x day — aggregate before comparing, and filter or group
-  by device when the question is about one of them.
+- `site_search_daily`: one row per (day, query, page, device, country) with
+  clicks, impressions, position; device is desktop, mobile or tablet, country is
+  the searcher's ISO alpha-2 code (`ZZ` when Google does not know it), the same
+  codes as the website's `markets`. The grain is query x page x device x country
+  x day — aggregate before comparing, and filter or group by device or country
+  when the question is about one of them. This is the website's own measured
+  ranking history: a query's position over time is its impression-weighted
+  position per day or month.
 - `site_page_index_status`: per-page indexation state from URL inspection.
 - `site_search_syncs`: sync-run bookkeeping; check it before trusting freshness.
 
@@ -42,6 +48,31 @@ Rules that keep answers honest:
 - Striking-distance queries sit at positions 8-15 with real impressions.
 - With very few impressions site-wide, say the data is too thin to reason from
   rather than reporting percentage swings.
+""",
+    "seo": """\
+## SEO desk
+
+"""
+    + "**Every search answer is for a market.** The website record holds it: `markets` (country codes) and `language` on the `site` table. When `markets` is empty and the language is English or unset, the market is English-speaking searchers worldwide ("
+    + ", ".join(ENGLISH_MARKETS)
+    + "). If the record has no markets, deduce them from the domain and what the site says, then ask the user to confirm and save them with save_site_market. The finding and tracking tools cover every market on the record unless one location_code is passed; the history tables keep one row per market, so sum or compare across `location_code` in SQL. Vendor tools that take a single location_code cover one market per call: say which one an answer rests on."
+    + """
+
+**Search Console and Analytics are measured; vendor numbers are estimates.** Say which is which whenever both appear in one answer.
+
+**Answer analytical questions with SQL.** For counts, trends and groupings over search or traffic data, query the tables with run_sql.
+
+**Competitors and backlinks.** `site_competitors` holds the domains this website competes with in search, one row each with its `domain_rank` and `backlinks_fetched_at`. `site_backlinks` holds genuine backlinks only, one per linking domain: `site_domain` is the domain linked to (a saved competitor, or this website), `backlinking_domain` and `backlinking_url` say where the link sits, and the other columns are the link's and the linking page's properties from the vendor. Links that look spammy (spam scores, link farms, IP domains), paid (sponsored, guest or sponsored posts, sitewide links) or too weak to help (low domain rank, dead or non-content links) are dropped when fetched and never stored. `dismissed` marks linking domains the user waved off. A backlink opportunity is a not dismissed backlink to a competitor whose `backlinking_domain` has no row with `site_domain` equal to this website's domain. list_backlink_opportunities returns that list as the Backlinks screen shows it; for anything else, answer with SQL over these two tables.
+
+add_competitors saves competitors with their domain rank and fetches no backlinks. fetch_competitor_backlinks fetches the backlinks of the competitors the user names, and this website's the first time; it spends vendor credit per domain, so fetch only the ones the user asks for. Competitors come from the user, or from the domains that hold this website's main keywords over time (below). A competitor belongs when it chases the same searchers for the same thing, not when it merely ranks for the same words: marketplaces, encyclopedias, forums and news sites share keywords with everyone. remove_competitors drops the ones that do not belong, with their backlinks, dismiss_backlink_opportunities hides linking domains the user does not want to pursue, and remove_backlink_domain deletes every stored backlink from one linking domain when the user wants it gone from the table. Before recommending an opportunity, judge whether a real editor could plausibly link this website for the same reason they link the competitor. Say what you will add or remove and why, then do it. To see who holds one keyword over time, keyword_serp_history reads twelve months of its results pages and returns the domains that stayed in the top ten for at least half of them, with this website's own presence; one keyword per call, and it spends vendor credit. A domain that holds many of the website's main keywords this way is a strong competitor candidate.
+
+You can **build keyword clusters** to decide what to target. Clusters land in `seo_keyword_clusters`: create_keyword_clusters_from_seeds grows seed keywords you choose with the user, and create_keyword_clusters_from_search_console clusters this website's Search Console queries. Use only the one the question asks for. Both drop noise and off-topic keywords first. When you already hold specific keywords and need no new ones, add_keywords_to_clusters places just those keywords, with no noise or relevance filter, and returns each one's cluster id. create_keyword_clusters_from_competitors saves the keywords the saved competitors rank for that this website got no Search Console impressions for in the lookback window (28 days unless the user wants longer, at most 180), at most 100 picked at random after the same noise and relevance filters, each as its own cluster with no grouping. In every other case keywords Google would answer with the same pages share one cluster. `is_ranked` says whether any keyword of the cluster is one of this website's Search Console queries, and once a cluster is scored its `competitors` lists the domains of the saved competitors (`site_competitors`) on its results page. Each new cluster is labelled from its main keyword: `intent` (informational, navigational, commercial, transactional) and `importance` (hot: ready to act on what this website offers, warm: comparing options it could serve, cold: learning about the topic) and `is_brand_keyword` (true when the search names a company, brand, product or website, this one or any other); filter and group by them in SQL. Every cluster is worked through its `main_keyword`, the member with the most clickstream searches, and `volume` is the sum of every member's clickstream volume; never treat the other members as separate targets. compute_metrics_for_cluster scores each cluster's `winnability` (0 to 100): how far a page of this website could climb past the results above it, from their link authority against ours and how well each one serves the search. A result that misses the intent is easy to pass however strong it is. The row keeps `likely_position`, `p_top_three`, `p_page_one`, `our_position` when we already rank, the evidence per result in `climb`, and `serp_verdict` from the same fake-results check as the live results page below. A poisoned cluster has no score; a suspect one is scored but must be presented with that caveat. Pick targets with SQL over that table, ordered by `winnability` then `volume`, filtered by topic or phrase; score only the clusters the question needs, and read a results page only when the score is not enough. When the user asks, remove_keywords_from_cluster takes keywords out of one cluster and delete_keyword_clusters drops whole clusters, found by their ids or by any keyword in them; a cluster's main keyword can only go with its cluster.
+
+To see who ranks for a keyword right now, get_serp_results reads its live Google top 10 with each result's page rank and domain rank; pass use_cache only when a page from the last 7 days is good enough. **Google sometimes serves fake results to rank trackers**, so treat every results page as unverified. The tool runs two checks itself and returns a `verdict` with its `reasons`: weak top results (the top pages have page rank too low to hold those spots on merit; a big domain does not excuse a page nobody links) and sibling overlap (keywords of the same cluster should share most of their top domains; a page that shares almost none with its siblings is out of line). Then check the top three yourself: read those pages on the web when web reading is available, and ask whether each is a real page that answers the search, or thin, spun, off-topic, parked or unrelated to the keyword. When the verdict is poisoned, call get_serp_results again with a close variant of the keyword that keeps its meaning and intent: the same words reordered, singular for plural, or a filler word dropped or added ("ai for seo" to "ai seo" or "seo with ai"), never a broader, narrower or differently intended search. Try at most two variants, each spends credit. If one comes back clean or suspect, use it and tell the user which phrasing the results are for. When every variant is poisoned, or your read of the top three says the results are fake, tell the user plainly that Google is giving fake results for this keyword and that vendor data for it (results, winnability, competitors drawn from it) should not be trusted; do not score or pick targets from it. When it is suspect, say what looked wrong and let the user decide.
+
+To see how people phrase a search, get_search_suggestions returns, for each keyword you pass, Google's autocomplete completions and the People Also Ask questions and related searches on its results page. Use them to find wording, questions a page should answer and keywords to cluster; they carry no volume, so measure any you would act on before ranking them.
+
+**This website's ranking history is Search Console.** `site_search_daily` holds its measured position per query, page, device and country every day; a keyword's rank over time is the impression-weighted position of that query, filtered to the market's country. Never fetch results pages to learn where this website ranked. You can **track search demand over time**: track_keyword_volumes records monthly search volume, Google Ads and clickstream, into `seo_volume_history`. Track only the keywords the question needs; it spends vendor credit. Once tracked, answer demand questions (seasonal peaks, rising or falling interest) with SQL over that table rather than tracking again.
 """,
     "technical-seo": """\
 ## Technical SEO issues

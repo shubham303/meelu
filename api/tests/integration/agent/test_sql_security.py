@@ -137,13 +137,6 @@ async def test_only_listed_tables_are_readable(pair):
         await asyncio.to_thread(bootstrap)
 
 
-async def test_child_tables_without_user_id_are_scoped_through_their_parent(pair):
-    a, _ = pair
-    granted = (await asyncio.to_thread(bootstrap)).granted
-    assert "seo_keyword_cluster_competitors" in granted
-    assert (await sql(a, "select count(*) from seo_keyword_cluster_competitors")).rows == [[0]]
-
-
 async def test_agent_cannot_write_into_another_workspace(pair):
     a, b = pair
     with pytest.raises(psycopg.errors.InsufficientPrivilege):

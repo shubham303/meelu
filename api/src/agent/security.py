@@ -13,7 +13,6 @@ POLICY = "meelu_agent_select"
 
 READABLE_TABLES = frozenset(
     {
-        "analytics_reports",
         "content_piece_issues",
         "content_pieces",
         "link_suggestions",
@@ -21,14 +20,14 @@ READABLE_TABLES = frozenset(
         "pillar_page_suggestions",
         "post_media",
         "profile",
-        "seo_competitors",
-        "seo_keyword_cluster_competitors",
+        "reports",
         "seo_keyword_clusters",
-        "seo_rank_history",
         "seo_volume_history",
         "site",
         "site_audit_runs",
+        "site_backlinks",
         "site_chunks",
+        "site_competitors",
         "site_crawl_jobs",
         "site_issues",
         "site_page_index_status",
@@ -39,7 +38,6 @@ READABLE_TABLES = frozenset(
         "site_pages",
         "site_search_daily",
         "site_search_syncs",
-        "site_seo",
         "site_traffic_channels_daily",
         "site_traffic_events_daily",
         "site_traffic_geo_daily",

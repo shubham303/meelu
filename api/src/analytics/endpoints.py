@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.analytics.schemas import (
@@ -9,13 +9,6 @@ from src.analytics.schemas import (
     AnalyticsChatMessagesCreateRequest,
     AnalyticsChatResponse,
     AnalyticsChatUpdateRequest,
-    AnalyticsReportCreateRequest,
-    AnalyticsReportDeleteResponse,
-    AnalyticsReportListItemResponse,
-    AnalyticsReportResponse,
-    AnalyticsReportSummaryRecord,
-    AnalyticsReportSummaryResponse,
-    AnalyticsReportUpdateRequest,
 )
 from src.analytics.service import analytics_service
 from src.auth import AuthContext, require_site
@@ -24,65 +17,6 @@ from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 
 router = APIRouter()
-
-
-@router.get("/analytics/reports")
-async def list_reports(
-    q: str | None = Query(None),
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-    paging: PaginationParams = Depends(get_pagination_params),
-) -> PaginatedApiResponse[AnalyticsReportListItemResponse]:
-    page = await analytics_service.list_reports(db, ctx.user_id, ctx.site_id, paging, q)
-    return PaginatedApiResponse[AnalyticsReportListItemResponse](
-        data=[AnalyticsReportListItemResponse.model_validate(r) for r in page.data],
-        pagination=page.pagination,
-    )
-
-
-@router.post("/analytics/reports", status_code=201)
-async def create_report(
-    body: AnalyticsReportCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsReportSummaryResponse:
-    record = await analytics_service.create_report(db, ctx.user_id, ctx.site_id, body)
-    return AnalyticsReportSummaryResponse.model_validate(
-        AnalyticsReportSummaryRecord.from_report(record)
-    )
-
-
-@router.get("/analytics/reports/{report_id}")
-async def get_report(
-    report_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsReportResponse:
-    record = await analytics_service.get_report(db, ctx.user_id, ctx.site_id, report_id)
-    return AnalyticsReportResponse.model_validate(record)
-
-
-@router.put("/analytics/reports/{report_id}")
-async def update_report(
-    report_id: str,
-    body: AnalyticsReportUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsReportSummaryResponse:
-    record = await analytics_service.update_report(db, ctx.user_id, ctx.site_id, report_id, body)
-    return AnalyticsReportSummaryResponse.model_validate(
-        AnalyticsReportSummaryRecord.from_report(record)
-    )
-
-
-@router.delete("/analytics/reports/{report_id}")
-async def delete_report(
-    report_id: str,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> AnalyticsReportDeleteResponse:
-    record = await analytics_service.delete_report(db, ctx.user_id, ctx.site_id, report_id)
-    return AnalyticsReportDeleteResponse(id=record.id)
 
 
 @router.get("/analytics/chats")

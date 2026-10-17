@@ -5,7 +5,6 @@ from src.providers.registry import ProviderAdapter, VendorResponse
 SEO_CAPABILITIES = frozenset(
     {
         "keywords.overview",
-        "keywords.history",
         "keywords.ideas",
         "keywords.suggestions",
         "keywords.related",
@@ -13,10 +12,13 @@ SEO_CAPABILITIES = frozenset(
         "keywords.trends",
         "domains.ranked_keywords",
         "domains.competitors",
-        "backlinks.domain_intersection",
+        "backlinks.list",
+        "backlinks.domain_ranks",
+        "backlinks.spam_scores",
         "serp.history",
         "domains.relevant_pages",
         "serp.organic",
+        "serp.autocomplete",
         "serp.competitors",
         "pages.lighthouse",
         "llm.mentions",
@@ -29,9 +31,6 @@ DEFAULT_LOCALE = {"location_code": 2840, "language_code": "en"}
 class SeoDataAdapter(ProviderAdapter):
     def keyword_overview(self, keywords: list[str], locale: dict) -> dict:
         raise self.unsupported("keywords.overview")
-
-    def keyword_history(self, keywords: list[str], locale: dict) -> dict:
-        raise self.unsupported("keywords.history")
 
     def keyword_ideas(self, seeds: list[str], locale: dict, limit: int) -> dict:
         raise self.unsupported("keywords.ideas")
@@ -54,10 +53,14 @@ class SeoDataAdapter(ProviderAdapter):
     def competitors_domain(self, target: str, locale: dict, limit: int) -> dict:
         raise self.unsupported("domains.competitors")
 
-    def backlinks_domain_intersection(
-        self, targets: list[str], exclude_targets: list[str], limit: int
-    ) -> dict:
-        raise self.unsupported("backlinks.domain_intersection")
+    def backlinks_list(self, target: str, limit: int) -> dict:
+        raise self.unsupported("backlinks.list")
+
+    def bulk_ranks(self, targets: list[str]) -> dict:
+        raise self.unsupported("backlinks.domain_ranks")
+
+    def bulk_spam_scores(self, targets: list[str]) -> dict:
+        raise self.unsupported("backlinks.spam_scores")
 
     def historical_serps(self, keyword: str, locale: dict, date_from: str) -> dict:
         raise self.unsupported("serp.history")
@@ -67,6 +70,9 @@ class SeoDataAdapter(ProviderAdapter):
 
     def serp_organic(self, keyword: str, locale: dict, device: str, depth: int) -> dict:
         raise self.unsupported("serp.organic")
+
+    def serp_autocomplete(self, keyword: str, locale: dict) -> dict:
+        raise self.unsupported("serp.autocomplete")
 
     def serp_competitors(self, keywords: list[str], locale: dict, limit: int) -> dict:
         raise self.unsupported("serp.competitors")

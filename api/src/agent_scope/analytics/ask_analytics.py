@@ -1,7 +1,7 @@
 from src.agent_scope.lib import AgentScope, SiteRef, desk_guides, desk_tables, fill
-from src.analytics.models.analytics_reports import AnalyticsReport
-from src.analytics.tools import analytics_save_report, analytics_update_report
 from src.content.models.content_pieces import ContentPiece
+from src.reports.models.report import Report
+from src.reports.tools import save_report, update_report
 from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.seo.site_search.models.site_search_daily import SiteSearchDaily
 from src.seo.site_search.models.site_search_sync import SiteSearchSync
@@ -21,7 +21,7 @@ from src.technical_seo.models.site_page_issue import SitePageIssue
 
 DESK = "analytics"
 TABLES = desk_tables(
-    AnalyticsReport,
+    Report,
     Site,
     SitePage,
     SitePageIndexStatus,
@@ -62,11 +62,8 @@ Search data lags two to three days. Do not extend a range to today and report th
 ## Meelu suggests, the user decides
 End a finding with what it suggests and the evidence behind it: the pages, the dates, the numbers. Do not change pages, content or settings. When a finding calls for an action another desk owns, name the desk.
 
-## Charts in the conversation
-When a chart answers better than a sentence, put it in a fenced block whose language is `chart`. Its body is one self-contained HTML fragment: inline SVG and inline CSS, real numbers from tool results, no scripts, nothing loaded over the network. Keep it small: one chart per block, a title, labelled axes.
-
 ## Keeping a result
-Nothing is saved unless the user asks. When they want to keep a result, save it with analytics_save_report. Write self-contained HTML: inline CSS and inline SVG charts, real numbers from tool results only, and a short note on where the numbers came from and the date range. The app rejects markup that loads anything over the network. To change a saved report, use analytics_update_report with its id from the reports table.
+Nothing is saved unless the user asks. When they want to keep a result, save it with save_report, desk "analytics". Write self-contained HTML: inline CSS and inline SVG charts, real numbers from tool results only, and a short note on where the numbers came from and the date range. The app rejects markup that loads anything over the network. To change a saved report, use update_report with its id from the reports table.
 
 ## Voice
 Plain, brief, specific. Lead with the number and the answer, then the method, with the caveat in the same breath. Short markdown tables are fine."""
@@ -80,7 +77,7 @@ scope = AgentScope(
     desk=DESK,
     tables=TABLES,
     guides=GUIDES,
-    writes=[analytics_save_report, analytics_update_report],
+    writes=[save_report, update_report],
     limits={"maxTurns": 60, "maxBudgetUsd": 3},
     allow_attachments=False,
     system_prompt=system_prompt,
