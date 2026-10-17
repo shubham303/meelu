@@ -59,7 +59,7 @@ export default function TrackedPage() {
       </Link>
       <PageHeader
         title="Tracked keywords"
-        description="Where you rank, and how demand moves, for the keywords Meelu tracks. Each one keeps twelve months of history from the day it was first tracked."
+        description="How demand moves for the keywords Meelu tracks, next to where you rank for them in Search Console. Twelve months of both."
         actions={
           <SiteAskButton
             title="Ask — Tracked keywords"
@@ -90,17 +90,17 @@ export default function TrackedPage() {
             <StatCard
               label="In the top 10"
               value={data.stats.topTen}
-              hint="on the last run"
+              hint="last month with data"
             />
             <StatCard
               label="Moved"
               value={data.stats.moved}
-              hint="since the run before"
+              hint="by a position or more since the month before"
             />
             <StatCard
               label="Not ranking yet"
               value={data.stats.notRanking}
-              hint="outside the top 30"
+              hint="no Search Console impressions"
             />
           </Stagger>
 
@@ -163,16 +163,16 @@ export default function TrackedPage() {
                 <EmptyState
                   icon={LineChart}
                   title="Nothing tracked in this market yet"
-                  hint="Ask Meelu to track the main keywords of the clusters you plan to target."
+                  hint="Ask Meelu to track the main keywords of the clusters you plan to target, or use Track this keyword on a cluster."
                 />
               </div>
             ) : (
               <TrackedTable rows={rows} months={data.months} />
             )}
             <p className="border-t border-edge px-4 py-3 text-xs text-sub">
-              Positions are Google&apos;s top 30 on desktop, recorded on each
-              tracking run. A grey bar is a month with no position in the top
-              30.
+              Positions are your Search Console average for searchers in this
+              market, weighted by impressions, per month. A grey bar is a month
+              with no impressions.
             </p>
           </Card>
         </>
@@ -228,7 +228,7 @@ function TrackedTable({
                   `#${k.position}`
                 ) : (
                   <span className="font-sans text-xs text-faint">
-                    not in top 30
+                    no impressions
                   </span>
                 )}
               </td>
@@ -285,12 +285,14 @@ function History({
       {history.map((p, i) => (
         <span
           key={months[i]}
-          title={`${formatDate(months[i])}: ${p ? `#${p}` : "not in the top 30"}`}
+          title={`${formatDate(months[i])}: ${p ? `#${p}` : "no impressions"}`}
           className={cn(
             "w-2 rounded-sm",
             p ? (p <= 10 ? "bg-good" : "bg-accent") : "bg-edge2",
           )}
-          style={{ height: p ? Math.round(((31 - p) / 30) * 30 + 2) : 3 }}
+          style={{
+            height: p ? Math.round(((31 - Math.min(p, 30)) / 30) * 30 + 2) : 3,
+          }}
         />
       ))}
     </div>

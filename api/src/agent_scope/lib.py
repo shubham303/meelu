@@ -29,6 +29,7 @@ class AgentScope:
     providers: list[str] = field(default_factory=list)
     local_tools: list[str] = field(default_factory=list)
     silent_writes: list[Tool] = field(default_factory=list)
+    standalone: bool = False
 
     @property
     def table_names(self) -> frozenset[str] | None:

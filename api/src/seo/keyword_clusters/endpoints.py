@@ -6,7 +6,11 @@ from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.providers.registry import Caller
-from src.seo.keyword_clusters.schemas import ClusterFilters, ClusterRecord
+from src.seo.keyword_clusters.schemas import (
+    ClusterFilters,
+    ClusterRecord,
+    KeywordsClusterRequest,
+)
 from src.seo.keyword_clusters.service import keyword_cluster_service
 from src.sites.service import site_service
 
@@ -56,3 +60,19 @@ async def delete_cluster(
 ) -> Response:
     await keyword_cluster_service.delete(db, ctx.site_id, cluster_id)
     return Response(status_code=204)
+
+
+@router.delete("/site/seo/clusters/{cluster_id}/keywords")
+async def remove_cluster_keyword(
+    cluster_id: str,
+    keyword: list[str] = Query(...),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> ClusterRecord:
+    return await keyword_cluster_service.remove_keywords(
+        db,
+        Caller(user_id=ctx.user_id, site_id=ctx.site_id),
+        ctx.site_id,
+        cluster_id,
+        KeywordsClusterRequest(keywords=keyword),
+    )

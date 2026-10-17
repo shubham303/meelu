@@ -45,6 +45,31 @@ test("checkSimilarity reports paragraph matches per page and skips excluded page
   assert.deepEqual(new Set(result.issues.map((i) => i.detail.includes("https://x.test/"))), new Set([true]));
 });
 
+test("checkSimilarity screens out unrelated pages and reports a near-duplicate page", async () => {
+  const article = [
+    "Espresso extraction depends on grind size, dose and the time the water spends in the puck before it reaches the cup.",
+    "A finer grind slows the flow, raises the extraction yield and pulls out more of the bitter compounds near the end of the shot.",
+    "Weigh the dose on a scale every time, because a single gram changes the ratio more than most baristas expect.",
+    "Aim for a ratio near one to two and a shot time around twenty eight seconds, then adjust the grinder in small steps.",
+    "Fresh beans roasted two to three weeks ago give the most even crema and the least channelling through the basket.",
+  ].join("\n");
+  const unrelated = (n) =>
+    `Our refund policy covers annual plans number ${n}. Invoices arrive by email on the first business day of each month and list every seat on the account. Cancelling a plan stops renewal at the end of the paid term, and unused seats are credited to the next invoice automatically when the team shrinks.`;
+  const pages = [
+    { id: "dup", url: "https://x.test/espresso", title: "Espresso guide", bodyText: article.replace("twenty eight", "twenty seven") },
+    ...Array.from({ length: 30 }, (_, i) => ({ id: `u${i}`, url: `https://x.test/billing-${i}`, title: `Billing ${i}`, bodyText: unrelated(i) })),
+  ];
+  const result = await checkSimilarity(article, { siteId: "s" }, { loadPages: async () => pages });
+  assert.equal(result.summary.pagesScreened, 31);
+  assert.equal(result.summary.pagesCompared, 1);
+  assert.equal(result.summary.duplicatePages, 1);
+  const page = result.issues[0];
+  assert.equal(page.code, "duplicate_page");
+  assert.equal(page.anchorText, null);
+  assert.ok(page.detail.includes("https://x.test/espresso"));
+  assert.ok(result.issues.every((i) => !i.detail.includes("billing")));
+});
+
 test("checkAiDetect flags windows and anchors them in the body", async () => {
   const { checkAiDetect } = await import("../src/main/text-checks/ai-detect.js");
   const para =

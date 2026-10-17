@@ -1,7 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
+from src.core.database import unit_of_work
+from src.seo.site_search.models.site_search_daily import SiteSearchDaily
 from tests.conftest import signup
 
 
@@ -21,6 +24,7 @@ BATCH = {
                     "query": "espresso machine",
                     "page": "https://example.com/pricing",
                     "device": "DESKTOP",
+                    "country": "usa",
                     "clicks": 10,
                     "impressions": 100,
                     "position": 5,
@@ -29,6 +33,7 @@ BATCH = {
                     "query": "coffee grinder",
                     "page": "https://example.com/pricing",
                     "device": "DESKTOP",
+                    "country": "usa",
                     "clicks": 5,
                     "impressions": 50,
                     "position": 10,
@@ -37,6 +42,7 @@ BATCH = {
                     "query": "espresso machine",
                     "page": "https://example.com/blog/beans",
                     "device": "DESKTOP",
+                    "country": "usa",
                     "clicks": 2,
                     "impressions": 20,
                     "position": 3,
@@ -50,6 +56,7 @@ BATCH = {
                     "query": "espresso machine",
                     "page": "https://example.com/pricing",
                     "device": "DESKTOP",
+                    "country": "usa",
                     "clicks": 20,
                     "impressions": 200,
                     "position": 4,
@@ -58,6 +65,7 @@ BATCH = {
                     "query": "coffee grinder",
                     "page": "https://example.com/blog/beans",
                     "device": "DESKTOP",
+                    "country": "usa",
                     "clicks": 1,
                     "impressions": 10,
                     "position": 12,
@@ -275,6 +283,7 @@ async def test_ingest_rows_is_idempotent(client, email):
                         "query": "espresso machine",
                         "page": PRICING,
                         "device": "DESKTOP",
+                        "country": "usa",
                         "clicks": 1,
                         "impressions": 2,
                         "position": 9,
@@ -321,7 +330,8 @@ async def test_ingest_rows_validation(client, email):
     )
     assert r.status_code == 400
     assert r.json()["error"]["message"] == (
-        "Missing required field(s): days.0.rows.0.query, days.0.rows.0.device"
+        "Missing required field(s): days.0.rows.0.query, days.0.rows.0.device, "
+        "days.0.rows.0.country"
     )
 
 
@@ -353,6 +363,7 @@ async def test_operating_blind_under_threshold(client, email):
                         "query": "espresso machine",
                         "page": PRICING,
                         "device": "DESKTOP",
+                        "country": "usa",
                         "clicks": 1,
                         "impressions": 12,
                         "position": 30,
@@ -599,6 +610,7 @@ async def test_each_device_keeps_its_own_row(client, email):
             "query": "espresso machine",
             "page": PRICING,
             "device": device,
+            "country": "usa",
             "clicks": clicks,
             "impressions": impressions,
             "position": position,
@@ -625,3 +637,37 @@ async def test_each_device_keeps_its_own_row(client, email):
     )
     assert r.status_code == 400
     assert '"watch" is not a device' in r.json()["error"]["message"]
+
+
+async def test_each_country_keeps_its_own_row(client, email):
+    await signup(client, email)
+    site = await make_site(client)
+    row = {
+        "query": "espresso machine",
+        "page": PRICING,
+        "device": "DESKTOP",
+        "clicks": 1,
+        "impressions": 10,
+        "position": 5,
+    }
+    rows = [{**row, "country": country} for country in ("usa", "GBR", "zzz")]
+    r = await client.post(
+        "/api/v1/site/search-data/rows", json={"days": [{"day": DAY_A, "rows": rows}]}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"] == {"days": 1, "rows": 3}
+
+    async with unit_of_work() as db:
+        countries = (
+            await db.scalars(
+                select(SiteSearchDaily.country).where(SiteSearchDaily.site_id == site["id"])
+            )
+        ).all()
+    assert sorted(countries) == ["GB", "US", "ZZ"]
+
+    r = await client.post(
+        "/api/v1/site/search-data/rows",
+        json={"days": [{"day": DAY_A, "rows": [{**row, "country": "xx"}]}]},
+    )
+    assert r.status_code == 400
+    assert '"xx" is not a Search Console country' in r.json()["error"]["message"]

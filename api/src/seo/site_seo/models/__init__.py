@@ -1,3 +1,3 @@
-from src.seo.site_seo.models import seo_competitor, site_seo
+from src.seo.site_seo.models import site_backlink, site_competitor
 
-__all__ = ["seo_competitor", "site_seo"]
+__all__ = ["site_backlink", "site_competitor"]

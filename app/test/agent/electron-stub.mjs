@@ -13,6 +13,7 @@ export const safeStorage = {
 export const shell = {};
 export const ipcMain = { handle() {}, on() {} };
 export const BrowserWindow = class {};
+export const session = { fromPartition: () => ({}) };
 export const dialog = {};
 export const net = {};
-export default { app, safeStorage, shell, ipcMain, BrowserWindow, dialog, net };
+export default { app, safeStorage, shell, ipcMain, BrowserWindow, session, dialog, net };

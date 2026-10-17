@@ -22,11 +22,11 @@ from src.providers.seo_data.shape import (
 
 MAX_BRAND_EXCLUSIONS = 8
 OVERVIEW_KEYWORDS_PER_REQUEST = 700
-HISTORY_KEYWORDS_PER_REQUEST = 700
 TRENDS_PER_REQUEST = 5
 MAX_TREND_KEYWORDS = 50
 MAX_LLM_TARGETS = 10
 SERP_COMPETITOR_KEYWORDS = 100
+BULK_TARGETS = 1000
 
 TTL = timedelta(days=7)
 PAGE_RANK_TTL = timedelta(days=30)
@@ -46,8 +46,9 @@ class SeoDataProvider(ProviderFacade):
         capability: str,
         build: Callable[[SeoDataAdapter], dict],
         ttl: timedelta | None = TTL,
+        refresh: bool = False,
     ) -> dict:
-        return await self.fetch(caller, capability, build, lambda a: a.send(build(a)), ttl)
+        return await self.fetch(caller, capability, build, lambda a: a.send(build(a)), ttl, refresh)
 
     async def _keyword_items(
         self,
@@ -74,17 +75,6 @@ class SeoDataProvider(ProviderFacade):
             keywords,
             OVERVIEW_KEYWORDS_PER_REQUEST,
             lambda a, part: a.keyword_overview(part, locale),
-        )
-
-    async def keyword_history(
-        self, caller: Caller, keywords: list[str], locale: dict
-    ) -> list[dict]:
-        return await self._keyword_items(
-            caller,
-            "keywords.history",
-            keywords,
-            HISTORY_KEYWORDS_PER_REQUEST,
-            lambda a, part: a.keyword_history(part, locale),
         )
 
     async def discover_keywords(
@@ -123,15 +113,16 @@ class SeoDataProvider(ProviderFacade):
         return list(found)
 
     async def pages_summary(self, caller: Caller, targets: list[str]) -> dict[str, dict]:
-        if not targets:
-            return {}
-        envelope = await self._fetch(
-            caller,
-            "backlinks.pages_summary",
-            lambda a: a.bulk_pages_summary(sorted(set(targets))),
-            ttl=PAGE_RANK_TTL,
-        )
-        return {str(i["url"]): i for i in bundle_items(envelope) if i and i.get("url")}
+        found: dict[str, dict] = {}
+        for part in chunk(sorted(set(targets)), BULK_TARGETS):
+            envelope = await self._fetch(
+                caller,
+                "backlinks.pages_summary",
+                lambda a, part=part: a.bulk_pages_summary(part),
+                ttl=PAGE_RANK_TTL,
+            )
+            found.update({str(i["url"]): i for i in bundle_items(envelope) if i and i.get("url")})
+        return found
 
     async def ranked_keywords(
         self,
@@ -202,36 +193,86 @@ class SeoDataProvider(ProviderFacade):
         depth: int,
         locale: dict,
         ttl: timedelta | None = None,
+        refresh: bool = False,
     ) -> dict | None:
         envelope = await self._fetch(
             caller,
             "serp.organic",
             lambda a: a.serp_organic(keyword, locale, device, depth),
             ttl=ttl,
+            refresh=refresh,
         )
         return first_result(envelope)
 
-    async def referring_domains_gap(
-        self, caller: Caller, target: str, exclude: list[str], limit: int
-    ) -> list[dict]:
+    async def serp_autocomplete(
+        self,
+        caller: Caller,
+        keyword: str,
+        locale: dict,
+        ttl: timedelta | None = None,
+        refresh: bool = False,
+    ) -> dict | None:
         envelope = await self._fetch(
             caller,
-            "backlinks.domain_intersection",
-            lambda a: a.backlinks_domain_intersection([target], exclude, limit),
+            "serp.autocomplete",
+            lambda a: a.serp_autocomplete(keyword, locale),
+            ttl=ttl,
+            refresh=refresh,
         )
-        found = [
-            ((i or {}).get("domain_intersection") or {}).get("1") for i in bundle_items(envelope)
-        ]
-        return [f for f in found if f and f.get("target")]
+        return first_result(envelope)
+
+    async def backlinks(self, caller: Caller, target: str, limit: int) -> list[dict]:
+        found = first_result(
+            await self._fetch(caller, "backlinks.list", lambda a: a.backlinks_list(target, limit))
+        )
+        return [i for i in (found or {}).get("items") or [] if isinstance(i, dict)]
+
+    async def domain_ranks(self, caller: Caller, domains: list[str]) -> dict[str, int]:
+        return await self._per_domain(
+            caller, "backlinks.domain_ranks", domains, lambda a, part: a.bulk_ranks(part), "rank"
+        )
+
+    async def domain_spam_scores(self, caller: Caller, domains: list[str]) -> dict[str, int]:
+        return await self._per_domain(
+            caller,
+            "backlinks.spam_scores",
+            domains,
+            lambda a, part: a.bulk_spam_scores(part),
+            "spam_score",
+        )
+
+    async def _per_domain(
+        self,
+        caller: Caller,
+        capability: str,
+        domains: list[str],
+        build: Callable[[SeoDataAdapter, list[str]], dict],
+        field: str,
+    ) -> dict[str, int]:
+        found: dict[str, int] = {}
+        for part in chunk(sorted({own_domain(d) for d in domains if own_domain(d)}), BULK_TARGETS):
+            envelope = await self._fetch(
+                caller, capability, lambda a, part=part: build(a, part), ttl=PAGE_RANK_TTL
+            )
+            for item in bundle_items(envelope):
+                value = pick((item or {}).get(field))
+                if value is not None and item.get("target"):
+                    found[own_domain(item["target"])] = round(value)
+        return found
 
     async def historical_serps(
-        self, caller: Caller, keyword: str, locale: dict, date_from: str
+        self,
+        caller: Caller,
+        keyword: str,
+        locale: dict,
+        date_from: str,
+        ttl: timedelta | None = None,
     ) -> list[dict]:
         envelope = await self._fetch(
             caller,
             "serp.history",
             lambda a: a.historical_serps(keyword, locale, date_from),
-            ttl=None,
+            ttl=ttl,
         )
         snapshots = [s for s in bundle_items(envelope) if s and s.get("datetime")]
         return sorted(snapshots, key=lambda s: s["datetime"])

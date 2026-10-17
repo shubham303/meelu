@@ -479,8 +479,18 @@ async function warm(contents) {
   await withTimeout(contents.loadURL("about:blank"), 10_000, "The render window did not start.");
 }
 
+let renderQueue = Promise.resolve();
+
+function oneAtATime(work) {
+  const turn = renderQueue.then(work, work);
+  renderQueue = turn.catch(() => undefined);
+  return turn;
+}
+
 export function closeWindow() {
-  for (const device of [...windows.keys()]) destroyWindow(device);
+  return oneAtATime(() => {
+    for (const device of [...windows.keys()]) destroyWindow(device);
+  });
 }
 
 function hostOf(url) {
@@ -608,7 +618,11 @@ function mobileFacts(mobile) {
   };
 }
 
-export async function renderPage({
+export function renderPage(options) {
+  return oneAtATime(() => renderOnePage(options));
+}
+
+async function renderOnePage({
   url,
   device = "desktop",
   profile = "googlebot",

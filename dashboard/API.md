@@ -296,15 +296,22 @@ puts the page on the site by hand.
 
 ## Analytics
 
-The Analytics desk. It saves the reports the user keeps from the analytics chat.
+The Analytics desk. It keeps the analytics chats.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET, POST | `/analytics/reports` | List reports (paged, `?q=` searches titles); create a report. |
-| GET, PUT, DELETE | `/analytics/reports/{report_id}` | Get, update or delete a report. |
 | GET, POST | `/analytics/chats` | List the website's Analytics chats (paged, newest activity first; id, title, updatedAt only); start a chat. |
 | GET, PUT, DELETE | `/analytics/chats/{chat_id}` | Get a chat; rename it or store its SDK session id; delete it with its messages. |
 | GET, POST | `/analytics/chats/{chat_id}/messages` | List a chat's messages (paged, newest first); append the user's question or the answer. |
+
+## Reports
+
+The Reports desk. It holds the self-contained HTML reports the user keeps from the Analytics, SEO and Technical SEO desks.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET, POST | `/reports` | List reports (paged, `?desk=` filters by the desk that wrote it, `?q=` searches titles); create a report (`desk`, `title`, `html`). |
+| GET, PUT, DELETE | `/reports/{report_id}` | Get, update (title and/or html) or delete a report. |
 
 ## Notes
 

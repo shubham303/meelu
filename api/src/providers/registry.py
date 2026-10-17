@@ -104,9 +104,10 @@ class ProviderFacade:
         request: Callable[[Any], dict[str, Any]],
         call: Callable[[Any], Awaitable[VendorResponse]],
         ttl: timedelta | None,
+        refresh: bool = False,
     ) -> Any:
         started = time.monotonic()
-        if ttl is not None:
+        if ttl is not None and not refresh:
             async with unit_of_work() as db:
                 hit = await self._cached(db, capability, request)
                 if hit is not None:

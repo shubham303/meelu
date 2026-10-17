@@ -2,11 +2,11 @@ import re
 
 import src.agent.tools.core
 import src.agent_plans.tools
-import src.analytics.tools
 import src.content.tools
 import src.data_analytics.tools as analytics_tools
 import src.notes.tools
 import src.profile.tools
+import src.reports.tools
 import src.site_pages.tools
 import src.technical_seo.tools  # noqa: F401
 from src.agent import server
@@ -125,8 +125,16 @@ def test_the_analytics_chat_has_the_engine_and_report_writes():
     body = agent_scope_service.scope_response("ask-analytics", AGENT_SCOPES["ask-analytics"], SITE)
     allowed = allowed_for({"analytics"}, body.writes)
     assert {"cluster", "forecast", "compare_periods", "run_sql"} <= allowed
-    assert {"analytics_save_report", "analytics_update_report"} <= allowed
+    assert {"save_report", "update_report"} <= allowed
     assert body.allow_attachments is False
+
+
+def test_report_writers_get_the_report_tools():
+    for action in ("ask-analytics", "ask-seo", "issue-review"):
+        body = agent_scope_service.scope_response(action, AGENT_SCOPES[action], SITE)
+        assert {"save_report", "update_report"} <= set(body.writes), action
+    body = agent_scope_service.scope_response("ask-pages", AGENT_SCOPES["ask-pages"], SITE)
+    assert "save_report" not in body.writes
 
 
 def test_every_write_in_a_scope_is_a_registered_write():

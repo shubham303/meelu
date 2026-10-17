@@ -1,5 +1,4 @@
 import asyncio
-from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import select
@@ -9,7 +8,6 @@ from src.core.database import unit_of_work
 from src.providers.registry import Caller, VendorResponse
 from src.providers.seo_data.dataforseo import ENDPOINTS, DataForSeoAdapter
 from src.providers.seo_data.service import seo_data
-from src.seo.keyword_tracking.models.seo_rank_history import SeoRankHistory
 from src.seo.keyword_tracking.models.seo_volume_history import SeoVolumeHistory
 from src.seo.keyword_tracking.schemas import TrackKeywordsRequest
 from src.seo.keyword_tracking.service import keyword_tracking_service
@@ -25,28 +23,6 @@ def envelope(items: list[dict]) -> dict:
     }
 
 
-def organic(rank: int, url: str, domain: str) -> dict:
-    return {
-        "type": "organic",
-        "rank_group": rank,
-        "rank_absolute": rank + 1,
-        "url": url,
-        "domain": domain,
-        "title": url,
-    }
-
-
-def snapshot(day: str, ours_at: int | None) -> dict:
-    items = [
-        {"type": "people_also_ask", "rank_group": 1},
-        organic(1, "https://rival.com/a", "rival.com"),
-    ]
-    if ours_at:
-        items.append(organic(ours_at, "https://www.example.com/espresso", "www.example.com"))
-    items.append(organic(40, "https://deep.com/x", "deep.com"))
-    return {"datetime": f"{day} 08:00:00 +00:00", "items": items}
-
-
 class FakeDataForSeo(DataForSeoAdapter):
     def __init__(self):
         self.sent: list[dict] = []
@@ -57,45 +33,19 @@ class FakeDataForSeo(DataForSeoAdapter):
     async def send(self, query: dict) -> VendorResponse:
         self.sent.append(query)
         endpoint, task = query["endpoint"], query["task"]
-        if endpoint == ENDPOINTS["historical_serps"]:
-            body = envelope([snapshot("2026-03-01", 9), snapshot("2026-06-01", 6)])
-        elif endpoint == ENDPOINTS["serp"]:
-            today = datetime.now(UTC).date().isoformat()
-            live = snapshot(today, 4)
-            body = {
-                "status_code": 20000,
-                "cost": 0.002,
-                "tasks": [{"status_code": 20000, "cost": 0.002, "result": [live]}],
-            }
-        elif endpoint == ENDPOINTS["keyword_history"]:
+        if endpoint == ENDPOINTS["keyword_overview"]:
             body = envelope(
                 [
                     {
                         "keyword": k,
-                        "history": [
-                            {
-                                "year": 2026,
-                                "month": 8,
-                                "keyword_info": {
-                                    "cpc": 2.5,
-                                    "competition": 0.3,
-                                    "monthly_searches": [
-                                        {"year": 2026, "month": 7, "search_volume": 900},
-                                        {"year": 2026, "month": 8, "search_volume": 1000},
-                                    ],
-                                },
-                            }
-                        ],
-                    }
-                    for k in task["keywords"]
-                    if k != "nothing here"
-                ]
-            )
-        elif endpoint == ENDPOINTS["keyword_overview"]:
-            body = envelope(
-                [
-                    {
-                        "keyword": k,
+                        "keyword_info": {
+                            "cpc": 2.5,
+                            "competition": 0.3,
+                            "monthly_searches": [
+                                {"year": 2026, "month": 8, "search_volume": 1000},
+                                {"year": 2026, "month": 7, "search_volume": 900},
+                            ],
+                        },
                         "clickstream_keyword_info": {
                             "monthly_searches": [
                                 {"year": 2026, "month": 8, "search_volume": 120},
@@ -127,44 +77,52 @@ async def make_site(client, email) -> tuple[str, str]:
     return user_id, r.json()["data"]["id"]
 
 
-async def test_rankings_backfill_once_then_add_a_live_snapshot(client, email, vendor):
+def gsc_row(query: str, page: str, country: str, impressions: int, position: float) -> dict:
+    return {
+        "query": query,
+        "page": page,
+        "device": "DESKTOP",
+        "country": country,
+        "clicks": 1,
+        "impressions": impressions,
+        "position": position,
+    }
+
+
+async def test_tracked_overview_reads_our_rank_from_search_console(client, email, vendor):
     user_id, site_id = await make_site(client, email)
-    caller = Caller(user_id=user_id, site_id=site_id)
-    body = TrackKeywordsRequest(keywords=["Espresso  Machine"])
-    uk = markets(["GB"], "en")
-
     async with unit_of_work() as db:
-        first = await keyword_tracking_service.track_rankings(
-            db, caller, user_id, site_id, "example.com", body, uk
+        await keyword_tracking_service.track_volumes(
+            db,
+            Caller(user_id=user_id, site_id=site_id),
+            user_id,
+            site_id,
+            TrackKeywordsRequest(keywords=["espresso machine"]),
+            markets(["GB"], "en"),
         )
-    assert first.backfilled == ["espresso machine"]
-    assert first.snapshots == 3
-    assert first.rows == 6
-    assert first.site_ranked == ["espresso machine"]
 
-    async with unit_of_work() as db:
-        second = await keyword_tracking_service.track_rankings(
-            db, caller, user_id, site_id, "example.com", body, uk
-        )
-    assert second.backfilled == []
-    assert second.snapshots == 1
-    assert sum(q["endpoint"] == ENDPOINTS["historical_serps"] for q in vendor.sent) == 1
-
-    async with unit_of_work() as db:
-        ours = (
-            await db.scalars(
-                select(SeoRankHistory)
-                .where(SeoRankHistory.site_id == site_id, SeoRankHistory.is_site.is_(True))
-                .order_by(SeoRankHistory.observed_on)
-            )
-        ).all()
-    assert [(r.observed_on, r.rank_group, r.source) for r in ours] == [
-        (date(2026, 3, 1), 9, "history"),
-        (date(2026, 6, 1), 6, "history"),
-        (datetime.now(UTC).date(), 4, "live"),
-    ]
-    assert all(r.domain == "example.com" for r in ours)
-    assert {r.location_code for r in ours} == {2826}
+    espresso = "https://www.example.com/espresso"
+    other = "https://www.example.com/other"
+    r = await client.post(
+        "/api/v1/site/search-data/rows",
+        json={
+            "days": [
+                {
+                    "day": "2026-08-10",
+                    "rows": [gsc_row("espresso machine", espresso, "gbr", 100, 6)],
+                },
+                {
+                    "day": "2026-09-10",
+                    "rows": [
+                        gsc_row("Espresso  Machine", espresso, "gbr", 300, 4),
+                        gsc_row("espresso machine", other, "gbr", 100, 8),
+                        gsc_row("espresso machine", espresso, "usa", 1000, 1),
+                    ],
+                },
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
 
     r = await client.get("/api/v1/site/seo/tracked", params={"locationCode": 2826})
     assert r.status_code == 200, r.text
@@ -173,17 +131,16 @@ async def test_rankings_backfill_once_then_add_a_live_snapshot(client, email, ve
     assert {"locationCode": 2826, "languageCode": "en", "country": "GB"} in overview["markets"]
     [tracked] = overview["keywords"]
     assert tracked["keyword"] == "espresso machine"
-    assert tracked["position"] == 4
-    assert tracked["previousPosition"] == 6
-    assert tracked["change"] == 2
-    assert tracked["url"] == "https://www.example.com/espresso"
-    months = overview["months"]
-    history = dict(zip(months, tracked["history"], strict=True))
-    assert history["2026-06-01"] == 6 and history["2026-03-01"] == 9
+    assert tracked["position"] == 5.0
+    assert tracked["previousPosition"] == 6.0
+    assert tracked["change"] == 1.0
+    assert tracked["url"] == espresso
+    history = dict(zip(overview["months"], tracked["history"], strict=True))
+    assert history["2026-08-01"] == 6.0 and history["2026-09-01"] == 5.0
     assert overview["stats"] == {"tracked": 1, "topTen": 1, "moved": 1, "notRanking": 0}
 
 
-async def test_volumes_merge_ads_history_with_clickstream(client, email, vendor):
+async def test_volumes_merge_ads_with_clickstream_from_one_overview(client, email, vendor):
     user_id, site_id = await make_site(client, email)
     async with unit_of_work() as db:
         tracked = await keyword_tracking_service.track_volumes(
@@ -212,8 +169,26 @@ async def test_volumes_merge_ads_history_with_clickstream(client, email, vendor)
         (9, None, 140),
     ]
     assert rows[1].cpc == pytest.approx(2.5)
+    assert rows[0].cpc is None and rows[2].cpc is None
+    assert {q["endpoint"] for q in vendor.sent} == {ENDPOINTS["keyword_overview"]}
+    assert len(vendor.sent) == len(ENGLISH_MARKETS)
 
 
-async def test_the_agent_can_query_both_history_tables():
+async def test_the_agent_can_query_the_volume_history():
     granted = (await asyncio.to_thread(bootstrap)).granted
-    assert {"seo_rank_history", "seo_volume_history", "site_seo"} <= set(granted)
+    assert {"seo_volume_history", "site_competitors", "site_backlinks"} <= set(granted)
+    assert "seo_rank_history" not in granted
+
+
+async def test_track_volumes_route_covers_the_site_markets(client, email, vendor):
+    await make_site(client, email)
+    r = await client.post(
+        "/api/v1/site/seo/tracked/volumes", json={"keywords": ["Espresso Machine"]}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["rows"] == 3 * len(ENGLISH_MARKETS)
+
+    r = await client.get("/api/v1/site/seo/tracked")
+    [tracked] = r.json()["data"]["keywords"]
+    assert tracked["keyword"] == "espresso machine"
+    assert "position" not in tracked
