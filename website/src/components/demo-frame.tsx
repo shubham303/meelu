@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Maximize2, Play } from "lucide-react";
+import { Compass, Play } from "lucide-react";
 
 const NATIVE_WIDTH = 1280;
 const NATIVE_HEIGHT = 820;
@@ -92,7 +92,7 @@ export function DemoFrame() {
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 text-xs text-sub transition-colors hover:text-ink"
         >
-          <Maximize2 size={12} /> Open full screen
+          <Compass size={12} /> Take the guided tour
         </a>
       </div>
 

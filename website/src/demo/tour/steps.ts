@@ -116,11 +116,26 @@ export const TOUR_STEPS: TourStep[] = [
     target: { selector: `a[href="${D}/seo"]` },
   },
   {
+    id: "start-task",
+    path: `${D}/seo`,
+    chapter: "The desks",
+    title: "Start a task",
+    body: "Each card starts a task with your coworker, already scoped to this desk. It works through the data, shows its evidence and asks before it saves anything. Tasks run in the desktop app.",
+    target: { text: "Start a task" },
+  },
+  {
     id: "competitors",
     path: `${D}/seo/competitors`,
     chapter: "The desks",
     title: "SEO: competitors and backlinks",
-    body: "Domains chasing the same searchers for the same thing. Their backlinks feed your backlink opportunities: sites that link to them but not to you, with spammy and paid links left out.",
+    body: "Domains chasing the same searchers for the same thing. Name the ones that matter to you, and their links feed your backlink opportunities.",
+  },
+  {
+    id: "backlinks",
+    path: `${D}/seo/backlinks`,
+    chapter: "The desks",
+    title: "SEO: backlink opportunities",
+    body: "Sites that link to your competitors but not to you. Links that look spammy, paid or too weak to help are left out. You decide which sites to ask.",
   },
   {
     id: "tracked",
@@ -128,6 +143,20 @@ export const TOUR_STEPS: TourStep[] = [
     chapter: "The desks",
     title: "SEO: tracked keywords",
     body: "Twelve months of search demand for the keywords you track, next to where you rank for them in Search Console.",
+  },
+  {
+    id: "search",
+    path: `${D}/seo/search`,
+    chapter: "The desks",
+    title: "SEO: search performance",
+    body: "Your Search Console data: clicks, impressions and positions per query and page, plus which pages Google has indexed. Ask what changed, what dropped and what is close to page one.",
+  },
+  {
+    id: "traffic",
+    path: `${D}/seo/traffic`,
+    chapter: "The desks",
+    title: "SEO: traffic",
+    body: "Your Google Analytics data: where visitors come from, which pages they land on and what converts.",
   },
   {
     id: "content",
@@ -168,6 +197,13 @@ export const TOUR_STEPS: TourStep[] = [
     title: "Notes",
     body: "Tell your coworker something once and it lands here. It reads these before every task, and a rule here outranks whatever it was about to do.",
     target: { selector: `a[href="${D}/notes"]` },
+  },
+  {
+    id: "settings",
+    path: `${D}/settings`,
+    chapter: "Done",
+    title: "Settings",
+    body: "Your name, role, sign-off and voice live here, and steer everything Meelu drafts. You can also make keys to connect your coworker to Claude Desktop or any MCP client.",
   },
   {
     id: "finish",
