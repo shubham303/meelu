@@ -138,6 +138,7 @@ async def test_status_and_platform_listing(client, email):
     assert set(domains) == {
         "seo-data",
         "social-listening",
+        "people-search",
         "json-data-extractor",
     }
     assert domains["seo-data"]["adapters"][0]["id"] == "dataforseo"

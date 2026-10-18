@@ -16,6 +16,7 @@ import {
   startSignalsSearch,
   stopSignalsSearch,
 } from "./social-signals/pipeline.js";
+import { activeFindLeads, startFindLeads, stopFindLeads } from "./find-leads/pipeline.js";
 import { startPageReviewSchedule } from "./page-review/index.js";
 import { requestRenderStop, runRender } from "./render/index.js";
 import { AVAILABLE_CHECKS, runTextChecks } from "./text-checks/index.js";
@@ -168,6 +169,10 @@ function emitCrawl(event, data) {
 
 function emitSignals(message) {
   if (win && !win.isDestroyed()) win.webContents.send("social-signals:event", message);
+}
+
+function emitFindLeads(message) {
+  if (win && !win.isDestroyed()) win.webContents.send("find-leads:event", message);
 }
 
 function emitSummary(event, data) {
@@ -508,6 +513,20 @@ function registerAgentIpc() {
     if (!allowedSender(ev)) return { error: "forbidden" };
     const providers = await providersFor();
     return { platforms: await providers.listening.availablePlatforms() };
+  });
+
+  ipcMain.handle("find-leads:search", async (ev, payload) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    const cookieHeader = await sessionCookieHeader().catch(() => "");
+    return startFindLeads(payload ?? {}, emitFindLeads, { cookieHeader });
+  });
+  ipcMain.handle("find-leads:stop", (ev, { jobId } = {}) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return { stopping: stopFindLeads(jobId) };
+  });
+  ipcMain.handle("find-leads:active", (ev, { siteId } = {}) => {
+    if (!allowedSender(ev)) return { error: "forbidden" };
+    return activeFindLeads(siteId);
   });
 
   ipcMain.handle("connectors:connectGsc", async (ev) => {

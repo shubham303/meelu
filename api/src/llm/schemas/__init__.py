@@ -4,7 +4,7 @@ from pydantic import Field
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
-Purpose = Literal["agent", "social_listening", "page_review", "site_summary"]
+Purpose = Literal["agent", "social_listening", "find_leads", "page_review", "site_summary"]
 Tier = Literal["featured", "well_known", "other"]
 
 

@@ -107,12 +107,6 @@ class QueryEmbeddingInput(EntityModel):
     text: str
 
 
-class PostEmbeddingInput(EntityModel):
-    id: str
-    title: str | None = None
-    text: str | None = None
-
-
 class RunResponse(EntityModel):
     id: str
     site_id: str

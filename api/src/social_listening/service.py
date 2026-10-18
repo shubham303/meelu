@@ -26,7 +26,6 @@ from src.social_listening.repositories.cursors import social_listening_cursors
 from src.social_listening.repositories.posts import social_listening_posts
 from src.social_listening.repositories.queries import social_listening_queries
 from src.social_listening.repositories.runs import social_listening_runs
-from src.social_listening.repositories.social_posts import social_posts
 from src.social_listening.schemas import (
     DONE_STATUSES,
     KEYWORDS_PER_LINE,
@@ -54,7 +53,7 @@ from src.social_listening.schemas import (
 )
 
 EMBED_MAX_ATTEMPTS = 3
-RETENTION_DAYS = 30
+CURSOR_RETENTION_DAYS = 30
 STALE_RUN_HOURS = 2
 STALE_RUN_ERROR = "The run stopped reporting and was closed."
 PLATFORM_IDS = tuple(p["id"] for p in PLATFORMS)
@@ -369,9 +368,8 @@ class SocialListeningService:
 
     async def purge(self, db: AsyncSession) -> dict[str, int]:
         now = datetime.now(UTC)
-        cutoff = now - timedelta(days=RETENTION_DAYS)
+        cutoff = now - timedelta(days=CURSOR_RETENTION_DAYS)
         return {
-            "posts": await social_posts.delete_older_than(db, cutoff),
             "cursors": await social_listening_cursors.delete_older_than(db, cutoff),
             "runs": await social_listening_runs.fail_running_before(
                 db, now - timedelta(hours=STALE_RUN_HOURS), STALE_RUN_ERROR

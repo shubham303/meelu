@@ -1,0 +1,95 @@
+import { jsonCall } from "../social-signals/llm.js";
+
+export const JUDGE_BATCH = 5;
+const SNIPPET_CHARS = 600;
+const ITEM_CHARS = 400;
+const MAX_ITEMS = 12;
+const MAX_EVIDENCE = 3;
+
+function system({ brief, siteContext }) {
+  return `You make the final call on people a founder might contact personally about their product. The founder writes and sends every message themselves.
+The founder described who they are looking for:
+"${brief}"
+${siteContext ? `\nTheir site:\n${siteContext}\n` : ""}
+Each numbered person comes with what surfaced them and numbered items of their own recent activity. Decide whether this person is worth a personal message now.
+
+Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
+{"results":[{"i":0,"worth":true,"why":"...","angle":"...","evidence":[0,2]}]}
+
+- i: the person's number; one result per person, every person covered.
+- worth: true only when their own words or activity show they fit the brief and would plausibly welcome hearing about the site.
+- why: one plain sentence telling the founder why this person is worth a message, citing what they said or did. For worth false, why it is not.
+- angle: when worth is true, one sentence on what to open with. Never write the message itself. Empty string otherwise.
+- evidence: when worth is true, the numbers (up to ${MAX_EVIDENCE}) of the items that back up why. Only numbers shown for that person.
+
+Be strict: a person who merely shares a topic, sells the same thing, or shows no need does not qualify.`;
+}
+
+export function itemsOf(lead) {
+  const items = [];
+  for (const e of lead.evidence ?? []) {
+    if (e?.url && e?.quote) items.push({ url: e.url, quote: String(e.quote), at: e.at ?? null });
+  }
+  for (const a of lead.activity ?? []) {
+    if (a?.url && a?.text && !items.some((i) => i.url === a.url)) {
+      items.push({ url: a.url, quote: String(a.text), at: a.at ?? null, kind: a.kind ?? null });
+    }
+  }
+  return items.slice(0, MAX_ITEMS);
+}
+
+export function judgeBlock(lead, i) {
+  const items = itemsOf(lead)
+    .map(
+      (item, n) =>
+        `  (${n})${item.kind ? ` ${item.kind}` : ""}${item.at ? ` ${String(item.at).slice(0, 10)}` : ""}: ${item.quote.slice(0, ITEM_CHARS)}`,
+    )
+    .join("\n");
+  return [
+    `[${i}] ${lead.platform}${lead.name ? ` · ${lead.name}` : ""}${lead.handle ? ` (@${lead.handle})` : ""}`,
+    lead.headline ? `Headline: ${lead.headline}` : "",
+    lead.snippet ? `Found by: ${String(lead.snippet).slice(0, SNIPPET_CHARS)}` : "",
+    items ? `Their items:\n${items}` : "No activity found.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function judgeVerdicts(parsed, leads) {
+  const byIndex = new Map();
+  for (const r of Array.isArray(parsed?.results) ? parsed.results : []) {
+    const i = Number(r?.i);
+    if (!Number.isInteger(i) || i < 0 || i >= leads.length || typeof r.worth !== "boolean") continue;
+    byIndex.set(i, r);
+  }
+  const out = [];
+  leads.forEach((lead, i) => {
+    const r = byIndex.get(i);
+    if (!r) return;
+    if (!r.worth) {
+      out.push({ id: lead.id, keep: false });
+      return;
+    }
+    const items = itemsOf(lead);
+    const picked = [];
+    for (const n of Array.isArray(r.evidence) ? r.evidence : []) {
+      const item = items[Number(n)];
+      if (Number.isInteger(Number(n)) && item && !picked.some((p) => p.url === item.url)) {
+        picked.push({ url: item.url, quote: item.quote, at: item.at });
+      }
+    }
+    out.push({
+      id: lead.id,
+      keep: true,
+      reason: String(r.why ?? "").trim() || null,
+      angle: String(r.angle ?? "").trim() || null,
+      evidence: picked.slice(0, MAX_EVIDENCE),
+    });
+  });
+  return out;
+}
+
+export async function judgeBatch(leads, ctx, target) {
+  const prompt = leads.map((lead, i) => judgeBlock(lead, i)).join("\n\n");
+  return judgeVerdicts(await jsonCall(system(ctx), prompt, target), leads);
+}

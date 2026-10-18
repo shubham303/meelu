@@ -901,3 +901,82 @@ export interface SocialListeningSummary {
   unprocessed: number;
   lastRun: SocialListeningRun | null;
 }
+
+export type LeadSource = "posts" | "linkedin" | "web";
+export type LeadBriefSource = "user" | "suggested";
+
+export interface LeadBriefPlan {
+  keywords?: string[];
+  linkedin?: { query: string; titles: string[]; locations: string[] };
+}
+
+export interface LeadBrief extends BaseEntity, SiteScoped {
+  text: string;
+  enabled: boolean;
+  source: LeadBriefSource;
+  sources: LeadSource[];
+  plan: LeadBriefPlan;
+  found: number;
+  kept: number;
+}
+
+export type LeadRunStatus = "running" | "done" | "stopped" | "error";
+
+export interface LeadSourceStats {
+  status?: "running" | "done" | "error";
+  candidates?: number;
+  skipped?: number;
+  fromVendor?: number;
+  fromStore?: number;
+  people?: number;
+  error?: string;
+}
+
+export interface LeadRun extends BaseEntity, SiteScoped {
+  status: LeadRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  foundCount: number;
+  shortlistedCount: number;
+  keptCount: number;
+  sourceStats: Record<string, LeadSourceStats>;
+  error: string | null;
+}
+
+export type LeadReviewStatus = "new" | "contacted" | "discarded";
+export type LeadStatus = LeadReviewStatus | "candidate" | "shortlisted";
+
+export interface LeadEvidence {
+  url: string;
+  quote: string;
+  at?: string | null;
+}
+
+export interface Lead extends BaseEntity, SiteScoped {
+  briefId: string | null;
+  runId: string | null;
+  source: LeadSource;
+  platform: string;
+  name: string | null;
+  handle: string | null;
+  headline: string | null;
+  profileUrl: string | null;
+  email: string | null;
+  emailSourceUrl: string | null;
+  website: string | null;
+  snippet: string | null;
+  evidence: LeadEvidence[];
+  reason: string | null;
+  angle: string | null;
+  status: LeadStatus;
+  contactedAt: string | null;
+  discardedAt: string | null;
+}
+
+export interface LeadSummary {
+  new: number;
+  contacted: number;
+  discarded: number;
+  unprocessed: number;
+  lastRun: LeadRun | null;
+}
