@@ -211,10 +211,23 @@ def test_facebook_scraper_one():
 
 
 def test_facebook_identity_uses_post_id():
-    from src.social_listening.identity import post_key
+    from src.providers.social_search.identity import post_key
 
     for url in (
         "https://www.facebook.com/permalink.php?story_fbid=pfbid02Ka7&id=1",
         "https://www.facebook.com/stella512/posts/pfbid02yDStsc2aAo8",
     ):
         assert post_key("facebook", "10163020137237023", url) == "facebook:10163020137237023"
+
+
+def test_bluesky_reads_the_handle_from_the_post_url():
+    from src.providers.social_search.actors import bluesky
+
+    parsed = bluesky.lexis_post(
+        {
+            "url": "https://bsky.app/profile/quadweb.bsky.social/post/3mxtsss27os2s",
+            "text": "our traffic dropped",
+            "createdAt": "2026-10-17T10:00:00Z",
+        }
+    )
+    assert parsed["author"]["handle"] == "quadweb.bsky.social"

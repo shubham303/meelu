@@ -14,7 +14,7 @@ const path = "/privacy";
 const description =
   "What the Meelu app and website collect, why, where it is stored, who it is shared with, and how to delete it. Includes how Meelu handles Google Search Console and Google Analytics data.";
 
-const EFFECTIVE = "2026-10-12";
+const EFFECTIVE = "2026-10-18";
 
 export const metadata: Metadata = {
   title,
@@ -88,6 +88,13 @@ export default function PrivacyPage() {
           <strong className={strong}>Keyword and social data.</strong> Keywords and competitor
           domains you track, their search volumes and rankings, and, if you use social listening,
           the topics you watch and the public posts found for them.
+        </p>
+        <p>
+          <strong className={strong}>Leads.</strong> If you use Find Leads, the briefs you write
+          and the people found for them from public sources: their public name, handle, headline
+          and profile link, an email address only when a public page prints it, and the public
+          posts behind the reason Meelu gives. Meelu does not send messages to them, store your
+          messages or track replies.
         </p>
         <p>
           <strong className={strong}>Billing.</strong> Your credit balance, a history of credit
@@ -253,7 +260,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong className={strong}>Apify</strong> &mdash; the topics you watch in social
-            listening, to find public posts.
+            listening and the searches Find Leads runs, to find public posts and public profiles,
+            and the profile links of shortlisted people, to read their recent public posts.
           </li>
           <li>
             <strong className={strong}>Dodo Payments</strong> &mdash; to process credit
@@ -283,6 +291,11 @@ export default function PrivacyPage() {
           <li>
             Public posts found by social listening are deleted 30 days after they were posted,
             together with your replies and statuses on them.
+          </li>
+          <li>
+            Discarded leads are deleted 30 days after you discard them, and people Meelu judged not
+            a fit are forgotten after 30 days. For both, only a short key such as a profile handle
+            is kept, so the same person is not shown to you again.
           </li>
           <li>
             Payment and credit records are kept as long as tax and accounting law requires.

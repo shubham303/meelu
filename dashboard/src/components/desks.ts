@@ -8,6 +8,7 @@ import {
   Radar,
   Search,
   Settings,
+  UserSearch,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,15 @@ export const WEBSITE_DESKS: Desk[] = [
     icon: Radar,
     stage: "earn",
     blurb: "Conversations your site belongs in, found from what you describe — you decide which to answer.",
+    scope: "site",
+  },
+  {
+    id: "find-leads",
+    href: "/dashboard/find-leads",
+    label: "Find Leads",
+    icon: UserSearch,
+    stage: "earn",
+    blurb: "People worth a personal message, found from who you describe — you write and send it yourself.",
     scope: "site",
   },
   {

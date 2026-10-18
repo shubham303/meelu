@@ -1,19 +1,16 @@
 import asyncio
 import contextlib
-import statistics
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.core.database import unit_of_work
 from src.core.logging import get_logger
 from src.providers.registry import Caller
-from src.providers.social_search.service import social_search
-from src.social_listening.identity import content_hash, native_id, post_key
+from src.providers.social_search.store import collect_posts
 from src.social_listening.repositories.cursors import social_listening_cursors
 from src.social_listening.repositories.posts import social_listening_posts
 from src.social_listening.repositories.queries import social_listening_queries
 from src.social_listening.repositories.runs import social_listening_runs
-from src.social_listening.repositories.social_posts import social_posts
 from src.social_listening.schemas import LOOKBACK_DAYS, PER_KEYWORD
 
 log = get_logger("social_listening.collect")
@@ -57,35 +54,6 @@ def keyword_windows(
 ) -> dict[str, datetime]:
     floor = now - timedelta(days=LOOKBACK_DAYS)
     return {k: max(cursors[k], floor) if k in cursors else floor for k in keywords}
-
-
-def vendor_since(windows: dict[str, datetime]) -> datetime:
-    return statistics.median_low(sorted(windows.values()))
-
-
-def social_post_row(raw: dict[str, Any]) -> dict[str, Any] | None:
-    url = str(raw.get("url") or "").strip()
-    platform = str(raw.get("platform") or "").strip()
-    if not url or not platform:
-        return None
-    raw_id = raw.get("id")
-    external = str(raw_id) if raw_id is not None and str(raw_id) != url else None
-    author = raw.get("author") or {}
-    created = raw.get("createdAt")
-    return {
-        "post_key": post_key(platform, external, url),
-        "external_id": native_id(platform, external, url),
-        "platform": platform,
-        "url": url,
-        "title": raw.get("title"),
-        "text": raw.get("text"),
-        "author_handle": author.get("handle"),
-        "author_name": author.get("displayName"),
-        "posted_at": datetime.fromisoformat(created) if created else None,
-        "engagement": raw.get("engagement") or {},
-        "context": raw.get("context") or {},
-        "content_hash": content_hash(raw.get("title"), raw.get("text")),
-    }
 
 
 async def _heartbeat(run_id: str, platform: str) -> None:
@@ -142,34 +110,14 @@ async def _collect(
         }, []
 
     windows = keyword_windows(keywords, cursors, datetime.now(UTC))
-    since = vendor_since(windows)
-    error = None
-    failed: list[str] = []
-    vendor_posts: list[dict] = []
-    try:
-        result = await social_search.search_platform(
-            Caller(user_id=user_id, site_id=site_id),
-            platform,
-            keywords,
-            since.isoformat(),
-            PER_KEYWORD,
-        )
-        vendor_posts = result.get("posts") or []
-        failed = [normalize_keyword(k) for k in result.get("failedKeywords") or []]
-    except Exception as exc:
-        error = str(exc)
-        failed = list(keywords)
-
-    rows = {r["post_key"]: r for r in (social_post_row(p) for p in vendor_posts) if r}
+    collected = await collect_posts(
+        Caller(user_id=user_id, site_id=site_id), platform, windows, PER_KEYWORD
+    )
+    failed = [normalize_keyword(k) for k in collected.failed_keywords]
+    vendor_ids = collected.vendor_ids
+    database_ids = collected.database_ids
+    union = collected.post_ids
     async with unit_of_work() as db:
-        await social_posts.insert_new(db, list(rows.values()))
-        vendor_ids = await social_posts.ids_by_keys(db, list(rows))
-        database_ids: list[str] = []
-        for keyword, window in windows.items():
-            database_ids.extend(
-                await social_posts.search_ids(db, platform, keyword, window, PER_KEYWORD)
-            )
-        union = list(dict.fromkeys([*vendor_ids, *database_ids]))
         candidates = await social_listening_posts.insert_candidates(
             db, user_id, site_id, run_id, union
         )
@@ -186,6 +134,6 @@ async def _collect(
         "candidates": candidates,
         "failedKeywords": failed,
     }
-    if error:
-        stats["error"] = error
+    if collected.error:
+        stats["error"] = collected.error
     return stats, union

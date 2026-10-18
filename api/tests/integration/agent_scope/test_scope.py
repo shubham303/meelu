@@ -101,6 +101,7 @@ def test_scope_response_merges_added_desks():
     assert [d.name for d in base.desks] == [
         "analytics",
         "content",
+        "find-leads",
         "pages",
         "profile",
         "seo",
@@ -115,6 +116,7 @@ def test_scope_response_merges_added_desks():
     assert merged.allow_attachments is True
     assert "content_pieces" in merged.system_prompt
     assert [d.name for d in merged.desks] == [
+        "find-leads",
         "pages",
         "profile",
         "seo",

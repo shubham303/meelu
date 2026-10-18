@@ -95,7 +95,9 @@ test("the system prompt sent to the model is the scope prompt plus the runner bl
   assert.ok(sys.includes("- analytics: analytics desk"));
   assert.ok(!sys.includes("- pages:"), "the loaded desk is not offered again");
   for (const hidden of CATALOG.filter((t) => t.desk && t.desk !== "pages")) {
-    assert.ok(!sys.includes(hidden.name), `${hidden.name} leaked into the prompt`);
+    for (const form of [`\`${hidden.name}\``, `mcp__meelu__${hidden.name}`]) {
+      assert.ok(!sys.includes(form), `${hidden.name} leaked into the prompt`);
+    }
   }
   const text = sys.split("\n").filter((l) => l.trim()).join("\n");
   assert.equal(sys, systemText(llm.requests[2]), "prompt is stable across turns of one task");

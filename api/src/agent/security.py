@@ -15,6 +15,9 @@ READABLE_TABLES = frozenset(
     {
         "content_piece_issues",
         "content_pieces",
+        "lead",
+        "lead_brief",
+        "lead_run",
         "link_suggestions",
         "notes",
         "pillar_page_suggestions",

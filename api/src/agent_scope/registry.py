@@ -8,6 +8,7 @@ import src.seo.serp_results.tools  # noqa: F401
 from src.agent import server
 from src.agent_scope.analytics import ACTIONS as ANALYTICS_ACTIONS
 from src.agent_scope.content import ACTIONS as CONTENT_ACTIONS
+from src.agent_scope.find_leads import ACTIONS as FIND_LEADS_ACTIONS
 from src.agent_scope.lib import AgentScope
 from src.agent_scope.pages import ACTIONS as PAGES_ACTIONS
 from src.agent_scope.plan import scope as plan
@@ -34,6 +35,7 @@ AGENT_SCOPES: dict[str, AgentScope] = {
     **PROFILE_ACTIONS,
     **ANALYTICS_ACTIONS,
     **SOCIAL_LISTENING_ACTIONS,
+    **FIND_LEADS_ACTIONS,
     **REPORTS_ACTIONS,
 }
 
@@ -50,6 +52,7 @@ DESK_BLURBS: dict[str, str] = {
     "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
     "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
     "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines.",
+    "find-leads": "People worth a personal message, found from the briefs the user writes — mark leads contacted or discarded, add or reword briefs.",
     "analytics": "Analysis over this website's Search Console, Analytics and page data in the database — profiling, clustering, forecasting, period comparison, metric drivers; save reports.",
 }
 LOADABLE_DESKS = frozenset(DESK_BLURBS)
