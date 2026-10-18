@@ -17,18 +17,20 @@ export function headersFor(gateway) {
   return { ...shared, authorization: `Bearer ${gateway.apiKey}`, ...gateway.headers };
 }
 
-export async function jsonCall(system, prompt, target) {
+export async function jsonCall(system, prompt, target, options = {}) {
   const { gateway, model, limits } = await resolveLlm(target);
+  const chosen = options.model ? options.model({ gateway, model }) : model;
   const res = await apiFetch(`${gateway.baseUrl}/v1/messages`, {
     method: "POST",
     headers: headersFor(gateway),
     body: JSON.stringify({
-      model,
+      model: chosen,
       max_tokens: Math.min(MAX_OUTPUT_TOKENS, limits?.output ?? MAX_OUTPUT_TOKENS),
       system,
       messages: [{ role: "user", content: prompt }],
+      ...(options.tools ? { tools: options.tools } : {}),
     }),
-    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+    signal: AbortSignal.timeout(options.timeoutMs ?? CALL_TIMEOUT_MS),
   });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) {

@@ -58,6 +58,7 @@ def vendor(monkeypatch):
         return reply
 
     monkeypatch.setattr(social_search, "search_platform", search_platform)
+    sql("delete from social_search_cursor")
     return {"calls": calls, "replies": replies}
 
 
@@ -279,8 +280,17 @@ async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
     run = await start_run(client)
     await collect(client, run["id"])
     assert len(await posts(client, "candidate")) == 3
-    since = datetime.fromisoformat(vendor["calls"][1]["since"])
-    assert datetime.now(UTC) - since < timedelta(minutes=5)
+    assert vendor["calls"][1]["keywords"] == ["page cache"]
+
+    sql(
+        "update social_search_cursor set last_fetched_at = now() - interval '7 hours' "
+        "where platform = 'hackernews'"
+    )
+    r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
+    run = await start_run(client)
+    await collect(client, run["id"])
+    call = vendor["calls"][2]
+    assert sorted(call["keywords"]) == ["page cache", "site speed", "slow wordpress"]
 
 
 async def test_collect_survives_vendor_failure(client, email, vendor):
@@ -386,6 +396,7 @@ async def test_posts_list_newest_first(client, email, vendor):
 
 async def test_purge_drops_old_posts_and_stale_runs(client, email, vendor):
     from src.core.database import unit_of_work
+    from src.providers.social_search.store import purge as purge_store
     from src.social_listening.service import social_listening_service
 
     await prepare(client, email)
@@ -396,6 +407,13 @@ async def test_purge_drops_old_posts_and_stale_runs(client, email, vendor):
     }
     run = await start_run(client)
     await collect(client, run["id"])
+    assert sql("select count(*) from social_post where post_key = 'hackernews:old'")[0][0] == 0
+    sql(
+        "insert into social_post (id, post_key, platform, url, text, posted_at, fetched_at) "
+        "values ('sp_purge_old', 'hackernews:purge_old', 'hackernews', "
+        "'https://news.ycombinator.com/item?id=purge_old', 'old post', "
+        "now() - interval '31 days', now())"
+    )
     sql(
         "update social_listening_run set started_at = now() - interval '3 hours' where id = %s",
         (run["id"],),
@@ -403,8 +421,8 @@ async def test_purge_drops_old_posts_and_stale_runs(client, email, vendor):
 
     async with unit_of_work() as db:
         removed = await social_listening_service.purge(db)
-    assert removed["posts"] >= 1
     assert removed["runs"] >= 1
+    assert (await purge_store())["posts"] >= 1
     assert [p["url"].rsplit("=", 1)[1] for p in await posts(client)] == ["new"]
     r = await client.get(f"/api/v1/social-listening/runs/{run['id']}")
     assert r.json()["data"]["status"] == "error"

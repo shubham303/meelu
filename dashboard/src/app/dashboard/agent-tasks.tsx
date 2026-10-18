@@ -92,6 +92,12 @@ declare global {
       onSocialSignalsEvent?: (
         cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
       ) => () => void;
+      findLeadsSearch?: (payload: { siteId: string; target?: number }) => Promise<{ jobId?: string; error?: string }>;
+      findLeadsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
+      findLeadsActive?: (siteId: string) => Promise<FindLeadsSnapshot | { error: string }>;
+      onFindLeadsEvent?: (
+        cb: (m: { jobId: string; event: string; data: Record<string, unknown> }) => void,
+      ) => () => void;
     };
   }
 }
@@ -107,6 +113,8 @@ export interface SocialSignalsSnapshot {
   startedAt: number | null;
   progress: Array<{ event: string; data: Record<string, unknown> }>;
 }
+
+export type FindLeadsSnapshot = SocialSignalsSnapshot;
 
 export interface OwnKeysView {
   anthropic: { saved: boolean; defaultModel: string };

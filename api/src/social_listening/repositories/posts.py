@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
 from src.social_listening.models.post import SocialListeningPost
-from src.social_listening.models.social_post import SocialPost
+from src.providers.social_search.models.social_post import SocialPost
 from src.social_listening.schemas import PostFilters, PostResponse
 
 POST_FIELDS = (

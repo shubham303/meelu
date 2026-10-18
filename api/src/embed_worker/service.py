@@ -9,7 +9,7 @@ from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas import SitePageChunkSource
 from src.social_listening.repositories.queries import social_listening_queries
-from src.social_listening.repositories.social_posts import social_posts
+from src.providers.social_search.repository import social_posts
 
 MAX_EMBED_ATTEMPTS = 3
 MAX_ERROR_CHARS = 500

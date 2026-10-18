@@ -94,6 +94,7 @@ async def run_actor(
     actor_input: dict[str, Any],
     max_items: int,
     charges: ChargeEvents = ChargeEvents(),
+    max_charge_usd: float | None = None,
 ) -> VendorResponse:
     started = await vendor_request(
         provider_id,
@@ -105,6 +106,7 @@ async def run_actor(
             "waitForFinish": WAIT_S,
             "timeout": RUN_TIMEOUT_S,
             "maxItems": max_items,
+            "maxTotalChargeUsd": max_charge_usd,
         },
         timeout_s=WAIT_S + 30,
     )

@@ -18,6 +18,8 @@ from src.credits import cron as credits_cron
 from src.credits.endpoints import router as credits_router
 from src.credits.limiter import PaidCallsBusyError
 from src.credits.service import InsufficientCreditsError, SiteDisabledError
+from src.find_leads import cron as find_leads_cron
+from src.find_leads.endpoints import router as find_leads_router
 from src.identity import cron as identity_cron
 from src.keys.endpoints import router as keys_router
 from src.llm.endpoints import router as llm_router
@@ -26,6 +28,7 @@ from src.payments.endpoints import router as payments_router
 from src.profile.endpoints import router as profile_router
 from src.providers.endpoints import router as providers_router
 from src.providers.errors import ProviderError
+from src.providers.social_search import cron as social_search_cron
 from src.render_jobs.endpoints import router as render_jobs_router
 from src.reports.endpoints import router as reports_router
 from src.scratchpad import cron as scratchpad_cron
@@ -61,6 +64,8 @@ async def lifespan(app: FastAPI):
     scratchpad_cron.register(scheduler.scheduler)
     sites_cron.register(scheduler.scheduler)
     social_listening_cron.register(scheduler.scheduler)
+    social_search_cron.register(scheduler.scheduler)
+    find_leads_cron.register(scheduler.scheduler)
     async with scheduler.running():
         yield
 
@@ -111,6 +116,7 @@ for desk in (
     reports_router,
     user_prompts_router,
     social_listening_router,
+    find_leads_router,
     agent_scope_router,
     agent_plans_router,
     credits_router,

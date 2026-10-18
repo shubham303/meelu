@@ -4,12 +4,14 @@ from src.analytics import models as analytics_models
 from src.content import models as content_models
 from src.crawl_jobs import models as crawl_jobs_models
 from src.credits import models as credits_models
+from src.find_leads import models as find_leads_models
 from src.keys import models as keys_models
 from src.llm import models as llm_models
 from src.notes import models as notes_models
 from src.payments import models as payments_models
 from src.profile import models as profile_models
 from src.providers import models as providers_models
+from src.providers.social_search import models as social_search_models
 from src.render_jobs import models as render_jobs_models
 from src.reports import models as reports_models
 from src.scratchpad import models as scratchpad_models
@@ -32,6 +34,7 @@ __all__ = [
     "content_models",
     "crawl_jobs_models",
     "credits_models",
+    "find_leads_models",
     "keys_models",
     "keyword_clusters_models",
     "keyword_tracking_models",
@@ -50,6 +53,7 @@ __all__ = [
     "site_traffic_models",
     "sites_models",
     "social_listening_models",
+    "social_search_models",
     "technical_seo_models",
     "user_prompts_models",
 ]

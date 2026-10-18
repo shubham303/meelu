@@ -71,6 +71,14 @@ const bridge = {
     ipcRenderer.on("social-signals:event", listener);
     return () => ipcRenderer.removeListener("social-signals:event", listener);
   },
+  findLeadsSearch: (payload) => ipcRenderer.invoke("find-leads:search", payload),
+  findLeadsStop: (jobId) => ipcRenderer.invoke("find-leads:stop", { jobId }),
+  findLeadsActive: (siteId) => ipcRenderer.invoke("find-leads:active", { siteId }),
+  onFindLeadsEvent: (callback) => {
+    const listener = (_event, message) => callback(message);
+    ipcRenderer.on("find-leads:event", listener);
+    return () => ipcRenderer.removeListener("find-leads:event", listener);
+  },
   saveTextFile: (params) => ipcRenderer.invoke("files:saveText", params),
 };
 
