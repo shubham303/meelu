@@ -199,6 +199,11 @@ async def search_console(client, queries):
     assert r.status_code == 200, r.text
 
 
+async def cluster_ids(client) -> list[str]:
+    r = await client.get("/api/v1/site/seo/clusters", params={"page_size": 50})
+    return [c["id"] for c in r.json()["data"]]
+
+
 async def create(user_id, site, caller, **body):
     async with unit_of_work() as db:
         return await asyncio.wait_for(
@@ -254,6 +259,7 @@ async def score(client, email, vendor, rival_rank: int, our_domain_rank: int, ta
     user_id, site, caller = await make_site(client, email)
     await search_console(client, ["best espresso machine"])
     await create(user_id, site, caller, min_volume=1000)
+    ids = await cluster_ids(client)
     vendor.serp_results = [
         (rival(s, tag), "Login" if s == 3 else f"Guide {s}") for s in range(1, 11)
     ]
@@ -263,7 +269,8 @@ async def score(client, email, vendor, rival_rank: int, our_domain_rank: int, ta
         await db.execute(delete(ProviderCache).where(ProviderCache.capability == "serp.organic"))
     async with unit_of_work() as db:
         computed = await asyncio.wait_for(
-            keyword_cluster_service.compute_metrics(db, caller, site, None, 10), timeout=30
+            keyword_cluster_service.compute_metrics(db, caller, site, ids),
+            timeout=30,
         )
     assert computed.computed == 1 and computed.failed == [] and computed.poisoned == []
     r = await client.get("/api/v1/site/seo/clusters")
@@ -295,6 +302,7 @@ async def test_weak_results_above_a_strong_domain_are_winnable(client, email, ve
 async def test_clusters_scored_together_share_one_page_rank_request(client, email, vendor):
     user_id, site, caller = await make_site(client, email)
     assert len(await create(user_id, site, caller)) == 2
+    ids = await cluster_ids(client)
     vendor.serp_results = [(rival(s, "shared"), f"Guide {s}") for s in range(1, 11)]
     vendor.ranks = {rival(s, "shared"): (60, 60) for s in range(1, 11)}
     async with unit_of_work() as db:
@@ -307,13 +315,24 @@ async def test_clusters_scored_together_share_one_page_rank_request(client, emai
 
     async with unit_of_work() as db:
         computed = await asyncio.wait_for(
-            keyword_cluster_service.compute_metrics(db, caller, site, None, 10), timeout=30
+            keyword_cluster_service.compute_metrics(db, caller, site, ids),
+            timeout=30,
         )
 
     assert computed.computed == 2
     summaries = [q for q in vendor.sent if q["endpoint"] == ENDPOINTS["bulk_pages_summary"]]
     assert len(summaries) == 1
     assert "https://example.com/" in summaries[0]["task"]["targets"]
+
+
+async def test_scoring_needs_explicit_cluster_ids(client, email):
+    _, site, caller = await make_site(client, email)
+    async with unit_of_work() as db:
+        with pytest.raises(HTTPException) as empty:
+            await keyword_cluster_service.compute_metrics(db, caller, site, [])
+        with pytest.raises(HTTPException) as many:
+            await keyword_cluster_service.compute_metrics(db, caller, site, ["x"] * 51)
+    assert empty.value.status_code == 422 and many.value.status_code == 422
 
 
 async def clusters_by_main(client) -> dict[str, dict]:

@@ -5,9 +5,7 @@ from src.providers.registry import Caller
 from src.seo.keyword_clusters.constants import (
     DEFAULT_COMPETITOR_CLUSTERS,
     DEFAULT_IMPRESSIONS_LOOKBACK,
-    DEFAULT_METRICS_LIMIT,
     DEFAULT_SEARCH_CONSOLE_QUERIES,
-    MAX_METRICS_LIMIT,
 )
 from src.seo.keyword_clusters.schemas import (
     ClusterRecord,
@@ -96,22 +94,16 @@ async def create_keyword_clusters_from_competitors(
 
 
 @tool(writes=True, desk=DESK)
-async def compute_metrics_for_cluster(
-    cluster_ids: list[str] | None = None, limit: int = DEFAULT_METRICS_LIMIT
-) -> MetricsComputed:
-    """Score how winnable each keyword cluster's main keyword is for this website (0-100,
-    from the authority and intent fit of the results above it) and save it on the cluster.
-    Without ids it scores the highest-volume clusters that have no score or a stale one.
-    A cluster whose results page is poisoned gets no score. Spends vendor credit."""
+async def compute_metrics_for_cluster(cluster_ids: list[str]) -> MetricsComputed:
+    """Score how winnable the given keyword clusters' main keywords are for this website
+    (0-100, from the authority and intent fit of the results above it) and save it on each
+    cluster. At most 50 ids. A cluster whose results page is poisoned gets no score. Spends
+    vendor credit."""
     ctx = require_site()
     async with unit_of_work() as db:
         site = await site_service.get(db, ctx.user_id, ctx.site_id)
         return await keyword_cluster_service.compute_metrics(
-            db,
-            Caller(user_id=ctx.user_id, site_id=ctx.site_id),
-            site,
-            cluster_ids,
-            min(max(int(limit), 1), MAX_METRICS_LIMIT),
+            db, Caller(user_id=ctx.user_id, site_id=ctx.site_id), site, cluster_ids
         )
 
 
