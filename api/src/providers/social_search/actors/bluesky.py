@@ -1,5 +1,14 @@
+import re
+
 from src.providers.social_search.actors import ActorSpec, SearchQuery
 from src.providers.social_search.shape import post, since_day
+
+PROFILE_IN_URL = re.compile(r"/profile/([^/]+)/post/")
+
+
+def handle_from_url(url: str | None) -> str | None:
+    match = PROFILE_IN_URL.search(url or "")
+    return match.group(1) if match else None
 
 
 def lexis_input(q: SearchQuery) -> dict:
@@ -21,7 +30,7 @@ def lexis_post(i: dict) -> dict | None:
         {
             "id": i.get("uri") or i.get("url"),
             "url": i.get("url"),
-            "handle": author.get("handle"),
+            "handle": author.get("handle") or handle_from_url(i.get("url")),
             "displayName": author.get("displayName") or author.get("name"),
             "text": i.get("text") or record.get("text") or "",
             "createdAt": i.get("createdAt") or record.get("createdAt"),

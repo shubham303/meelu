@@ -341,6 +341,28 @@ hand. The app runs the search pipeline locally and sends results here.
 | GET | `/social-listening/summary` | Counts for the desk. |
 | GET, PATCH | `/social-listening/posts/{post_id}` | Get or update a post. |
 
+## Find leads
+
+People worth a personal message, found by the app's local pipeline. The app
+starts a run, the api collects post authors and LinkedIn people in background
+jobs, the app sends web leads and the judge's verdicts. Meelu never contacts
+anyone; a lead is new, contacted or discarded.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET, POST | `/find-leads/briefs` | List briefs; add one. |
+| GET, PATCH, DELETE | `/find-leads/briefs/{brief_id}` | Get, update or delete a brief. |
+| GET, POST | `/find-leads/runs` | List runs (paged); start a run. |
+| GET, PATCH | `/find-leads/runs/{run_id}` | Get or update a run. |
+| POST | `/find-leads/runs/{run_id}/collect` | Start collecting one source (`posts` with a platform, or `linkedin`). |
+| POST | `/find-leads/runs/{run_id}/enrich` | Start reading the shortlist's recent activity. |
+| POST | `/find-leads/leads/candidates` | Ingest web leads found by the app. |
+| POST | `/find-leads/leads/screened` | Save the first, snippet-only verdicts. |
+| POST | `/find-leads/leads/judged` | Save the final verdicts with reason, angle and evidence. |
+| GET | `/find-leads/leads` | List leads (paged; `status`, `briefId`, `runId`, `source`, `q`). |
+| GET, PATCH, DELETE | `/find-leads/leads/{lead_id}` | Get a lead, change its status, or delete it. |
+| GET | `/find-leads/summary` | Counts for the desk and the last run. |
+
 ## Data providers
 
 Shared third-party data vendors (DataForSEO, Apify). The server holds one

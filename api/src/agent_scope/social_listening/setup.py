@@ -5,7 +5,7 @@ from src.social_listening.models.config import SocialListeningConfig
 from src.social_listening.models.post import SocialListeningPost
 from src.social_listening.models.query import SocialListeningQuery
 from src.social_listening.models.run import SocialListeningRun
-from src.social_listening.models.social_post import SocialPost
+from src.providers.social_search.models.social_post import SocialPost
 from src.social_listening.tools import social_listening_save_queries
 
 DESK = "social-listening"

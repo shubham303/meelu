@@ -5,7 +5,7 @@ import psycopg
 
 from src.core.database import unit_of_work
 from src.core.locks import skip_if_locked
-from src.social_listening.repositories.social_posts import social_posts
+from src.providers.social_search.repository import social_posts
 from tests.conftest import TEST_URL
 
 PG_URL = TEST_URL.replace("postgresql+psycopg://", "postgresql://")
