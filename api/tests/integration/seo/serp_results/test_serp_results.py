@@ -203,7 +203,7 @@ async def test_a_cluster_with_a_poisoned_results_page_is_not_scored(client, emai
     assert r.status_code == 201, r.text
     site_id = r.json()["data"]["id"]
     async with unit_of_work() as db:
-        await seo_keyword_clusters.upsert_many(
+        [saved] = await seo_keyword_clusters.upsert_many(
             db,
             user_id,
             site_id,
@@ -222,7 +222,7 @@ async def test_a_cluster_with_a_poisoned_results_page_is_not_scored(client, emai
     async with unit_of_work() as db:
         site = await site_service.get(db, user_id, site_id)
         computed = await keyword_cluster_service.compute_metrics(
-            db, Caller(user_id=user_id, site_id=site_id), site, None, 10
+            db, Caller(user_id=user_id, site_id=site_id), site, [saved.id]
         )
 
     assert (computed.computed, computed.failed, computed.poisoned) == (0, [], ["seo with ai"])
