@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,12 +18,14 @@ from src.seo.keyword_clusters.constants import (
     KEYWORD_NOT_IN_CLUSTER,
     MAIN_KEYWORD_STAYS,
     MAX_COMPETITOR_KEYWORDS_PER_DOMAIN,
-    METRICS_TTL,
+    MAX_METRICS_LIMIT,
     MIN_COMPETITOR_KEYWORDS_PER_DOMAIN,
+    NO_CLUSTER_IDS,
     NO_SAVED_COMPETITORS,
     NOISE_SHARE_OF_CORE,
     PAGE_WEIGHT,
     RELEVANCE_ROUND,
+    TOO_MANY_CLUSTER_IDS,
     TOP_N,
 )
 from src.seo.keyword_clusters.judging import (
@@ -444,13 +445,13 @@ class KeywordClusterService:
         db: AsyncSession,
         caller: Caller,
         site: SiteRecord,
-        cluster_ids: list[str] | None,
-        limit: int,
+        cluster_ids: list[str],
     ) -> MetricsComputed:
-        stale_before = datetime.now(UTC) - METRICS_TTL
-        clusters = await seo_keyword_clusters.needing_metrics(
-            db, site.id, cluster_ids, stale_before, limit
-        )
+        if not cluster_ids:
+            raise HTTPException(422, NO_CLUSTER_IDS)
+        if len(cluster_ids) > MAX_METRICS_LIMIT:
+            raise HTTPException(422, TOO_MANY_CLUSTER_IDS)
+        clusters = await seo_keyword_clusters.get_many(db, site.id, cluster_ids)
         done: list[ClusterRecord] = []
         failed: list[str] = []
         poisoned: list[str] = []

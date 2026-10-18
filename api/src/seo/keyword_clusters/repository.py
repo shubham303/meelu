@@ -209,31 +209,6 @@ class KeywordClusterRepository:
         )
         return [ClusterRecord.model_validate(r) for r in rows]
 
-    async def needing_metrics(
-        self,
-        db: AsyncSession,
-        site_id: str,
-        cluster_ids: list[str] | None,
-        stale_before: datetime,
-        limit: int,
-    ) -> list[ClusterRecord]:
-        query = select(SeoKeywordCluster).where(SeoKeywordCluster.site_id == site_id)
-        if cluster_ids:
-            query = query.where(SeoKeywordCluster.id.in_(cluster_ids))
-        else:
-            query = query.where(
-                or_(
-                    SeoKeywordCluster.metrics_at.is_(None),
-                    SeoKeywordCluster.metrics_at < stale_before,
-                )
-            )
-        rows = await db.scalars(
-            query.order_by(SeoKeywordCluster.volume.desc(), SeoKeywordCluster.main_keyword).limit(
-                limit
-            )
-        )
-        return [ClusterRecord.model_validate(r) for r in rows]
-
     async def mark_ranked(self, db: AsyncSession, site_id: str, cluster_ids: list[str]) -> None:
         if not cluster_ids:
             return
