@@ -1,4 +1,3 @@
-from datetime import timedelta
 from typing import Literal
 
 CLUSTER_ID_PREFIX = "kcl"
@@ -39,11 +38,11 @@ SCALE = 50.0
 
 INTENT_FIT = {"full": 1.0, "partial": 0.5, "none": 0.0}
 
-METRICS_TTL = timedelta(days=30)
-
-DEFAULT_METRICS_LIMIT = 10
-
 MAX_METRICS_LIMIT = 50
+
+NO_CLUSTER_IDS = "Pass the ids of the clusters to score."
+
+TOO_MANY_CLUSTER_IDS = f"Score at most {MAX_METRICS_LIMIT} clusters at a time."
 
 CLUSTER_NOT_FOUND = "No such keyword cluster on this website."
 
