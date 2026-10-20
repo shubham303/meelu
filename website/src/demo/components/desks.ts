@@ -4,10 +4,12 @@ import {
   FileChartColumn,
   Globe,
   LayoutDashboard,
+  MessageCircleQuestion,
   NotebookPen,
   Radar,
   Search,
   Settings,
+  UserSearch,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,6 +55,15 @@ export const WEBSITE_DESKS: Desk[] = [
     scope: "site",
   },
   {
+    id: "geo",
+    href: "/demo/dashboard/geo",
+    label: "GEO",
+    icon: MessageCircleQuestion,
+    stage: "decide",
+    blurb: "Questions people ask AI search — whether a page answers each one, and what ChatGPT, Claude and AI Overviews cite.",
+    scope: "site",
+  },
+  {
     id: "content",
     href: "/demo/dashboard/content",
     label: "Content",
@@ -68,6 +79,15 @@ export const WEBSITE_DESKS: Desk[] = [
     icon: Radar,
     stage: "earn",
     blurb: "Conversations your site belongs in, found from what you describe — you decide which to answer.",
+    scope: "site",
+  },
+  {
+    id: "find-leads",
+    href: "/demo/dashboard/find-leads",
+    label: "Find Leads",
+    icon: UserSearch,
+    stage: "earn",
+    blurb: "People worth a personal message, found from who you describe — you write and send it yourself.",
     scope: "site",
   },
   {

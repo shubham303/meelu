@@ -10,7 +10,7 @@ export function SiteFooter() {
         <Link href="/" aria-label="Meelu home">
           <Logo size={18} />
         </Link>
-        <nav className="flex items-center gap-4 text-xs text-sub">
+        <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-sub">
           <Link href="/tools" className="transition-colors hover:text-ink">
             Free tools
           </Link>

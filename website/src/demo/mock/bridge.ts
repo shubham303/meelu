@@ -1,4 +1,5 @@
 import { socialRun, type SocialRunEvent } from "./routes/social";
+import { leadsRun, type LeadRunEvent } from "./routes/leads";
 import { channel, sleep, type Listener } from "./agent/channel";
 import { AVAILABLE_CHECKS, checkContent } from "./agent/checks";
 import { siteSummary, writeSiteSummary } from "./agent/hooks";
@@ -26,6 +27,7 @@ type ConnectorsView = Record<string, { fields: Record<string, string>; updatedAt
 const summaries = channel<SummaryEvent>();
 const billing = channel<{ message: string }>();
 const social = channel<SocialRunEvent>();
+const leads = channel<LeadRunEvent>();
 
 const DAY = 86_400_000;
 const connectors: ConnectorsView = {
@@ -164,13 +166,18 @@ export const demoBridge = {
   socialSignalsPlatforms: async () => socialRun.platforms(),
   onSocialSignalsEvent: (cb: Listener<SocialRunEvent>) => social.on(cb),
 
+  findLeadsSearch: async (payload: { siteId: string; target?: number }) => leadsRun.start(payload, (e) => leads.emit(e)),
+  findLeadsStop: async (jobId: string) => leadsRun.stop(jobId),
+  findLeadsActive: async (siteId: string) => leadsRun.active(siteId),
+  onFindLeadsEvent: (cb: Listener<LeadRunEvent>) => leads.on(cb),
+
   saveTextFile: async (params: { name: string; content: string }) => {
     downloadText(params.name, params.content);
     return { ok: true as const, path: `~/Downloads/${params.name}` };
   },
 
   appUpdate: async () => ({ update: null }),
-  checkUpdate: async () => ({ currentVersion: "0.1.5", update: null }),
+  checkUpdate: async () => ({ currentVersion: "0.1.11", update: null }),
   downloadUpdate: async () => ({ ok: false }),
 };
 

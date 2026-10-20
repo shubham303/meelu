@@ -1,5 +1,6 @@
 import type {
   SocialListeningConfig,
+  SocialListeningEstimate,
   SocialListeningPlatformStats,
   SocialListeningPost,
   SocialListeningQuery,
@@ -53,6 +54,19 @@ function summary(): SocialListeningSummary {
     done: DONE.reduce((n, s) => n + count(s), 0),
     unprocessed: count("candidate") + count("matched"),
     lastRun,
+  };
+}
+
+const COST_PER_KEYWORD: Record<string, number> = { reddit: 30_000, x: 40_000, linkedin: 60_000, facebook: 50_000 };
+
+function estimate(): SocialListeningEstimate {
+  const keywords = state.queries.filter((q) => q.enabled).reduce((n, q) => n + Math.max(2, q.keywords.length), 0);
+  return {
+    platforms: social.PLATFORMS.map((p) => {
+      const price = COST_PER_KEYWORD[p.id] ?? 0;
+      const vendorKeywords = price ? Math.ceil(keywords * 0.6) : 0;
+      return { platform: p.id, keywords, vendorKeywords, maxCostMicros: vendorKeywords * price };
+    }),
   };
 }
 
@@ -155,6 +169,7 @@ export const ROUTES: Route[] = [
     return ok({ id: m[1] });
   }],
   ["GET", /^\/api\/v1\/social-listening\/summary$/, () => ok(summary())],
+  ["GET", /^\/api\/v1\/social-listening\/estimate$/, () => ok(estimate())],
   ["GET", /^\/api\/v1\/social-listening\/runs$/, (_m, q) =>
     paginate([...state.runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt)), q)],
   ["GET", /^\/api\/v1\/social-listening\/runs\/([^/]+)$/, (m) => {
