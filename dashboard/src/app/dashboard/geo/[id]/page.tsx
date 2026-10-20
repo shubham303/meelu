@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, RotateCw, Trash2 } from "lucide-react";
+import { ArrowLeft, RotateCw, Sparkles, Trash2 } from "lucide-react";
 import { PageEnter } from "@/components/animate";
-import { Button, ConfirmDelete, PageHeader, Spinner } from "@/components/ui";
+import { Button, ConfirmDelete, IconButton, PageHeader, Spinner } from "@/components/ui";
 import { api, useApi } from "@/lib/use-api";
+import { useIsApp } from "@/lib/use-app-mode";
 import type { GeoQuery } from "@/lib/types";
+import { useAgentTasks } from "../../agent-tasks";
 import { CheckBody, PrimaryAction } from "../check-body";
 import { CheckProgress } from "../check-progress";
 import { isRunning } from "../lib";
@@ -17,6 +19,8 @@ const POLL_MS = 3000;
 export default function GeoQuestionPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const isApp = useIsApp();
+  const { launchTask } = useAgentTasks();
   const { data: query, loading, error: loadError, refresh } = useApi<GeoQuery>(`/api/v1/geo/queries/${id}`);
   const [checking, setChecking] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -53,6 +57,15 @@ export default function GeoQuestionPage() {
 
   const check = query.latestCheck;
 
+  const ask = () =>
+    launchTask({
+      title: `GEO: ${query.text}`,
+      endpoint: "/api/agent/ask-geo",
+      emptyHint: "Ask why this question is not fully answered, or plan what the page should add.",
+      draft: { question: `"${query.text}" (id ${query.id})` },
+      onWrote: () => void refresh(),
+    });
+
   return (
     <PageEnter>
       <Link href="/dashboard/geo" className="mb-3 inline-flex items-center gap-1.5 text-sm text-sub hover:text-ink">
@@ -69,6 +82,16 @@ export default function GeoQuestionPage() {
             <Button variant="outline" className="hover:text-bad" onClick={() => setRemoving(true)}>
               <Trash2 size={13} /> Stop tracking
             </Button>
+            {isApp && (
+              <IconButton
+                title="Ask Meelu about this question"
+                aria-label="Ask Meelu about this question"
+                className="h-9 w-9 border border-accent/30 bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent"
+                onClick={ask}
+              >
+                <Sparkles size={16} />
+              </IconButton>
+            )}
           </div>
         }
       />
