@@ -15,6 +15,8 @@ READABLE_TABLES = frozenset(
     {
         "content_piece_issues",
         "content_pieces",
+        "geo_check",
+        "geo_query",
         "lead",
         "lead_brief",
         "lead_run",

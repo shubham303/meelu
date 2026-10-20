@@ -42,6 +42,8 @@ class Settings(EnvSettings):
 
     dataforseo_auth: str = ""
     dataforseo_base_url: str = "https://api.dataforseo.com"
+    dataforseo_chatgpt_model: str = "gpt-6-luna"
+    dataforseo_claude_model: str = "claude-haiku-5-5"
     apify_api_key: str = ""
     github_token: str = ""
     stackexchange_key: str = ""
@@ -75,6 +77,7 @@ class Settings(EnvSettings):
     seo_job_vendor_ceiling_micros: int = 2_000_000
 
     log_level: str = "INFO"
+    log_slow_request_ms: int = 1000
 
     agent_data_dir: Path = Path.home() / ".meelu" / "agent-data"
     agent_statement_timeout_ms: int = 30000

@@ -11,6 +11,8 @@ from tenacity import (
 
 from src.core.logging import get_logger
 
+log = get_logger()
+
 
 class IntegrationError(Exception):
     def __init__(self, status: int | None, message: str, body: Any = None):
@@ -32,7 +34,6 @@ class HttpIntegration:
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
-        self._log = get_logger(f"integrations.{self.name}.request")
 
     def auth_headers(self) -> dict[str, str]:
         return {}
@@ -78,14 +79,29 @@ class HttpIntegration:
                 headers={**self.auth_headers(), **(headers or {})},
             )
         except httpx.TimeoutException as e:
-            self._log.warning("timeout", method=method, path=path)
+            log.warning(
+                "integrations.request.timeout", integration=self.name, method=method, path=path
+            )
             raise TransientIntegrationError(None, f"{self.name} timed out") from e
         except httpx.TransportError as e:
-            self._log.warning("unreachable", method=method, path=path, error=str(e))
+            log.warning(
+                "integrations.request.unreachable",
+                integration=self.name,
+                method=method,
+                path=path,
+                error=str(e),
+            )
             raise TransientIntegrationError(None, f"{self.name} is unreachable: {e}") from e
 
         elapsed_ms = round((time.monotonic() - started) * 1000)
-        self._log.info("response", method=method, path=path, status=res.status_code, ms=elapsed_ms)
+        log.info(
+            "integrations.request.response",
+            integration=self.name,
+            method=method,
+            path=path,
+            status=res.status_code,
+            ms=elapsed_ms,
+        )
 
         body = self._read_body(res)
         if res.status_code == 429 or res.status_code >= 500:

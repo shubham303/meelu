@@ -9,8 +9,7 @@ from src.find_leads.service import find_leads_service
 async def find_leads_save_briefs(briefs: list[BriefUpsertItem]) -> UpsertResponse:
     """Add or update the briefs, upserted by text: [{text, enabled?, sources?, source?}].
     A brief is one plain sentence on who to look for and what shows they need the site;
-    sources are posts, linkedin and web. Use source "suggested" for ones you propose; save
-    only after the user agrees."""
+    sources are posts, linkedin and web. Use source "suggested" for ones you propose."""
     if not briefs:
         raise ValueError("briefs must not be empty.")
     ctx = require_site()

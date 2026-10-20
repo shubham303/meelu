@@ -3,7 +3,12 @@ from typing import Any
 
 from src.providers.errors import ProviderRequestError
 from src.providers.http import vendor_request
-from src.providers.json_data_extractor.adapter import DECIDE, JsonDataExtractorAdapter, Question
+from src.providers.json_data_extractor.adapter import (
+    DECIDE,
+    EXTRACT,
+    JsonDataExtractorAdapter,
+    Question,
+)
 from src.providers.registry import VendorResponse
 from src.settings import settings
 
@@ -12,6 +17,11 @@ SYSTEM_PROMPT = (
     "For each question pick exactly one of its allowed choices, judged against the criteria "
     "given for each choice, and give your confidence from 0 to 1 that the choice is right. "
     "Answer with JSON only."
+)
+
+EXTRACT_SYSTEM_PROMPT = (
+    "You read the data in the user message and answer the instructions given with it. "
+    "Use only what the data says. Answer with JSON that matches the schema, and nothing else."
 )
 
 
@@ -77,10 +87,19 @@ def read_answers(
     return answers
 
 
+def read_json(provider_id: str, body: Any) -> Any:
+    try:
+        return json.loads(body["choices"][0]["message"]["content"])
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise ProviderRequestError(
+            provider_id, 502, "OpenRouter returned no JSON answer", body
+        ) from exc
+
+
 class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
     id = "openrouter-deepseek"
     name = "OpenRouter · DeepSeek"
-    capabilities = frozenset({DECIDE})
+    capabilities = frozenset({DECIDE, EXTRACT})
 
     def configured(self) -> bool:
         return bool(settings.openrouter_api_key)
@@ -91,8 +110,10 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
             "x-title": "Meelu",
         }
 
-    async def decide(self, state: Any, questions: dict[str, Question]) -> VendorResponse:
-        body = await vendor_request(
+    async def complete(
+        self, system: str, user: str, name: str, schema: dict[str, Any], timeout_s: float
+    ) -> Any:
+        return await vendor_request(
             self.id,
             settings.openrouter_base_url.rstrip("/") + "/v1/chat/completions",
             method="POST",
@@ -101,23 +122,37 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
                 "model": settings.openrouter_model,
                 "temperature": 0,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt(state, questions)},
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
                 ],
                 "response_format": {
                     "type": "json_schema",
-                    "json_schema": {
-                        "name": "answers",
-                        "strict": True,
-                        "schema": answer_schema(questions),
-                    },
+                    "json_schema": {"name": name, "strict": True, "schema": schema},
                 },
                 "usage": {"include": True},
             },
-            timeout_s=120,
+            timeout_s=timeout_s,
+        )
+
+    async def decide(self, state: Any, questions: dict[str, Question]) -> VendorResponse:
+        body = await self.complete(
+            SYSTEM_PROMPT, user_prompt(state, questions), "answers", answer_schema(questions), 120
         )
         answers = read_answers(self.id, body, questions)
         return VendorResponse(
             {"model": body.get("model"), "answers": answers},
+            micros_of(body.get("usage") or {}),
+        )
+
+    async def extract(self, instructions: str, data: Any, schema: dict[str, Any]) -> VendorResponse:
+        body = await self.complete(
+            EXTRACT_SYSTEM_PROMPT,
+            json.dumps({"instructions": instructions, "data": data}, ensure_ascii=False),
+            "result",
+            schema,
+            300,
+        )
+        return VendorResponse(
+            {"model": body.get("model"), "result": read_json(self.id, body)},
             micros_of(body.get("usage") or {}),
         )

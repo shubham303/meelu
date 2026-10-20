@@ -125,6 +125,46 @@ test("add_desk sends the desk's tools on the next model call without a new hands
   assert.equal(scopeApi.calls.length, 3);
 });
 
+function toolResultText(request) {
+  const result = lastTurn(request).content.findLast((b) => b.type === "tool_result");
+  return typeof result.content === "string" ? result.content : result.content.map((c) => c.text).join("");
+}
+
+test("remove_desk refuses the desk's tools at once and drops their schemas from the next user turn", async () => {
+  llm.script.push(
+    { tool: "mcp__desks__add_desk", input: { desk: "content" } },
+    { tool: "mcp__desks__remove_desk", input: { desk: "content" } },
+    { tool: "mcp__meelu__content_create_piece", input: { title: "x" } },
+    { text: "after remove" },
+  );
+  const start = llm.requests.length;
+  const calls = scopeApi.calls.length;
+  const res = await turn("write a page, then move on");
+  assert.equal(res.done.ok, true, res.done.error);
+  const [beforeAdd, afterAdd, afterRemove, afterRefused] = llm.requests.slice(start);
+  assert.deepEqual(meeluTools(beforeAdd), PAGES_TOOLS);
+  assert.deepEqual(meeluTools(afterAdd), CONTENT_TOOLS);
+  assert.ok(toolResultText(afterRemove).includes("unloaded"));
+  assert.match(toolResultText(afterRefused), /not in this task|No such tool available/, "a removed desk's tool is refused");
+  assert.equal(scopeApi.calls.at(-1).desks, "", "scope refetched without the removed desk");
+
+  llm.script.push({ text: "next turn" });
+  const next = await turn("something else", res.sessionId);
+  assert.equal(next.done.ok, true, next.done.error);
+  const nextReq = llm.requests.at(-1);
+  assert.deepEqual(meeluTools(nextReq), PAGES_TOOLS, "content tools gone from the request");
+  for (const gone of ["content_create_piece", "content_update_piece"]) {
+    assert.ok(!JSON.stringify(nextReq.tools).includes(gone), `${gone} schema still sent`);
+  }
+  assert.ok(nextReq.tools.some((t) => t.name === "mcp__desks__add_desk"), "the desk can be loaded again");
+  assert.ok(JSON.stringify(nextReq.messages).includes("write a page, then move on"), "the session resumed its transcript");
+  assert.equal(scopeApi.calls.length - calls, 4, "scope fetched at start, on add, on remove and on restart");
+
+  llm.script.push({ text: "same process" });
+  await turn("and again", res.sessionId);
+  assert.equal(scopeApi.calls.length - calls, 4, "an ordinary turn after the restart does not refetch");
+});
+
 test("silent writes of an approved job skip the permission prompt", async () => {
   const asked = [];
   const askPermission = async ({ tool }) => {
@@ -266,4 +306,16 @@ test("a task started with another model sends that model", async () => {
   const res = await turn("use the other one", undefined, { model: "openai/gpt-6-luna" });
   assert.equal(res.done.ok, true, res.done.error);
   assert.equal(llm.requests.at(-1).model, "openai/gpt-6-luna");
+});
+
+test("a desk the scope always loads sends its read tools from the first call and cannot be removed", async () => {
+  llm.script.push({ text: "geo answer" });
+  const { done } = await turn("which questions lack a page?", undefined, { action: "ask-geo" });
+  assert.equal(done.ok, true, done.error);
+  const req = llm.requests.at(-1);
+  const tools = meeluTools(req);
+  assert.ok(tools.includes("cluster") && tools.includes("forecast"), "preloaded desk reads are listed");
+  assert.ok(!tools.includes("search_page"), "a desk neither owned nor loaded stays hidden");
+  const offered = JSON.stringify(req.tools.find((t) => t.name === "mcp__desks__add_desk")?.input_schema ?? {});
+  assert.ok(!offered.includes("analytics"), "the preloaded desk is not offered again");
 });

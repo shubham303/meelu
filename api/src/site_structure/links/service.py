@@ -62,7 +62,7 @@ from src.site_structure.pipeline.schemas import (
 )
 from src.site_structure.pipeline.screening import screened_state, yes_confidence
 
-log = get_logger("site_structure.links.service")
+log = get_logger()
 
 NOT_FOUND = "No such link suggestion on this website."
 
@@ -702,7 +702,9 @@ class LinkSuggestionService:
                 screening.questions(item.action, question),
             )
         except ProviderRequestError as exc:
-            log.warning("link suggestion screening failed", suggestion_id=item.id, error=str(exc))
+            log.warning(
+                "site_structure.links.screening_failed", suggestion_id=item.id, error=str(exc)
+            )
             return None
         confidence = yes_confidence(answer["answers"]["apply"])
         state = screened_state(confidence)

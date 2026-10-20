@@ -13,7 +13,7 @@ from src.profile.repository import access_tokens, profiles, users
 from src.profile.schemas import UserRecord
 from src.settings import settings
 
-log = get_logger("identity")
+log = get_logger()
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ class IdentityService:
         try:
             await profiles.create(db, user.id, {"full_name": user.name})
         except Exception as e:
-            log.error("seed_profile_failed", user_id=user.id, error=str(e))
+            log.error("identity.signup.profile_seed_failed", user_id=user.id, error=str(e))
 
     async def sign_out(self, db: AsyncSession, token: str) -> None:
         await access_tokens.delete(db, hash_key(token))

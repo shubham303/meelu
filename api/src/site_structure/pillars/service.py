@@ -63,7 +63,7 @@ from src.site_structure.pipeline.schemas import (
 )
 from src.site_structure.pipeline.screening import screened_state, yes_confidence
 
-log = get_logger("site_structure.pillars.service")
+log = get_logger()
 
 NOT_FOUND = "No such pillar page suggestion on this website."
 
@@ -484,7 +484,9 @@ class PillarPageSuggestionService:
                 screening.questions(item.action),
             )
         except ProviderRequestError as exc:
-            log.warning("pillar suggestion screening failed", suggestion_id=item.id, error=str(exc))
+            log.warning(
+                "site_structure.pillars.screening_failed", suggestion_id=item.id, error=str(exc)
+            )
             return None
         confidence = yes_confidence(answer["answers"]["apply"])
         state = screened_state(confidence)

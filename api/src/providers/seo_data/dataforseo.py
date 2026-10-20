@@ -25,6 +25,8 @@ ENDPOINTS = {
     "relevant_pages": "/v3/dataforseo_labs/google/relevant_pages/live",
     "lighthouse": "/v3/on_page/lighthouse/live/json",
     "llm_mentions": "/v3/ai_optimization/llm_mentions/search/live",
+    "chat_gpt_answer": "/v3/ai_optimization/chat_gpt/llm_responses/live",
+    "claude_answer": "/v3/ai_optimization/claude/llm_responses/live",
 }
 
 LIMITS = {
@@ -39,6 +41,8 @@ LIMITS = {
     "bulk_targets": 1000,
 }
 
+AI_PROMPT_CHARS = 500
+FORCED_WEB_SEARCH = frozenset({"claude"})
 OK = 20000
 
 
@@ -288,4 +292,40 @@ class DataForSeoAdapter(SeoDataAdapter):
                 "limit": clamp(limit, 1000),
                 **locale,
             },
+        )
+
+    def ai_answer(self, platform, prompt, country, model):
+        return query(
+            f"{platform}_answer",
+            {
+                "user_prompt": prompt[:AI_PROMPT_CHARS],
+                "model_name": model,
+                "web_search": True,
+                **({"force_web_search": True} if platform in FORCED_WEB_SEARCH else {}),
+                **({"web_search_country_iso_code": country.upper()} if country else {}),
+            },
+        )
+
+    async def ai_models(self, platform):
+        url = (
+            settings.dataforseo_base_url.rstrip("/")
+            + f"/v3/ai_optimization/{platform}/llm_responses/models"
+        )
+        body = await vendor_request(self.id, url, headers=self.headers(), timeout_s=30)
+        found = [
+            m
+            for t in (body or {}).get("tasks") or []
+            for m in (t or {}).get("result") or []
+            if isinstance(m, dict)
+        ]
+        return [
+            str(m["model_name"])
+            for m in found
+            if m.get("model_name") and m.get("web_search_supported")
+        ]
+
+    def serp_ai_overview(self, keyword, locale):
+        return query(
+            "serp",
+            {"keyword": keyword, "depth": 10, "load_async_ai_overview": True, **locale},
         )

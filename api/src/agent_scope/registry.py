@@ -9,7 +9,9 @@ from src.agent import server
 from src.agent_scope.analytics import ACTIONS as ANALYTICS_ACTIONS
 from src.agent_scope.content import ACTIONS as CONTENT_ACTIONS
 from src.agent_scope.find_leads import ACTIONS as FIND_LEADS_ACTIONS
+from src.agent_scope.geo import ACTIONS as GEO_ACTIONS
 from src.agent_scope.lib import AgentScope
+from src.agent_scope.overview import ACTIONS as OVERVIEW_ACTIONS
 from src.agent_scope.pages import ACTIONS as PAGES_ACTIONS
 from src.agent_scope.plan import scope as plan
 from src.agent_scope.profile import ACTIONS as PROFILE_ACTIONS
@@ -27,6 +29,7 @@ NOTE_TOOLS = (save_note, update_note, delete_note)
 
 AGENT_SCOPES: dict[str, AgentScope] = {
     "plan": plan,
+    **OVERVIEW_ACTIONS,
     **SITE_ACTIONS,
     **SEO_ACTIONS,
     **PAGES_ACTIONS,
@@ -36,6 +39,7 @@ AGENT_SCOPES: dict[str, AgentScope] = {
     **ANALYTICS_ACTIONS,
     **SOCIAL_LISTENING_ACTIONS,
     **FIND_LEADS_ACTIONS,
+    **GEO_ACTIONS,
     **REPORTS_ACTIONS,
 }
 
@@ -53,6 +57,7 @@ DESK_BLURBS: dict[str, str] = {
     "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
     "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines.",
     "find-leads": "People worth a personal message, found from the briefs the user writes — mark leads contacted or discarded, add or reword briefs.",
+    "geo": "Questions people ask AI search — whether a page on the site answers each one, what ChatGPT, Claude and AI Overviews say and cite; add, remove and check tracked questions.",
     "analytics": "Analysis over this website's Search Console, Analytics and page data in the database — profiling, clustering, forecasting, period comparison, metric drivers; save reports.",
 }
 LOADABLE_DESKS = frozenset(DESK_BLURBS)

@@ -4,6 +4,7 @@ import {
   FileChartColumn,
   Globe,
   LayoutDashboard,
+  MessageCircleQuestion,
   NotebookPen,
   Radar,
   Search,
@@ -51,6 +52,15 @@ export const WEBSITE_DESKS: Desk[] = [
     icon: Search,
     stage: "decide",
     blurb: "How Google sees the site and what visitors do — Search Console and Analytics.",
+    scope: "site",
+  },
+  {
+    id: "geo",
+    href: "/dashboard/geo",
+    label: "GEO",
+    icon: MessageCircleQuestion,
+    stage: "decide",
+    blurb: "Questions people ask AI search — whether a page answers each one, and what ChatGPT, Claude and AI Overviews cite.",
     scope: "site",
   },
   {

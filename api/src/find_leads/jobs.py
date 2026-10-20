@@ -8,7 +8,7 @@ from src.core.database import unit_of_work
 from src.core.logging import get_logger
 from src.find_leads.repositories.runs import lead_runs
 
-log = get_logger("find_leads.jobs")
+log = get_logger()
 
 HEARTBEAT_SECONDS = 20
 SILENT_AFTER_SECONDS = 90
@@ -43,7 +43,7 @@ async def _heartbeat(run_id: str, key: str, earlier: int) -> None:
             async with unit_of_work() as db:
                 await lead_runs.merge_source_stats(db, run_id, key, running_stats(earlier))
         except Exception as exc:
-            log.warning("find_leads_heartbeat_failed", run_id=run_id, key=key, error=str(exc))
+            log.warning("find_leads.jobs.heartbeat_failed", run_id=run_id, key=key, error=str(exc))
 
 
 async def run_job(
@@ -55,7 +55,7 @@ async def run_job(
     try:
         stats, found = await work()
     except Exception as exc:
-        log.error("find_leads_job_failed", run_id=run_id, key=key, error=str(exc))
+        log.error("find_leads.jobs.failed", run_id=run_id, key=key, error=str(exc))
         stats = {"status": "error", "error": str(exc)}
     finally:
         beat.cancel()

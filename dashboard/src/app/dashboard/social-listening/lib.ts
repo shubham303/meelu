@@ -85,6 +85,11 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
   return prev;
 }
 
+export function dollars(micros: number): string {
+  if (micros > 0 && micros < 10_000) return "<$0.01";
+  return `$${(micros / 1_000_000).toFixed(2)}`;
+}
+
 export function postsPath(params: Record<string, string | number | null | undefined>): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {

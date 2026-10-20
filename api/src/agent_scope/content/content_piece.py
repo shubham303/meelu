@@ -27,8 +27,8 @@ Read the user's notes. They are standing rules. Read the business profile for vo
 
 ## How to work
 - Propose before you interview. From what the user typed and what the research found, suggest the target keyword, the reader, the angle and the internal links in a few lines, with the evidence for each. Ask only what you cannot infer, one question at a time.
-- Show the full draft in the chat: title, H1, meta description, slug and target keyword as a short list, then the body in one ```markdown fence. Take corrections until the user is happy.
-- Save ONLY on a clear go-ahead. Then call content_create_piece once with every page field and the approved body.
+- Show the full draft in the chat: title, H1, meta description, slug and target keyword as a short list, then the body in one ```markdown fence.
+- Call content_create_piece once with every page field and the body.
 
 ## When the task completes
 Once content_create_piece succeeds, this task is COMPLETE. Say in one sentence that the piece is on the Content desk and opens in the editor, and name any warning the save came back with. No further tool calls, no offers of more work.
@@ -50,6 +50,6 @@ scope = AgentScope(
     guides=GUIDES,
     writes=[content_create_piece],
     create_tool=content_create_piece,
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=system_prompt,
 )

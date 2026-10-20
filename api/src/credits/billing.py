@@ -12,7 +12,7 @@ from src.profile.repository import users
 from src.settings import settings
 from src.sites.repository import sites
 
-log = get_logger("credits.billing")
+log = get_logger()
 
 ACTIVE = "active"
 DISABLED = "disabled"
@@ -122,7 +122,9 @@ class SiteBillingService:
                         charged = await self.charge_site(db, site)
                 except Exception as exc:
                     result.failed += 1
-                    log.error("site_billing_failed", site_id=site.site_id, error=str(exc))
+                    log.error(
+                        "credits.billing.site_charge_failed", site_id=site.site_id, error=str(exc)
+                    )
                     continue
                 if charged:
                     result.charged += 1

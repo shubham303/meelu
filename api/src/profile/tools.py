@@ -36,8 +36,8 @@ async def save_profile(
     website_url: str | None = None,
 ) -> ProfileResponse:
     """Set fields on the user's profile; omitted fields keep their value. Creates the
-    profile when none exists (full_name required then). Only with the user's
-    agreement, in their words; timezone is an IANA name like Europe/London."""
+    profile when none exists (full_name required then). In the user's words;
+    timezone is an IANA name like Europe/London."""
     given = {
         "full_name": full_name,
         "role": role,

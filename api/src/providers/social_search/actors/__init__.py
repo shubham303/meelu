@@ -6,6 +6,8 @@ from typing import Any
 from src.providers.apify import ChargeEvents
 from src.providers.social_search.shape import epoch_seconds
 
+WINDOW_SLACK = 1.1
+
 
 @dataclass(frozen=True)
 class SearchQuery:
@@ -30,11 +32,10 @@ class ActorSpec:
     build_input: Callable[[SearchQuery], dict[str, Any]]
     normalize: Callable[[dict[str, Any]], dict | None]
     charges: ChargeEvents = ChargeEvents()
-    one_query_per_run: bool = False
 
 
 def window(query: SearchQuery, steps: list[tuple[float, str]], beyond: str) -> str:
     age = query.age_days()
     if age is None:
         return beyond
-    return next((label for days, label in steps if age <= days), beyond)
+    return next((label for days, label in steps if age <= days * WINDOW_SLACK), beyond)

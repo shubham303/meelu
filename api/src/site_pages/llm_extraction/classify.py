@@ -15,7 +15,7 @@ from src.site_pages.schemas.llm_extraction import PageLlmExtractionCreateRequest
 BATCH = 50
 CONCURRENCY = 8
 
-log = get_logger("site_page_llm_extraction")
+log = get_logger()
 
 
 class SitePageClassifier:
@@ -66,7 +66,7 @@ class SitePageClassifier:
                     done["failed"] += 1
 
         await asyncio.gather(*(one(p) for p in pages))
-        log.info("page extraction batch", site_id=site_id, **done)
+        log.info("site_pages.llm_extraction.batch_done", site_id=site_id, **done)
         return done["extracted"] + done["failed"]
 
     async def run_extraction_pass(self, site_id: str | None = None) -> int:
@@ -79,9 +79,13 @@ class SitePageClassifier:
                     if held:
                         processed += await self.classify_site_batch(user_id, pending_site_id)
             except (NoProviderError, InsufficientCreditsError) as exc:
-                log.warning("page extraction skipped", site_id=pending_site_id, reason=str(exc))
+                log.warning(
+                    "site_pages.llm_extraction.site_skipped",
+                    site_id=pending_site_id,
+                    reason=str(exc),
+                )
             except Exception:
-                log.exception("page extraction crashed", site_id=pending_site_id)
+                log.exception("site_pages.llm_extraction.site_crashed", site_id=pending_site_id)
         return processed
 
 

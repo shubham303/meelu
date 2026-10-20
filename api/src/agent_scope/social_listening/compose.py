@@ -21,6 +21,6 @@ scope = AgentScope(
     tables=TABLES,
     guides=GUIDES,
     writes=[],
-    limits={"maxTurns": 8, "maxBudgetUsd": 0.3},
+    limits={"maxTurns": 8},
     system_prompt=system_prompt,
 )
