@@ -2,7 +2,6 @@ import type { ApiKey, CreatedApiKey, Note, NoteHit, NoteKind, SiteProfile, UserP
 import type { UserPrompt, UserPromptSurface } from "@demo/features/user-prompts/api";
 import { activeSiteId } from "@demo/lib/current-site";
 import * as siteData from "../data/site";
-import * as contentData from "../data/content";
 import * as misc from "../data/misc";
 import * as credits from "../data/credits";
 import { DEFAULT_MODEL, MODELS } from "../data/llm";
@@ -127,24 +126,6 @@ function siteBilling(site: SiteProfile): credits.SiteBilling {
   };
 }
 
-function stats() {
-  const site = currentSite();
-  const ledgerly = site.id === siteData.SITE_ID;
-  const groups = ledgerly ? siteData.ISSUE_GROUPS : [];
-  const pieces = ledgerly ? contentData.PIECES.length : 0;
-  const pages = ledgerly ? siteData.PAGES.length : 0;
-  return {
-    content: { pieces },
-    seo: { pages },
-    site: { pages, needsReading: 0 },
-    pages: {
-      open: groups.filter((g) => g.state === "open").length,
-      verified: ledgerly ? 3 : 0,
-      rejected: groups.filter((g) => g.state === "rejected").length,
-    },
-  };
-}
-
 function notesForSite(): Note[] {
   const siteId = activeSiteId() ?? siteData.SITE_ID;
   return state.notes.filter((n) => n.siteId === siteId);
@@ -190,8 +171,6 @@ function randomHex(length: number): string {
 }
 
 export const ROUTES: Route[] = [
-  ["GET", /^\/api\/v1\/stats$/, () => ok(stats())],
-
   ["GET", /^\/api\/v1\/site$/, () => ok(currentSite())],
   ["PUT", /^\/api\/v1\/site$/, (_m, _q, body) => ok(applySiteChanges(currentSite(), body))],
   ["PATCH", /^\/api\/v1\/site$/, (_m, _q, body) => ok(applySiteChanges(currentSite(), body))],

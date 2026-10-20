@@ -22,6 +22,20 @@ export function GET() {
 
 Meelu is in development and built in the open. The desktop app is out for macOS and Windows and needs a Meelu account. Crawling and the agent run on the user's computer; site data and third-party data lookups live on Meelu's server. Nothing changes on the user's site without their approval.
 
+## Desks
+
+- Site and Technical SEO: crawl the site, map internal links, find broken links, missing tags and pages that render differently on mobile
+- SEO: Search Console and Google Analytics next to keyword volumes, Google's top 10, competitors and backlinks; keyword clusters with one page per search
+- GEO: track questions people ask AI search, check whether a page answers each one and what ChatGPT, Claude and Google's AI Overview say and cite
+- Content: write web pages for the user's own site (title, H1, meta description, slug, target keyword, body), checked on every save
+- Social Listening: find conversations on Reddit, X, LinkedIn, Bluesky, Facebook, Hacker News, Stack Exchange, Dev.to and GitHub Issues where a reply would help
+- Find Leads: find people worth a personal message, with the posts behind each one; the user writes and sends the message
+- Analytics and Reports: ask questions about Search Console and Analytics data, answered with charts and evidence, and keep the ones that matter
+
+## Integrations
+
+Per website, through Composio: Gmail, Outlook, Mailchimp and Kit (drafts only), Webflow and Contentful (draft pages), HubSpot, Attio and Pipedrive (contacts and notes the user approves), Notion and Google Docs (new pages), Reddit, LinkedIn and GitHub (posts only a reply the user approved, never a new post). Google Search Console and Google Analytics 4 connect from the app.
+
 ## Pricing
 
 - [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 0.4 credits a day and every website after that 0.2; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for three days; the agent can also run on the user's own LLM key.

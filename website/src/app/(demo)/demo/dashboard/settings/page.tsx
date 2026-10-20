@@ -491,7 +491,7 @@ function AccountSection() {
             try {
               await signOut();
               setCurrentSite(null);
-              router.push("/login");
+              router.push("/demo/login");
             } finally {
               setSigningOut(false);
             }

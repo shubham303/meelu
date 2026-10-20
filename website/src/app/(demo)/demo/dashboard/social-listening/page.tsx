@@ -10,6 +10,7 @@ import { useIsApp } from "@demo/lib/use-app-mode";
 import { cn } from "@demo/lib/utils";
 import type {
   SocialListeningConfig,
+  SocialListeningEstimate,
   SocialListeningPost,
   SocialListeningQuery,
   SocialListeningReviewStatus,
@@ -86,6 +87,9 @@ export default function SocialListeningPage() {
   const { data: summary, refresh: refreshSummary } = useApi<SocialListeningSummary>(
     "/api/v1/social-listening/summary",
   );
+  const { data: estimate, refresh: refreshEstimate } = useApi<SocialListeningEstimate>(
+    "/api/v1/social-listening/estimate",
+  );
   const {
     data: postsPage,
     loading: postsLoading,
@@ -99,8 +103,8 @@ export default function SocialListeningPage() {
   );
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([refreshPosts(), refreshSummary(), refreshQueries()]);
-  }, [refreshPosts, refreshSummary, refreshQueries]);
+    await Promise.all([refreshPosts(), refreshSummary(), refreshQueries(), refreshEstimate()]);
+  }, [refreshPosts, refreshSummary, refreshQueries, refreshEstimate]);
 
   useEffect(() => {
     void bridge?.socialSignalsPlatforms?.().then((res) => {
@@ -321,10 +325,13 @@ export default function SocialListeningPage() {
             queries={lines}
             config={config}
             platformInfo={platformInfo}
+            estimate={estimate}
             expanded={editingLines}
             onExpand={() => setEditingLines(true)}
             onCollapse={() => setEditingLines(false)}
-            refreshQueries={refreshQueries}
+            refreshQueries={async () => {
+              await Promise.all([refreshQueries(), refreshEstimate()]);
+            }}
             refreshConfig={refreshConfig}
           />
 
