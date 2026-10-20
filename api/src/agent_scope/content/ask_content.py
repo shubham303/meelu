@@ -17,7 +17,7 @@ ASK = AskDesk(
     produces="web pages for this site, each with its title, H1, meta description, slug, target keyword and body",
     pen="""Write and revise pieces. A piece is one web page for this site. Use content_create_piece for a new one and content_update_piece to change one. Everything lands as a draft for the user to review.""",
     extra=[
-        "**Nothing here publishes.** Meelu holds the text; the user puts it on the site themselves. There are no social posts on this desk.",
+        "**Nothing here publishes.** Meelu holds the text; the user puts it on the site themselves. When they want it in their CMS, load the CMS desk: it saves a draft there for them to publish. For Notion or Google Docs, load the Docs desk: it adds the piece as a new page there. There are no social posts on this desk.",
         f"**Write from the data.** {TABLES_NOTE} Choose the target keyword from the Search Console data and the internal links from the crawled pages; never invent a URL.",
     ],
     elsewhere=[

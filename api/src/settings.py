@@ -45,6 +45,8 @@ class Settings(EnvSettings):
     dataforseo_chatgpt_model: str = "gpt-6-luna"
     dataforseo_claude_model: str = "claude-haiku-5-5"
     apify_api_key: str = ""
+    composio_api_key: str = ""
+    composio_base_url: str = "https://backend.composio.dev/api/v3.1"
     github_token: str = ""
     stackexchange_key: str = ""
     openrouter_api_key: str = ""
@@ -74,6 +76,7 @@ class Settings(EnvSettings):
     credits_billing_sweep_disabled: bool = False
     sites_paused_retention_days: int = 30
     sites_purge_minutes: int = 60
+    connected_apps_sweep_minutes: int = 60
     seo_job_vendor_ceiling_micros: int = 2_000_000
 
     log_level: str = "INFO"

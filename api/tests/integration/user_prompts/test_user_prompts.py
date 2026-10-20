@@ -34,7 +34,11 @@ async def test_user_prompts_crud(client, email):
 
     r = await client.post(
         "/api/v1/user-prompts",
-        json={"surface": "structure", "label": "Weekly check", "prompt": "Same name, other surface."},
+        json={
+            "surface": "structure",
+            "label": "Weekly check",
+            "prompt": "Same name, other surface.",
+        },
     )
     assert r.status_code == 201
 
@@ -48,7 +52,9 @@ async def test_user_prompts_crud(client, email):
         "/api/v1/user-prompts", json={"surface": "email", "label": "x", "prompt": "y"}
     )
     assert r.status_code == 400
-    assert r.json()["error"]["message"] == 'Invalid surface "email". Allowed values: seo, structure.'
+    assert (
+        r.json()["error"]["message"] == 'Invalid surface "email". Allowed values: seo, structure.'
+    )
 
     r = await client.post(
         "/api/v1/user-prompts", json={"surface": "seo", "label": "  ", "prompt": "y"}
@@ -90,14 +96,10 @@ async def test_user_prompts_crud(client, email):
     r = await client.patch(f"/api/v1/user-prompts/{weekly['id']}", json={})
     assert r.status_code == 400
 
-    r = await client.patch(
-        f"/api/v1/user-prompts/{orphans['id']}", json={"label": "Weekly check"}
-    )
+    r = await client.patch(f"/api/v1/user-prompts/{orphans['id']}", json={"label": "Weekly check"})
     assert r.status_code == 409
 
-    r = await client.patch(
-        f"/api/v1/user-prompts/{weekly['id']}", json={"label": "Weekly check"}
-    )
+    r = await client.patch(f"/api/v1/user-prompts/{weekly['id']}", json={"label": "Weekly check"})
     assert r.status_code == 200
 
     r = await client.delete(f"/api/v1/user-prompts/{weekly['id']}")

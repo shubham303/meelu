@@ -8,6 +8,8 @@ from src.agent_plans.endpoints import router as agent_plans_router
 from src.agent_scope.endpoints import router as agent_scope_router
 from src.analytics.endpoints import router as analytics_router
 from src.auth import session_router
+from src.connected_apps import cron as connected_apps_cron
+from src.connected_apps.endpoints import router as connected_apps_router
 from src.content.endpoints import router as content_router
 from src.core import scheduler
 from src.core.csrf import CsrfMiddleware
@@ -67,6 +69,7 @@ async def lifespan(app: FastAPI):
     social_listening_cron.register(scheduler.scheduler)
     social_search_cron.register(scheduler.scheduler)
     find_leads_cron.register(scheduler.scheduler)
+    connected_apps_cron.register(scheduler.scheduler)
     async with scheduler.running():
         yield
 
@@ -119,6 +122,7 @@ for desk in (
     social_listening_router,
     find_leads_router,
     geo_router,
+    connected_apps_router,
     agent_scope_router,
     agent_plans_router,
     credits_router,

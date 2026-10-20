@@ -9,6 +9,12 @@ import { api } from "@/lib/use-api";
 import type { SocialListeningPost } from "@/lib/types";
 import { hoursAgo } from "./lib";
 
+function xReplyUrl(postUrl: string, text: string): string | null {
+  const id = /\/status\/(\d+)/.exec(postUrl)?.[1];
+  if (!id) return null;
+  return `https://x.com/intent/post?in_reply_to=${id}&text=${encodeURIComponent(text)}`;
+}
+
 export function ReplyPanel({
   post,
   siteId,
@@ -59,6 +65,13 @@ export function ReplyPanel({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+    await patch({ status: "drafted", replyText: reply }, true);
+  };
+
+  const replyOnX = async () => {
+    const url = post ? xReplyUrl(post.url, reply) : null;
+    if (!url) return;
+    window.open(url, "_blank", "noopener");
     await patch({ status: "drafted", replyText: reply }, true);
   };
 
@@ -151,6 +164,11 @@ export function ReplyPanel({
             <Button onClick={() => void copy()} disabled={!reply.trim()}>
               {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy reply"}
             </Button>
+            {post.platform === "x" && xReplyUrl(post.url, reply) && (
+              <Button variant="outline" onClick={() => void replyOnX()} disabled={!reply.trim()}>
+                <ExternalLink size={14} /> Reply on X
+              </Button>
+            )}
             <a
               href={post.url}
               target="_blank"
@@ -168,7 +186,11 @@ export function ReplyPanel({
               Mark replied
             </Button>
           </div>
-          <p className="text-xs text-sub">Copy reply moves the post to Drafted. Post it yourself, then mark it replied.</p>
+          <p className="text-xs text-sub">
+            {post.platform === "x"
+              ? "Reply on X opens X with your reply filled in; you press Post. Either button moves the post to Drafted; mark it replied once it is up."
+              : "Copy reply moves the post to Drafted. Post it yourself, then mark it replied."}
+          </p>
         </div>
       )}
     </Drawer>

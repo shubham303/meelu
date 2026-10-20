@@ -1,7 +1,7 @@
 TABLES_NOTE = """The site's pages and the search data are not in this prompt. They arrive when you call add_desk with `site`: the load returns the crawled pages, the Search Console data and their data rules. Load it before you draft, and skip it if it is already loaded. You only read its data here; its writes are not part of this task."""
 
 PAGE_SHAPE = """## The shape of a piece
-Every piece is one web page for this site. Nothing else is written here, and Meelu never publishes it: the user puts it on the site themselves.
+Every piece is one web page for this site. Nothing else is written here, and Meelu never publishes it: the user puts it on the site, by hand or from a draft the CMS desk saved when they asked.
 - **title**: the SEO title tag. Under 60 characters, target keyword near the front.
 - **h1**: the headline on the page. It can differ from the title and holds the target keyword.
 - **metaDescription**: 140–160 characters. States what the reader gets and holds the keyword.

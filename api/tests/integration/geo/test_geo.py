@@ -92,7 +92,11 @@ def ai(monkeypatch):
         state["calls"].append(platform)
         if platform in state["fail"]:
             raise ProviderRequestError("dataforseo", 502, f"{platform} is down", None)
-        cited = f"https://www.{DOMAIN}/blog/cannibalization" if platform == "chat_gpt" else "https://other.example.org/x"
+        cited = (
+            f"https://www.{DOMAIN}/blog/cannibalization"
+            if platform == "chat_gpt"
+            else "https://other.example.org/x"
+        )
         return {
             "platform": platform,
             "text": f"{platform} says cannibalization is two pages competing.",
@@ -147,7 +151,12 @@ async def prepare(client, email):
 async def add_page(client, path, body, title=None):
     r = await client.post(
         "/api/v1/site/pages",
-        json={"url": f"https://{DOMAIN}{path}", "bodyText": body, "title": title, "contentHash": path},
+        json={
+            "url": f"https://{DOMAIN}{path}",
+            "bodyText": body,
+            "title": title,
+            "contentHash": path,
+        },
     )
     assert r.status_code == 201, r.text
     return r.json()["data"]
@@ -206,7 +215,10 @@ async def test_questions_are_saved_cleaned_and_edited(client, email):
 
     r = await client.post(
         "/api/v1/geo/queries",
-        json=[{"text": "  how do I   find keyword cannibalization "}, {"text": "meelu pricing", "source": "suggested"}],
+        json=[
+            {"text": "  how do I   find keyword cannibalization "},
+            {"text": "meelu pricing", "source": "suggested"},
+        ],
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"] == {"inserted": 2, "updated": 0}
@@ -222,7 +234,9 @@ async def test_questions_are_saved_cleaned_and_edited(client, email):
 
     r = await client.patch(f"/api/v1/geo/queries/{rows[0]['id']}", json={"text": "meelu pricing"})
     assert r.status_code == 409, r.text
-    r = await client.patch(f"/api/v1/geo/queries/{rows[0]['id']}", json={"text": "how to find cannibalization"})
+    r = await client.patch(
+        f"/api/v1/geo/queries/{rows[0]['id']}", json={"text": "how to find cannibalization"}
+    )
     assert r.status_code == 200, r.text
     assert r.json()["data"]["text"] == "how to find cannibalization"
 
@@ -265,7 +279,14 @@ async def test_a_full_page_ranked_on_page_one_is_covered(client, email, llm, ai,
     assert check["pageAdds"] == ["Search Console steps"]
     assert check["suggestion"] == "Fake suggestion for covered."
 
-    judged_bodies = [c["data"]["page"]["body"] for c in llm if "page" in c["data"] and c["data"]["page"] and "points" in c["data"] and "advice" not in c["data"]]
+    judged_bodies = [
+        c["data"]["page"]["body"]
+        for c in llm
+        if "page" in c["data"]
+        and c["data"]["page"]
+        and "points" in c["data"]
+        and "advice" not in c["data"]
+    ]
     assert STEPS_BODY in judged_bodies
 
     r = await client.get("/api/v1/geo/summary")
