@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 const services = [
   {
     name: "DataForSEO",
-    what: "Keyword volumes, rankings, backlinks and search results pages.",
+    what: "Keyword volumes, rankings, backlinks, search results pages, and the answers ChatGPT, Claude and Google's AI Overview give for GEO checks.",
   },
   {
     name: "Apify",
@@ -24,7 +24,7 @@ const services = [
   },
   {
     name: "OpenRouter",
-    what: "AI models that read and classify your pages.",
+    what: "AI models that read and classify your pages, and judge whether they answer the questions you track on the GEO desk.",
   },
 ];
 

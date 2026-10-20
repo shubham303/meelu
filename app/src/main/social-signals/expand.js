@@ -7,7 +7,8 @@ Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 {"lines":[{"id":"...","keywords":["...","..."]}]}
 
 - One entry per line, with the line's id exactly as given.
-- keywords: exactly ${KEYWORDS_PER_LINE} short search phrases people would actually write in such a post. Two or three words each, because they run against literal keyword search APIs. Pick the two phrases most likely to find the conversation the line describes; if the line names a brand or product, one of them is the name itself.
+- keywords: exactly ${KEYWORDS_PER_LINE} short search phrases people would actually write in such a post. Two or three words each, because they run against literal keyword search APIs that return the newest posts containing every word, and every post returned is paid for. Pick the two phrases most likely to find the conversation the line describes and least likely to find anything else.
+- When the line names a brand or product, pair the name with the words that carry the intent, such as "<name> alternative", "<name> too expensive", "cancel <name>" or "switching from <name>". Never use a bare name alone: it matches every passing mention, ad, tutorial and anything else that shares the word.
 - The two phrases of a line must differ.
 
 Use the description of the marketer's own site to read ambiguous words the way their customers would. Never invent phrases the line does not support.`;

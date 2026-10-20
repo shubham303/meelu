@@ -19,7 +19,7 @@ from src.payments.schemas import (
 from src.profile.repository import users
 from src.settings import settings
 
-log = get_logger("payments")
+log = get_logger()
 
 PENDING = "pending"
 SUCCEEDED = "succeeded"
@@ -56,7 +56,7 @@ class PaymentService:
                 {"meelu_payment_id": payment.id, "meelu_user_id": user_id},
             )
         except dodo.DodoError as e:
-            log.error("dodo_checkout_failed", user_id=user_id, error=str(e))
+            log.error("payments.checkout.dodo_failed", user_id=user_id, error=str(e))
             raise HTTPException(502, str(e)) from e
 
         await payments.update(
@@ -87,7 +87,7 @@ class PaymentService:
         try:
             dodo.verify_webhook(raw_body, headers)
         except dodo.DodoSignatureError as e:
-            log.warning("dodo_webhook_rejected", error=str(e))
+            log.warning("payments.webhook.signature_rejected", error=str(e))
             raise HTTPException(401, "Invalid webhook signature.") from e
 
         event = json.loads(raw_body)
@@ -98,7 +98,7 @@ class PaymentService:
 
         payment = await self._match(db, data)
         if payment is None:
-            log.warning("dodo_webhook_unmatched", type=kind, payment_id=data.get("payment_id"))
+            log.warning("payments.webhook.unmatched", type=kind, payment_id=data.get("payment_id"))
             return
 
         settled = {
@@ -109,7 +109,7 @@ class PaymentService:
         if kind == "payment.succeeded":
             if not self._paid_in_full(payment, settled):
                 log.error(
-                    "dodo_webhook_amount_mismatch",
+                    "payments.webhook.amount_mismatch",
                     payment_id=payment.id,
                     expected_cents=payment.credit_micros // MICROS_PER_CENT,
                     paid_amount=settled["paid_amount"],
@@ -148,6 +148,17 @@ class PaymentService:
             db, payment.id, UNSETTLED, {**settled, "status": SUCCEEDED, "credited_at": now}
         )
         if updated is None:
+            current = await payments.find(db, payment.id)
+            if current is not None and current.dodo_payment_id != settled["dodo_payment_id"]:
+                log.error(
+                    "payments.webhook.duplicate_payment",
+                    payment_id=current.id,
+                    user_id=current.user_id,
+                    credited_dodo_payment_id=current.dodo_payment_id,
+                    uncredited_dodo_payment_id=settled["dodo_payment_id"],
+                    paid_amount=settled["paid_amount"],
+                    paid_currency=settled["paid_currency"],
+                )
             return
         await credit_service.add_credits(
             db,
@@ -156,7 +167,7 @@ class PaymentService:
             "purchase",
             f"Top-up ${updated.credit_micros / 1_000_000:.2f} · {updated.dodo_payment_id}",
         )
-        log.info("credits_purchased", user_id=updated.user_id, payment_id=updated.id)
+        log.info("payments.webhook.credited", user_id=updated.user_id, payment_id=updated.id)
 
 
 payment_service = PaymentService()

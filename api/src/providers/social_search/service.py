@@ -1,3 +1,4 @@
+from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderFacade
 from src.providers.social_search.apify import apify_adapters
 from src.providers.social_search.meelu_public import MeeluPublicAdapter
@@ -35,6 +36,19 @@ class SocialSearchProvider(ProviderFacade):
             lambda a: a.search_posts(platform, query),
             None,
         )
+
+    async def max_cost_micros(
+        self, platform: str, keyword_count: int, per_keyword: int
+    ) -> int | None:
+        if keyword_count == 0:
+            return 0
+        adapters = self.adapters_for(f"search.{platform}")
+        if not adapters:
+            return None
+        try:
+            return await adapters[0].max_cost_micros(keyword_count, per_keyword)
+        except ProviderRequestError:
+            return None
 
 
 social_search = SocialSearchProvider([MeeluPublicAdapter(), *apify_adapters()])

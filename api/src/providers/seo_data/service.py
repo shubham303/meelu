@@ -2,15 +2,17 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from src.providers.errors import ConflictError
+from src.providers.errors import ConflictError, ProviderRequestError
 from src.providers.registry import Caller, ProviderFacade
 from src.providers.seo_data.adapter import SeoDataAdapter
 from src.providers.seo_data.dataforseo import DataForSeoAdapter
 from src.providers.seo_data.shape import (
+    ai_overview_answer,
     brand_filters,
     bundle_items,
     chunk,
     first_result,
+    llm_answer,
     locale_of,
     normalize_keywords,
     own_domain,
@@ -19,6 +21,7 @@ from src.providers.seo_data.shape import (
     ranked_row,
     trend_points,
 )
+from src.settings import settings
 
 MAX_BRAND_EXCLUSIONS = 8
 OVERVIEW_KEYWORDS_PER_REQUEST = 700
@@ -30,6 +33,9 @@ BULK_TARGETS = 1000
 
 TTL = timedelta(days=7)
 PAGE_RANK_TTL = timedelta(days=30)
+AI_ANSWER_TTL = timedelta(days=1)
+AI_ANSWER_PLATFORMS = ("chat_gpt", "claude")
+AI_MODELS_TTL = timedelta(hours=24)
 
 
 def now_iso() -> str:
@@ -39,6 +45,28 @@ def now_iso() -> str:
 class SeoDataProvider(ProviderFacade):
     domain = "seo-data"
     label = "search data"
+
+    def __init__(self, adapters: list[SeoDataAdapter]):
+        super().__init__(adapters)
+        self._ai_models: dict[tuple[str, str], tuple[datetime, str]] = {}
+
+    async def _ai_model(self, adapter: SeoDataAdapter, platform: str) -> str:
+        wanted = {
+            "chat_gpt": settings.dataforseo_chatgpt_model,
+            "claude": settings.dataforseo_claude_model,
+        }[platform]
+        key = (adapter.id, platform)
+        cached = self._ai_models.get(key)
+        now = datetime.now(UTC)
+        if cached and now - cached[0] < AI_MODELS_TTL:
+            return cached[1]
+        try:
+            listed = await adapter.ai_models(platform)
+        except ProviderRequestError:
+            return wanted
+        model = wanted if wanted in listed or not listed else listed[0]
+        self._ai_models[key] = (now, model)
+        return model
 
     async def _fetch(
         self,
@@ -415,6 +443,50 @@ class SeoDataProvider(ProviderFacade):
             key=lambda p: -(p["aiSearchVolume"] if p["aiSearchVolume"] is not None else -1)
         )
         return {"platform": platform, "prompts": prompts}
+
+    async def ai_answer(
+        self,
+        caller: Caller,
+        platform: str,
+        question: str,
+        country: str | None = None,
+        refresh: bool = False,
+    ) -> dict:
+        if platform not in AI_ANSWER_PLATFORMS:
+            raise ConflictError(f"No AI answers for {platform}.")
+        models = {a.id: await self._ai_model(a, platform) for a in self.adapters_for("ai.answer")}
+        envelope = await self._fetch(
+            caller,
+            "ai.answer",
+            lambda a: a.ai_answer(platform, question, country, models[a.id]),
+            ttl=AI_ANSWER_TTL,
+            refresh=refresh,
+        )
+        return {"platform": platform, **llm_answer(first_result(envelope))}
+
+    async def ai_overview(
+        self,
+        caller: Caller,
+        question: str,
+        location_code: int | None = None,
+        language_code: str | None = None,
+        refresh: bool = False,
+    ) -> dict:
+        locale = locale_of(location_code, language_code)
+        envelope = await self._fetch(
+            caller,
+            "serp.ai_overview",
+            lambda a: a.serp_ai_overview(question, locale),
+            ttl=AI_ANSWER_TTL,
+            refresh=refresh,
+        )
+        found = ai_overview_answer(first_result(envelope))
+        return {
+            "platform": "ai_overview",
+            "shown": found is not None,
+            "text": (found or {}).get("text") or "",
+            "citations": (found or {}).get("citations") or [],
+        }
 
 
 seo_data = SeoDataProvider([DataForSeoAdapter()])

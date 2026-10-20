@@ -202,7 +202,8 @@ async function judgeStage(lines, siteContext, ctx) {
   const posts = await until(state, listMatchedPosts(siteId, cookieHeader));
   send("stage", { stage: "judging" });
   send("judged", { judged: 0, total: posts.length, kept: 0 });
-  if (posts.length === 0) return 0;
+  const keptByPlatform = {};
+  if (posts.length === 0) return { kept: 0, keptByPlatform };
 
   const linesById = new Map(lines.map((l) => [l.id, l]));
   const byLine = new Map();
@@ -239,13 +240,16 @@ async function judgeStage(lines, siteContext, ctx) {
         };
       });
       const saved = await until(state, saveVerdicts(siteId, verdicts, cookieHeader));
+      for (const { post } of answered.filter((r, i) => verdicts[i].keep)) {
+        keptByPlatform[post.platform] = (keptByPlatform[post.platform] ?? 0) + 1;
+      }
       judged += answered.length;
       kept += saved?.kept ?? 0;
       send("judged", { judged, total: posts.length, kept });
     }
   };
   await Promise.all(Array.from({ length: Math.min(JUDGE_CONCURRENCY, batches.length) }, worker));
-  return kept;
+  return { kept, keptByPlatform };
 }
 
 async function drive(jobId, input, state, emit, { cookieHeader, release }) {
@@ -284,7 +288,8 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
     const lines = await searchTerms(enabledLines, siteContext, ctx);
     const collected = await collectStage(input, runId, ctx);
     counts.matchedCount = await gateStage(ctx);
-    counts.keptCount = await judgeStage(lines, siteContext, ctx);
+    const judgedOut = await judgeStage(lines, siteContext, ctx);
+    counts.keptCount = judgedOut.kept;
     guard(state);
 
     await finishPatch("done");
@@ -293,7 +298,12 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
       inserted: collected.inserted,
       matched: counts.matchedCount,
       kept: counts.keptCount,
-      platforms: collected.platforms ?? {},
+      platforms: Object.fromEntries(
+        Object.entries(collected.platforms ?? {}).map(([id, stats]) => [
+          id,
+          { ...stats, kept: judgedOut.keptByPlatform[id] ?? 0 },
+        ]),
+      ),
     });
   } catch (err) {
     if (err instanceof Stopped) {

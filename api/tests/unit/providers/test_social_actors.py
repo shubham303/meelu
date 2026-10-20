@@ -108,6 +108,16 @@ def test_x_codeperfection():
     assert out["engagement"]["views"] == 9
 
 
+def test_reddit_window_covers_a_lookback_that_ran_minutes_past_a_week():
+    q = SearchQuery(
+        keywords=["seo audit"],
+        since=(datetime.now(UTC) - timedelta(days=7, minutes=5)).isoformat(),
+        per_keyword=20,
+    )
+    assert reddit.harshmaur_input(q)["searchTime"] == "week"
+    assert reddit.fatihtahta_input(q)["timeframe"] == "week"
+
+
 def test_linkedin_harvest_and_maestro():
     q = SearchQuery(
         keywords=["seo audit", "crawl"],
@@ -183,31 +193,36 @@ def test_caps_are_per_keyword():
     assert x.codeperfection_input(q)["maxTotalTweets"] == 75
 
 
-def test_facebook_scraper_one():
-    q = SearchQuery(keywords=["wordpress slow"], since="2026-10-08T00:00:00Z", per_keyword=25)
-    assert facebook.scraper_one_input(q) == {
-        "query": "wordpress slow",
-        "resultsCount": 25,
-        "searchType": "latest",
+def test_facebook_topapi():
+    q = SearchQuery(
+        keywords=["wordpress slow", "site speed"], since="2026-10-08T00:00:00Z", per_keyword=25
+    )
+    assert facebook.topapi_input(q) == {
+        "searchQueries": ["wordpress slow", "site speed"],
+        "sortBy": "recent",
+        "mustContainQuery": False,
+        "maxPostsPerQuery": 25,
+        "maxItems": 50,
         "startDate": "2026-10-08",
     }
-    out = facebook.scraper_one_post(
+    out = facebook.topapi_post(
         {
-            "url": "https://www.facebook.com/groups/784025789158373/permalink/2160015128226092/",
-            "postId": "2160015128226092",
-            "timestamp": 1792663967000,
-            "postText": "A slow WordPress site can have problems",
-            "reactionsCount": 1,
-            "commentsCount": 1,
-            "isReshare": False,
+            "post_id": "1542617331240852",
+            "url": "https://www.facebook.com/Semrush/posts/pfbid0sc7Y9FmdBnUuoJQ362",
+            "message": "A slow WordPress site can have problems",
+            "timestamp": 1792469040,
+            "published_at": "2026-10-20T04:04:00.000Z",
             "author": {"id": "1", "name": "Yasin BusinessDev"},
+            "reactions_count": 4,
+            "comments_count": 1,
+            "search_query": "wordpress slow",
         }
     )
-    assert out["id"] == "2160015128226092"
+    assert out["id"] == "1542617331240852"
     assert out["title"] is None
     assert out["author"] == {"handle": "Yasin BusinessDev", "displayName": "Yasin BusinessDev"}
-    assert out["engagement"] == {"score": 1, "comments": 1, "views": None}
-    assert out["createdAt"] == "2026-10-22T10:12:47+00:00"
+    assert out["engagement"] == {"score": 4, "comments": 1, "views": None}
+    assert out["createdAt"] == "2026-10-20T04:04:00+00:00"
 
 
 def test_facebook_identity_uses_post_id():
@@ -220,14 +235,19 @@ def test_facebook_identity_uses_post_id():
         assert post_key("facebook", "10163020137237023", url) == "facebook:10163020137237023"
 
 
-def test_bluesky_reads_the_handle_from_the_post_url():
-    from src.providers.social_search.actors import bluesky
+def test_bluesky_post_builds_the_web_url_from_the_record_uri():
+    from src.providers.social_search.meelu_public import bluesky_post
 
-    parsed = bluesky.lexis_post(
+    out = bluesky_post(
         {
-            "url": "https://bsky.app/profile/quadweb.bsky.social/post/3mxtsss27os2s",
-            "text": "our traffic dropped",
-            "createdAt": "2026-10-17T10:00:00Z",
+            "uri": "at://did:plc:abc/app.bsky.feed.post/3myaaxh3yikro",
+            "author": {"handle": "rustybrick.com", "displayName": "Barry Schwartz"},
+            "record": {"text": "our traffic dropped", "createdAt": "2026-10-19T13:45:40.930Z"},
+            "likeCount": 3,
+            "replyCount": 1,
         }
     )
-    assert parsed["author"]["handle"] == "quadweb.bsky.social"
+    assert out["url"] == "https://bsky.app/profile/rustybrick.com/post/3myaaxh3yikro"
+    assert out["author"] == {"handle": "rustybrick.com", "displayName": "Barry Schwartz"}
+    assert out["engagement"]["score"] == 3
+    assert out["createdAt"] == "2026-10-19T13:45:40.930000+00:00"

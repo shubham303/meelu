@@ -48,6 +48,6 @@ scope = AgentScope(
     guides=GUIDES,
     writes=[set_page_type],
     silent_writes=[set_page_type],
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=ask_prompt(ASK),
 )

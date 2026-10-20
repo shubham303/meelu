@@ -23,7 +23,7 @@ export const PLATFORMS: PlatformInfo[] = [
   { id: "reddit", label: "Reddit", access: "apify", available: true },
   { id: "x", label: "X (Twitter)", access: "apify", available: true },
   { id: "linkedin", label: "LinkedIn", access: "apify", available: true },
-  { id: "bluesky", label: "Bluesky", access: "apify", available: true },
+  { id: "bluesky", label: "Bluesky", access: "direct", available: true },
   { id: "facebook", label: "Facebook", access: "apify", available: true },
 ];
 

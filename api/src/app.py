@@ -20,6 +20,7 @@ from src.credits.limiter import PaidCallsBusyError
 from src.credits.service import InsufficientCreditsError, SiteDisabledError
 from src.find_leads import cron as find_leads_cron
 from src.find_leads.endpoints import router as find_leads_router
+from src.geo.endpoints import router as geo_router
 from src.identity import cron as identity_cron
 from src.keys.endpoints import router as keys_router
 from src.llm.endpoints import router as llm_router
@@ -117,6 +118,7 @@ for desk in (
     user_prompts_router,
     social_listening_router,
     find_leads_router,
+    geo_router,
     agent_scope_router,
     agent_plans_router,
     credits_router,

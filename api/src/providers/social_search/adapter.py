@@ -16,3 +16,6 @@ class SocialSearchAdapter(ProviderAdapter):
 
     async def search_posts(self, platform: str, query: dict) -> VendorResponse:
         raise self.unsupported(f"search.{platform}")
+
+    async def max_cost_micros(self, keyword_count: int, per_keyword: int) -> int | None:
+        return 0

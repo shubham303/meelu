@@ -69,7 +69,9 @@ class AgentScopeService:
                 raise HTTPException(
                     400, f"Unknown desk {name!r}. Loadable: {', '.join(sorted(LOADABLE_DESKS))}."
                 )
-        return [name for name in requested if name != scope.desk]
+        return [
+            name for name in dict.fromkeys([*scope.loaded_desks, *requested]) if name != scope.desk
+        ]
 
     def desk_brief(self, desk_name: str) -> str:
         addition = desk_addition(desk_name)
@@ -118,6 +120,7 @@ class AgentScopeService:
             providers=scope.providers,
             local_tools=local_tools,
             silent_writes=silent,
+            loaded_desks=[] if scope.standalone else list(scope.loaded_desks),
             desks=[
                 DeskOffer(name=name, blurb=blurb, brief=self.desk_brief(name))
                 for name, blurb in sorted(DESK_BLURBS.items())

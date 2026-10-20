@@ -136,3 +136,78 @@ def brand_filters(terms: list[str]) -> list:
             filters.append("and")
         filters.append(["keyword_data.keyword", "not_ilike", f"%{term}%"])
     return filters
+
+
+AI_OVERVIEW_TYPES = frozenset({"ai_overview", "knowledge_graph_ai_overview_item"})
+AI_OVERVIEW_TEXT_TYPES = frozenset(
+    {
+        "ai_overview_element",
+        "ai_overview_table_element",
+        "ai_overview_expanded_element",
+        "ai_overview_expanded_component",
+    }
+)
+CITATION_TYPES = frozenset({"ai_overview_reference", "link_element"})
+
+
+def walk(node: Any):
+    if isinstance(node, dict):
+        yield node
+        for value in node.values():
+            yield from walk(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from walk(value)
+
+
+def add_citation(found: dict[str, dict], url: Any, title: Any) -> None:
+    clean = clean_url(url)
+    if clean and clean not in found:
+        found[clean] = {"url": clean, "title": clip(title, 300)}
+
+
+def llm_answer(result: dict | None) -> dict:
+    texts: list[str] = []
+    citations: dict[str, dict] = {}
+    for item in (result or {}).get("items") or []:
+        if (item or {}).get("type") != "message":
+            continue
+        for section in item.get("sections") or []:
+            if (section or {}).get("type") != "text":
+                continue
+            if section.get("text"):
+                texts.append(str(section["text"]).strip())
+            for note in section.get("annotations") or []:
+                add_citation(citations, (note or {}).get("url"), (note or {}).get("title"))
+    return {
+        "text": "\n\n".join(t for t in texts if t),
+        "citations": list(citations.values()),
+        "model": (result or {}).get("model_name"),
+    }
+
+
+def ai_overview_answer(result: dict | None) -> dict | None:
+    overview = next(
+        (n for n in walk((result or {}).get("items") or []) if n.get("type") in AI_OVERVIEW_TYPES),
+        None,
+    )
+    if overview is None:
+        return None
+    texts: list[str] = []
+    citations: dict[str, dict] = {}
+    for node in walk(overview.get("items") or []):
+        kind = node.get("type")
+        if kind in AI_OVERVIEW_TEXT_TYPES:
+            body = node.get("markdown") or node.get("text")
+            if body:
+                texts.append(str(body).strip())
+        elif kind in CITATION_TYPES:
+            add_citation(citations, node.get("url"), node.get("title") or node.get("source"))
+    if not texts and (overview.get("markdown") or overview.get("text")):
+        texts.append(str(overview.get("markdown") or overview.get("text")).strip())
+    for ref in overview.get("references") or []:
+        add_citation(citations, (ref or {}).get("url"), (ref or {}).get("title"))
+    return {
+        "text": "\n\n".join(dict.fromkeys(t for t in texts if t)),
+        "citations": list(citations.values()),
+    }

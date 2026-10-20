@@ -5,6 +5,7 @@ from src.content import models as content_models
 from src.crawl_jobs import models as crawl_jobs_models
 from src.credits import models as credits_models
 from src.find_leads import models as find_leads_models
+from src.geo import models as geo_models
 from src.keys import models as keys_models
 from src.llm import models as llm_models
 from src.notes import models as notes_models
@@ -35,6 +36,7 @@ __all__ = [
     "crawl_jobs_models",
     "credits_models",
     "find_leads_models",
+    "geo_models",
     "keys_models",
     "keyword_clusters_models",
     "keyword_tracking_models",

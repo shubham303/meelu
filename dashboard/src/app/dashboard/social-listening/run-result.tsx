@@ -2,13 +2,17 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { dollars } from "./lib";
 
 export interface RunOutcome {
   stopped: boolean;
   fetched: number;
   inserted: number;
   kept: number;
-  platforms: Record<string, { error?: string | null }>;
+  platforms: Record<
+    string,
+    { error?: string | null; fromVendor?: number; fromDatabase?: number; costMicros?: number; kept?: number }
+  >;
 }
 
 function listOf(names: string[]) {
@@ -26,6 +30,7 @@ export function RunResult({
   onDismiss: () => void;
 }) {
   const failed = Object.entries(outcome.platforms).filter(([, s]) => s.error);
+  const yields = outcome.stopped ? [] : Object.entries(outcome.platforms).filter(([, s]) => !s.error);
   const searched = listOf(Object.keys(outcome.platforms).map(platformLabel));
   const good = !outcome.stopped && outcome.kept > 0;
 
@@ -58,6 +63,16 @@ export function RunResult({
       <div className="min-w-0 flex-1 space-y-1">
         <p className={cn("text-sm font-medium", good ? "text-good" : "text-ink")}>{title}</p>
         {hint && <p className="text-[13px] text-sub">{hint}</p>}
+        {yields.length > 0 && (
+          <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-[12.5px] tabular-nums text-sub">
+            {yields.map(([id, s]) => (
+              <li key={id}>
+                {platformLabel(id)}: {(s.fromVendor ?? 0) + (s.fromDatabase ?? 0)} found · {s.kept ?? 0} kept ·{" "}
+                {dollars(s.costMicros ?? 0)}
+              </li>
+            ))}
+          </ul>
+        )}
         {failed.map(([id, s]) => (
           <p key={id} className="text-[13px] text-bad">
             {platformLabel(id)} failed: {s.error}

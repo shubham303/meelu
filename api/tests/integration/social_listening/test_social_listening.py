@@ -215,6 +215,33 @@ async def test_run_needs_five_dollars_and_one_at_a_time(client, email):
     assert rows[0][0] == "error"
 
 
+async def test_estimate_counts_only_keywords_the_vendor_would_be_asked_for(
+    client, email, vendor, monkeypatch
+):
+    from src.providers.social_search.service import social_search
+
+    async def max_cost_micros(platform, keyword_count, per_keyword):
+        return keyword_count * per_keyword * 100
+
+    monkeypatch.setattr(social_search, "max_cost_micros", max_cost_micros)
+    await prepare(client, email)
+    await add_line(client, "people with slow wordpress sites", ["slow wordpress", "site speed"])
+    r = await client.post("/api/v1/social-listening/queries", json=[{"text": "new line"}])
+    assert r.status_code == 200, r.text
+    sql(
+        "insert into social_search_cursor (id, platform, keyword, last_fetched_at, "
+        "created_at, updated_at) values ('ssc_fresh', 'hackernews', 'site speed', now(), "
+        "now(), now())"
+    )
+
+    r = await client.get("/api/v1/social-listening/estimate")
+    assert r.status_code == 200, r.text
+    hackernews = next(p for p in r.json()["data"]["platforms"] if p["platform"] == "hackernews")
+    assert hackernews["keywords"] == 4
+    assert hackernews["vendorKeywords"] == 3
+    assert hackernews["maxCostMicros"] == 3 * 25 * 100
+
+
 async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
     await prepare(client, email)
     await add_line(client, "people with slow wordpress sites", ["slow wordpress", "site speed"])
@@ -255,6 +282,7 @@ async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
     assert stats["fromDatabase"] == 1
     assert stats["candidates"] == 3
     assert stats["failedKeywords"] == ["page cache"]
+    assert stats["costMicros"] == 0
     assert finished["fetchedCount"] == 4
 
     found = await posts(client, "candidate")
