@@ -195,9 +195,7 @@ async def test_run_guards(client, email):
     await prepare(client, email, credits=1.0)
     r = await client.post(f"{BASE}/runs")
     assert r.status_code == 402
-    assert r.json()["error"]["message"] == (
-        "Finding leads needs a credit balance of at least $5."
-    )
+    assert r.json()["error"]["message"] == ("Finding leads needs a credit balance of at least $5.")
     await grant(email, 20)
     r = await client.post(f"{BASE}/runs")
     assert r.status_code == 400
@@ -295,7 +293,9 @@ async def test_linkedin_and_web_candidates(client, email, vendors):
         },
     )
     assert r.json()["data"] == {"inserted": 2, "skipped": 0}
-    web = {lead["name"]: lead for lead in await leads(client, "candidate") if lead["source"] == "web"}
+    web = {
+        lead["name"]: lead for lead in await leads(client, "candidate") if lead["source"] == "web"
+    }
     assert web["Rise Bakery"]["email"] == "hello@risebakery.example"
     assert web["Guessed"].get("email") is None
     run_row = (await client.get(f"{BASE}/runs/{run['id']}")).json()["data"]
@@ -335,7 +335,12 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors):
     recent_at = (datetime.now(UTC) - timedelta(days=3)).isoformat()
     old_at = (datetime.now(UTC) - timedelta(days=40)).isoformat()
     vendors["activity"]["candlesbydana"] = [
-        {"url": activity_url, "text": "which pages lost rankings?", "at": recent_at, "kind": "post"},
+        {
+            "url": activity_url,
+            "text": "which pages lost rankings?",
+            "at": recent_at,
+            "kind": "post",
+        },
         {"url": old_url, "text": "2019 rant", "at": old_at, "kind": "post"},
         {"url": "https://x.example/undated", "text": "no date", "at": None, "kind": "comment"},
     ]

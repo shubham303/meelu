@@ -1,4 +1,5 @@
 import src.agent.tools.core
+import src.connected_apps.tools
 import src.data_analytics.tools
 import src.providers.seo_data.tools
 import src.scratchpad.tools
@@ -20,6 +21,7 @@ from src.agent_scope.seo import ACTIONS as SEO_ACTIONS
 from src.agent_scope.site import ACTIONS as SITE_ACTIONS
 from src.agent_scope.social_listening import ACTIONS as SOCIAL_LISTENING_ACTIONS
 from src.agent_scope.technical_seo import ACTIONS as TECHNICAL_SEO_ACTIONS
+from src.connected_apps.catalog import DESKS as CONNECTED_APP_DESKS
 from src.notes.tools import delete_note, save_note, update_note
 
 WRITE_TOOLS = frozenset(server.WRITE_TOOLS)
@@ -59,6 +61,7 @@ DESK_BLURBS: dict[str, str] = {
     "find-leads": "People worth a personal message, found from the briefs the user writes — mark leads contacted or discarded, add or reword briefs.",
     "geo": "Questions people ask AI search — whether a page on the site answers each one, what ChatGPT, Claude and AI Overviews say and cite; add, remove and check tracked questions.",
     "analytics": "Analysis over this website's Search Console, Analytics and page data in the database — profiling, clustering, forecasting, period comparison, metric drivers; save reports.",
+    **{d.name: d.blurb for d in CONNECTED_APP_DESKS.values()},
 }
 LOADABLE_DESKS = frozenset(DESK_BLURBS)
 
@@ -88,7 +91,7 @@ def desk_addition(desk_name: str) -> AgentScope:
 
 def _attach_note_tools() -> None:
     for scope in AGENT_SCOPES.values():
-        if scope.desk == WORKSPACE or scope.is_global or scope.standalone:
+        if scope.desk == WORKSPACE or scope.is_global:
             continue
         scope.writes = [w for w in scope.writes if w not in NOTE_TOOLS] + list(NOTE_TOOLS)
 

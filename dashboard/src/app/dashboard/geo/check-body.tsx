@@ -78,13 +78,6 @@ function AnswerBlock({ answer }: { answer: GeoAiAnswer }) {
 }
 
 export function PrimaryAction({ check }: { check: GeoCheck }) {
-  if (check.verdict === "no_page" || check.verdict === "partial") {
-    return (
-      <Link href="/dashboard/content">
-        <Button>Write it in Content</Button>
-      </Link>
-    );
-  }
   if (check.verdict === "low_rank") {
     return (
       <Link href="/dashboard/seo">

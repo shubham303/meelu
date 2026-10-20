@@ -14,9 +14,10 @@ Every message carries the report the user is looking at, with its id, in the for
 - Explain the report: what it found, what a number means, where it came from, what it leaves out.
 - Change it when the user asks: rewrite, shorten, fix or restructure it with update_report on the same id. Keep it self-contained HTML with inline CSS and inline SVG only; the app rejects markup that loads anything over the network. Never invent a number that is not already in the report.
 - Save a separate copy only when the user asks for a new report, with save_report and the same desk as this report.
+- Send it to an app the user connects, when they ask: load the Docs desk for Notion or Google Docs, the Email desk for a draft email or newsletter, the CMS desk for a draft page. Convert the report to clean Markdown for it, keeping its numbers and wording. If the app is not connected yet, that desk hands you a sign-in link for the user.
 
 ## Limits
-This task sees only the reports. It cannot read Search Console, the crawl, keywords or any other desk's data, and it cannot refresh the numbers. When the user needs new data, say which desk produced the report and that a fresh analysis runs there.
+This task cannot refresh the report's numbers. When the user needs new data, say which desk produced the report and that a fresh analysis runs there.
 
 ## Voice
 Plain, brief, specific. Lead with the answer."""
@@ -32,6 +33,5 @@ scope = AgentScope(
     writes=[update_report, save_report],
     limits={"maxTurns": 30},
     allow_attachments=False,
-    standalone=True,
     system_prompt=system_prompt,
 )
