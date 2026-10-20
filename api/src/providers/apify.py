@@ -1,6 +1,7 @@
 import asyncio
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from src.providers.errors import ProviderRequestError
@@ -12,6 +13,7 @@ BASE = "https://api.apify.com/v2"
 RUN_TIMEOUT_S = 300
 WAIT_S = 60
 COST_SETTLE_ATTEMPTS = 5
+PRICE_TTL_S = 86400
 ACTIVE = ("READY", "RUNNING")
 FINISHED = ("SUCCEEDED", "TIMED-OUT")
 
@@ -73,6 +75,45 @@ def _event_estimate_micros(run: dict, charges: ChargeEvents, item_count: int) ->
         if isinstance(price, (int, float)) and count:
             total += price * count
     return round(total * 1_000_000)
+
+
+_prices: dict[str, tuple[float, dict[str, float]]] = {}
+
+
+def _highest_price(event: dict) -> float:
+    flat = event.get("eventPriceUsd")
+    if isinstance(flat, (int, float)):
+        return float(flat)
+    tiers = (event.get("eventTieredPricingUsd") or {}).values()
+    return max((float(t.get("tieredEventPriceUsd") or 0) for t in tiers), default=0.0)
+
+
+def _current_events(actor: dict) -> dict:
+    now = datetime.now(UTC).isoformat()
+    infos = [i for i in actor.get("pricingInfos") or [] if str(i.get("startedAt") or "") <= now]
+    current = infos[-1] if infos else {}
+    return (current.get("pricingPerEvent") or {}).get("actorChargeEvents") or {}
+
+
+async def event_prices(provider_id: str, actor_id: str) -> dict[str, float]:
+    cached = _prices.get(actor_id)
+    if cached and time.monotonic() - cached[0] < PRICE_TTL_S:
+        return cached[1]
+    res = await vendor_request(provider_id, f"{BASE}/acts/{actor_id}", headers=_headers())
+    events = _current_events((res or {}).get("data") or {})
+    prices = {name: _highest_price(event) for name, event in events.items()}
+    _prices[actor_id] = (time.monotonic(), prices)
+    return prices
+
+
+async def max_charge_micros(
+    provider_id: str, actor_id: str, charges: ChargeEvents, runs: int, results: int
+) -> int | None:
+    prices = await event_prices(provider_id, actor_id)
+    if charges.result not in prices:
+        return None
+    start = prices.get(charges.start, 0.0) if charges.start else 0.0
+    return round((prices[charges.result] * results + start * runs) * 1_000_000)
 
 
 async def _settled_cost(provider_id: str, run: dict, charges: ChargeEvents, item_count: int) -> int:

@@ -3,8 +3,11 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, model_validator
 
+from src.core.logging import get_logger
 from src.integrations.base import HttpIntegration, IntegrationError
 from src.settings import settings
+
+log = get_logger()
 
 API_URL = "https://api.unsplash.com"
 UTM = "utm_source=meelu&utm_medium=referral"
@@ -114,7 +117,11 @@ class UnsplashClient(HttpIntegration):
         try:
             await self.request("GET", download_location)
         except IntegrationError as e:
-            self._log.warning("download_trigger_failed", location=download_location, error=str(e))
+            log.warning(
+                "integrations.unsplash.download_trigger_failed",
+                location=download_location,
+                error=str(e),
+            )
 
 
 unsplash = UnsplashClient()

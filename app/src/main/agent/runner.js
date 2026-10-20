@@ -15,6 +15,7 @@ import { MEELU_SERVER, meeluMcpServer } from "./meelu-server.js";
 import { isPublicWebUrl } from "../public-address.js";
 
 const MAX_TURNS = 24;
+const MAX_BUDGET_USD = 5;
 const SILENT_TOOLS = new Set(["run_sql"]);
 
 const MODEL_LIST_MS = 6 * 60 * 60 * 1000;
@@ -26,10 +27,10 @@ const READER_MAX_TURNS = 40;
 function desksPrompt(offers) {
   if (!offers.length) return "";
   const lines = offers.map((d) => `- ${d.name}: ${d.blurb}`).join("\n");
-  return `\n\n## Other desks (load on demand)\n\nThis task loaded one desk's tools. The workspace has more:\n${lines}\n\nWhen the request needs a write or tool one of those desks owns, call \`add_desk\` with its name. Its tools are in your list from your very next call, and its tables and writes come back in the tool result, so carry on with the request in the same reply. Loading a desk needs no permission. Never send the user to that desk, and never ask whether to load it. Load one to read as well when you need tables this prompt does not list; you can already query every table it does list.`;
+  return `\n\n## Other desks (load on demand)\n\nThis task loaded one desk's tools. The workspace has more:\n${lines}\n\nWhen the request needs a write or tool one of those desks owns, call \`add_desk\` with its name. Its tools are in your list from your very next call, and its tables and writes come back in the tool result, so carry on with the request in the same reply. Loading a desk needs no permission. Never send the user to that desk, and never ask whether to load it. Load one to read as well when you need tables this prompt does not list; you can already query every table it does list. When the user moves on to something a loaded desk has no part in, call \`remove_desk\` to drop it: its tools are refused at once and leave your list from the user's next message, so they stop riding along on every call. Loading it again later is free.`;
 }
 
-function desksServer(offers, onAdd) {
+function desksServer(offers, onAdd, onRemove) {
   if (!offers.length) return null;
   const names = offers.map((d) => d.name);
   const addDesk = sdkTool(
@@ -41,7 +42,16 @@ function desksServer(offers, onAdd) {
       return { content: [{ type: "text", text }] };
     },
   );
-  return createSdkMcpServer({ name: "desks", version: "1.0.0", tools: [addDesk] });
+  const removeDesk = sdkTool(
+    "remove_desk",
+    "Unload a desk you loaded with add_desk once the work that needed it is done. Its tools are refused at once and leave your list from the user's next message; load it again if a later request needs it.",
+    { desk: z.enum(names).describe("A desk you loaded earlier in this task") },
+    async ({ desk }) => {
+      const text = await onRemove(desk);
+      return { content: [{ type: "text", text }] };
+    },
+  );
+  return createSdkMcpServer({ name: "desks", version: "1.0.0", tools: [addDesk, removeDesk] });
 }
 
 const NO_WEB_DESKS = new Set(["site"]);
@@ -542,7 +552,8 @@ async function buildConfig(session) {
   }
   const readOnly = isReadOnly(scope);
   const providerDomains = readOnly ? [] : (scope.providers ?? []);
-  session.access = deskAccess(catalog, [scope.desk, ...desks], writes, providerDomains, scope.silentWrites);
+  const loadedDesks = [scope.desk, ...(scope.loadedDesks ?? [])];
+  session.access = deskAccess(catalog, [...loadedDesks, ...desks], writes, providerDomains, scope.silentWrites);
   session.meeluServer?.close();
   session.meeluServer = meeluMcpServer(ENV_DEFAULTS.agentMcpUrl, meeluHeaders, catalog, session.access.allowed);
   const readTools = [...session.access.allowed]
@@ -558,24 +569,37 @@ async function buildConfig(session) {
 
 
   const deskOffers = scope.desks ?? [];
-  const addDeskServer = desksServer(deskOffers, async (desk) => {
-    if (desks.has(desk)) return `The ${desk} desk is already loaded.`;
-    const offer = deskOffers.find((d) => d.name === desk);
-    desks.add(desk);
+  const refreshDesks = async () => {
     const merged = await fetchScope(action, siteId, cookieHeader, {
       ...(params ?? {}),
       desks: [...desks].join(","),
     });
     session.access = deskAccess(
       catalog,
-      [scope.desk, ...desks],
+      [...loadedDesks, ...desks],
       merged.writes ?? [],
       readOnly ? [] : (merged.providers ?? []),
       merged.silentWrites,
     );
     await session.meeluServer.show(session.access.allowed);
-    return offer?.brief ?? `The ${desk} desk is loaded.`;
-  });
+  };
+  const addDeskServer = desksServer(
+    [...deskOffers, ...[...desks].map((name) => ({ name }))],
+    async (desk) => {
+      if (desks.has(desk)) return `The ${desk} desk is already loaded.`;
+      const offer = deskOffers.find((d) => d.name === desk);
+      desks.add(desk);
+      await refreshDesks();
+      return offer?.brief ?? `The ${desk} desk is loaded.`;
+    },
+    async (desk) => {
+      if (!desks.has(desk)) return `The ${desk} desk is not loaded.`;
+      desks.delete(desk);
+      await refreshDesks();
+      session.narrowed = true;
+      return `The ${desk} desk is unloaded. Its tools and writes are refused from now on; leave its tables alone. Load it again with add_desk if a later request needs it.`;
+    },
+  );
 
   const reviewServer = reviewMcpServer(readOnly ? [] : (scope.localTools ?? []), {
     cookieHeader,
@@ -607,7 +631,7 @@ async function buildConfig(session) {
       toolName.startsWith("mcp__meelu__") ||
       reviewTool ||
       (webPageServer && toolName.startsWith(`mcp__${WEB_PAGE_SERVER}__`)) ||
-      (addDeskServer && toolName === "mcp__desks__add_desk") ||
+      (addDeskServer && (toolName === "mcp__desks__add_desk" || toolName === "mcp__desks__remove_desk")) ||
       (withWeb && (toolName === "WebSearch" || toolName === "WebFetch")) ||
       toolName === "Agent" ||
       toolName === "Task";
@@ -717,6 +741,7 @@ class LiveSession {
     this.model = typeof model === "string" && model.trim() ? model.trim() : null;
     this.options = options;
     this.desks = new Set();
+    this.narrowed = false;
     this.access = { allowed: new Set(), writes: [], silentWrites: new Set() };
     this.meeluServer = null;
     this.approvedJobs = new Set();
@@ -736,6 +761,7 @@ class LiveSession {
   }
 
   async start(resumeId) {
+    this.narrowed = false;
     this.config = await buildConfig(this);
     this.input = new TurnInput();
     const { config } = this;
@@ -759,6 +785,7 @@ class LiveSession {
         strictMcpConfig: true,
         includePartialMessages: true,
         maxTurns: config.scope.limits?.maxTurns ?? MAX_TURNS,
+        maxBudgetUsd: MAX_BUDGET_USD,
         ...claudeExecutable(),
         env: llmEnv(config.gateway, config.limits),
       },
@@ -859,6 +886,7 @@ class LiveSession {
     if (this.busy) throw new Error("This task is still answering. Wait for it to finish.");
     clearTimeout(this.idleTimer);
 
+    if (this.q && this.narrowed) this.stopProcess();
     if (!this.q) await this.start(this.sessionId);
     if (files?.length && this.config.scope.allowAttachments === false) {
       if (!this.sessionId) this.destroy();

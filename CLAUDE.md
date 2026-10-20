@@ -70,9 +70,9 @@ The CLI never connects to the agent server: it talks to an in-process MCP
 server (`app/src/main/agent/meelu-server.js`) that lists only the allowed tools
 and forwards calls over one kept-alive connection. Hiding with `deny` or
 `disallowedTools` does not work: the CLI still sends every schema to the model.
-`add_desk` is a local tool that only appends to the session's desk list; the
-runner fetches the scope again, widens the listed set, fires `list_changed`,
-and continues the same session. Never add per-desk logic to the MCP server,
+`add_desk` and `remove_desk` are local tools that only change the session's
+desk list; the runner fetches the scope again, widens or narrows the listed
+set, fires `list_changed`, and continues the same session. Never add per-desk logic to the MCP server,
 never open a second MCP connection per desk, and never re-handshake on an
 ordinary turn.
 

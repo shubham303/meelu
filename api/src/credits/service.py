@@ -18,7 +18,7 @@ from src.credits.schemas import (
 from src.settings import settings
 from src.sites.repository import sites
 
-log = get_logger("credits")
+log = get_logger()
 
 
 class InsufficientCreditsError(Exception):
@@ -98,10 +98,10 @@ class CreditService:
             async with db.begin_nested():
                 resumed = await site_billing_service.resume_user_sites(db, user_id)
         except Exception as exc:
-            log.error("sites_resume_failed", user_id=user_id, error=str(exc))
+            log.error("credits.billing.sites_resume_failed", user_id=user_id, error=str(exc))
             return entry
         if resumed:
-            log.info("sites_resumed", user_id=user_id, resumed=resumed)
+            log.info("credits.billing.sites_resumed", user_id=user_id, resumed=resumed)
         return entry
 
     async def grant(self, db: AsyncSession, user_id: str, body: GrantRequest) -> BalanceResponse:
@@ -131,7 +131,7 @@ class CreditService:
                 db, user_id, billing.DISABLED, datetime.now(UTC)
             )
             log.warning(
-                "credits_overdrawn",
+                "credits.usage.overdrawn",
                 user_id=user_id,
                 balance_micros=entry.balance_after_micros,
                 sites_disabled=disabled,

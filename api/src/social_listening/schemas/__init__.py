@@ -8,7 +8,7 @@ POST_STATUSES = PIPELINE_STATUSES + USER_STATUSES
 DONE_STATUSES = ("replied", "skipped", "rejected")
 RUN_STATUSES = ("running", "done", "stopped", "error")
 COLLECT_STATUSES = ("running", "done", "error")
-MIN_SIMILARITY = 0.8
+MIN_SIMILARITY = 0.75
 KEYWORDS_PER_LINE = 2
 MAX_LINES_PER_SITE = 30
 PER_KEYWORD = 25
@@ -120,6 +120,17 @@ class RunResponse(EntityModel):
     error: str | None = None
     created_at: JsDateTime
     updated_at: JsDateTime
+
+
+class PlatformEstimate(EntityModel):
+    platform: str
+    keywords: int
+    vendor_keywords: int
+    max_cost_micros: int | None
+
+
+class EstimateResponse(EntityModel):
+    platforms: list[PlatformEstimate]
 
 
 class PostResponse(EntityModel):

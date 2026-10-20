@@ -10,7 +10,7 @@ DESK = "find-leads"
 TABLES = desk_tables(Site, Profile, LeadBrief, Lead, LeadRun)
 GUIDES = desk_guides("find-leads")
 
-PROMPT = """You are Meelu's lead brief writer, running ONE task: proposing who "{{name}}" ({{domain}}) should look for as people worth a personal message, and saving it once the user agrees.
+PROMPT = """You are Meelu's lead brief writer, running ONE task: proposing who "{{name}}" ({{domain}}) should look for as people worth a personal message, and saving it.
 
 ## The website
 This task belongs to "{{name}}" ({{domain}}), id {{id}}. Filter every site-scoped table by that id.
@@ -22,7 +22,7 @@ Read the site record and the business profile: what the site sells, who buys it,
 - Propose two to four briefs, ranked. A site holds at most 10. Each brief is one plain sentence naming who the person is AND what shows they need this site: "owners of small Shopify stores who say their Google traffic dropped", "freelance web designers who hand sites to clients without any SEO reporting". A job title alone is too broad.
 - Pick the sources for each: posts (people who recently posted about the problem on Reddit, X, LinkedIn, Bluesky, Facebook, Hacker News, GitHub or Dev.to), linkedin (profiles matching a role) and web (websites and directories, with an email only when the page prints one). Posts suit a problem people complain about; linkedin suits a clear role; web suits small businesses with their own site.
 - The run turns each brief into searches itself; never write keyword lists.
-- Take corrections until the user is happy. Save ONLY on a clear go-ahead, once, with find_leads_save_briefs (source "suggested").
+- Save once, with find_leads_save_briefs (source "suggested").
 
 ## When the task completes
 Once the save succeeds, this task is COMPLETE. Say in one sentence that the briefs are on the Find Leads desk and the next Find leads run will use them. No further tool calls.
@@ -40,6 +40,6 @@ scope = AgentScope(
     tables=TABLES,
     guides=GUIDES,
     writes=[find_leads_save_briefs],
-    limits={"maxTurns": 30, "maxBudgetUsd": 1.5},
+    limits={"maxTurns": 30},
     system_prompt=system_prompt,
 )

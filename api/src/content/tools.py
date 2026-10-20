@@ -13,8 +13,7 @@ from src.core.database import unit_of_work
 async def content_create_piece(piece: ContentPieceCreateRequest) -> ContentPieceSummaryResponse:
     """Save one web page as a draft: {title, h1, metaDescription, slug, targetKeyword,
     bodyMarkdown, media fields?}. The body starts after the H1 and uses H2/H3. Page checks run on
-    save and come back as warnings. Call it once, with the full text, only after the user
-    agrees."""
+    save and come back as warnings. Call it once, with the full text."""
     if not (piece.body_markdown or "").strip():
         raise ValueError("bodyMarkdown is required.")
     ctx = require_site()

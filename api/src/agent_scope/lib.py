@@ -30,6 +30,7 @@ class AgentScope:
     local_tools: list[str] = field(default_factory=list)
     silent_writes: list[Tool] = field(default_factory=list)
     standalone: bool = False
+    loaded_desks: tuple[str, ...] = ()
 
     @property
     def table_names(self) -> frozenset[str] | None:

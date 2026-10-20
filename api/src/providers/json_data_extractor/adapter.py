@@ -3,6 +3,7 @@ from typing import Any
 from src.providers.registry import ProviderAdapter, VendorResponse
 
 DECIDE = "decide"
+EXTRACT = "extract"
 
 Question = dict[str, Any]
 
@@ -26,3 +27,6 @@ def score(instructions: str, levels: list[str]) -> Question:
 class JsonDataExtractorAdapter(ProviderAdapter):
     async def decide(self, state: Any, questions: dict[str, Question]) -> VendorResponse:
         raise self.unsupported(DECIDE)
+
+    async def extract(self, instructions: str, data: Any, schema: dict[str, Any]) -> VendorResponse:
+        raise self.unsupported(EXTRACT)

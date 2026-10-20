@@ -852,7 +852,19 @@ export interface SocialListeningPlatformStats {
   fromDatabase?: number;
   candidates?: number;
   failedKeywords?: string[];
+  costMicros?: number;
   error?: string;
+}
+
+export interface SocialListeningPlatformEstimate {
+  platform: string;
+  keywords: number;
+  vendorKeywords: number;
+  maxCostMicros: number | null;
+}
+
+export interface SocialListeningEstimate {
+  platforms: SocialListeningPlatformEstimate[];
 }
 
 export interface SocialListeningRun extends BaseEntity, SiteScoped {
@@ -979,4 +991,83 @@ export interface LeadSummary {
   discarded: number;
   unprocessed: number;
   lastRun: LeadRun | null;
+}
+
+export type GeoIntent = "informational" | "commercial" | "transactional" | "navigational";
+export type GeoVerdict = "no_page" | "partial" | "low_rank" | "covered";
+export type GeoPointStatus = "answers" | "partly" | "missing";
+export type GeoPlatform = "chat_gpt" | "claude" | "ai_overview";
+
+export interface GeoPoint {
+  point: string;
+  status: GeoPointStatus;
+  evidence?: string;
+}
+
+export interface GeoPage {
+  pageId: ID;
+  url: string;
+  title?: string;
+  coverage: number;
+  points: GeoPoint[];
+}
+
+export interface GeoAiAnswer {
+  platform: GeoPlatform;
+  shown: boolean;
+  text: string;
+  citations: { url: string; title?: string }[];
+  citedUs: boolean;
+  covers: string[];
+  misses: string[];
+  error?: string;
+}
+
+export type GeoCheckStage = "pages" | "question" | "judge" | "compare";
+
+export interface GeoCheckProgress {
+  stage?: GeoCheckStage;
+  pagesFound?: number;
+  points?: number;
+  pagesJudged: number;
+  answersFetched: number;
+}
+
+export interface GeoCheck extends BaseEntity, SiteScoped {
+  queryId: ID;
+  status: "running" | "done" | "error" | "stopped";
+  progress: GeoCheckProgress;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+  intent?: GeoIntent;
+  requiredPoints: string[];
+  verdict?: GeoVerdict;
+  pageId?: ID;
+  pageUrl?: string;
+  position?: number;
+  pages: GeoPage[];
+  aiAnswers: GeoAiAnswer[];
+  pageAdds: string[];
+  suggestion?: string;
+  model?: string;
+}
+
+export interface GeoQuery extends BaseEntity, SiteScoped {
+  text: string;
+  source: "user" | "suggested";
+  enabled: boolean;
+  latestCheck?: GeoCheck;
+}
+
+export interface GeoSummary {
+  queries: number;
+  unchecked: number;
+  running: number;
+  noPage: number;
+  partial: number;
+  lowRank: number;
+  covered: number;
+  cited: number;
+  lastCheckedAt?: string;
 }

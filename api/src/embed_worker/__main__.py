@@ -1,5 +1,7 @@
 import sys
 
+from src.core.logging import get_logger
+
 from .worker import main
 
 try:
@@ -7,5 +9,5 @@ try:
 except KeyboardInterrupt:
     pass
 except Exception as e:
-    print(f"embed-worker: fatal — {e}", file=sys.stderr)
+    get_logger().error("embed_worker.startup.fatal", error=str(e))
     sys.exit(1)

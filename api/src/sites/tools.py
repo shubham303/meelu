@@ -8,7 +8,7 @@ from src.sites.service import site_service
 @tool(writes=True, desk="site")
 async def save_site_market(markets: list[str], language: str | None = None) -> SiteResponse:
     """Save the countries this website sells to (two-letter codes such as US or GB) and the
-    language its searchers use (such as en). Only what the user confirmed."""
+    language its searchers use (such as en)."""
     ctx = require_site()
     body = SiteUpdateRequest(markets=markets, language=language)
     async with unit_of_work() as db:

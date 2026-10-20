@@ -3,13 +3,25 @@ from sqlalchemy import select
 from src.content.models.content_pieces import ContentPiece
 from src.core.database import unit_of_work
 from src.core.ids import uid
+from src.find_leads.models.lead import Lead
 from src.profile.models.user import User
+from src.reports.models.report import Report
 from src.site_pages.models.site_page import SitePage
 from tests.conftest import signup
 
+WAITING_NONE = {
+    "structureSuggestions": 0,
+    "conversationsToReply": 0,
+    "leadsToMessage": 0,
+    "issuesOpen": 0,
+}
+
 EMPTY = {
-    "content": {"pieces": 0},
-    "seo": {"pages": 0},
+    "pages": 0,
+    "lastCrawlAt": None,
+    "contentPieces": 0,
+    "reports": 0,
+    "waiting": WAITING_NONE,
 }
 
 
@@ -23,6 +35,29 @@ async def seed_rows(user_id, site_id):
     async with unit_of_work() as db:
         for _ in range(5):
             db.add(ContentPiece(id=uid("cpc"), user_id=user_id, site_id=site_id, title="Launch"))
+        for i in range(2):
+            db.add(
+                Report(
+                    id=uid("rpt"),
+                    user_id=user_id,
+                    site_id=site_id,
+                    desk="analytics",
+                    title=f"Report {i}",
+                    html="<p>r</p>",
+                )
+            )
+        for i, status in enumerate(["new", "new", "contacted", "candidate"]):
+            db.add(
+                Lead(
+                    id=uid("lead"),
+                    user_id=user_id,
+                    site_id=site_id,
+                    identity_key=f"person-{site_id}-{i}",
+                    source="linkedin",
+                    platform="linkedin",
+                    status=status,
+                )
+            )
         await db.flush()
 
         for i, blocked in enumerate([False, False, False, True]):
@@ -60,8 +95,11 @@ async def test_stats_rollups(client, email):
     r = await client.get("/api/v1/stats")
     assert r.status_code == 200
     assert r.json()["data"] == {
-        "content": {"pieces": 5},
-        "seo": {"pages": 3},
+        **EMPTY,
+        "pages": 3,
+        "contentPieces": 5,
+        "reports": 2,
+        "waiting": {**WAITING_NONE, "leadsToMessage": 2},
     }
 
 
@@ -76,7 +114,7 @@ async def test_stats_are_scoped_to_the_named_site(client, email):
     await seed_rows(user_id, first["id"])
 
     r = await client.get("/api/v1/stats", headers={"x-meelu-site": first["id"]})
-    assert r.json()["data"]["seo"]["pages"] == 3
+    assert r.json()["data"]["pages"] == 3
 
     r = await client.get("/api/v1/stats", headers={"x-meelu-site": second["id"]})
     assert r.json() == {"data": EMPTY}

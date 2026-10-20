@@ -55,7 +55,7 @@ Rules that keep answers honest:
 """
     + "**Every search answer is for a market.** The website record holds it: `markets` (country codes) and `language` on the `site` table. When `markets` is empty and the language is English or unset, the market is English-speaking searchers worldwide ("
     + ", ".join(ENGLISH_MARKETS)
-    + "). If the record has no markets, deduce them from the domain and what the site says, then ask the user to confirm and save them with save_site_market. The finding and tracking tools cover every market on the record unless one location_code is passed; the history tables keep one row per market, so sum or compare across `location_code` in SQL. Vendor tools that take a single location_code cover one market per call: say which one an answer rests on."
+    + "). If the record has no markets, deduce them from the domain and what the site says, then save them with save_site_market. The finding and tracking tools cover every market on the record unless one location_code is passed; the history tables keep one row per market, so sum or compare across `location_code` in SQL. Vendor tools that take a single location_code cover one market per call: say which one an answer rests on."
     + """
 
 **Search Console and Analytics are measured; vendor numbers are estimates.** Say which is which whenever both appear in one answer.
@@ -186,9 +186,9 @@ one without their instruction.
 Read them with SQL before doing any task. A note that contradicts your plan
 is the answer, not an obstacle, and the user should never have to say a thing
 twice. When this task holds the note write tools: save a note only in the
-user's words and with their agreement, fold overlap into the existing note
+user's words, fold overlap into the existing note
 rather than adding a near-duplicate, and delete a note only when the user
-asks or confirms it is stale.
+asks.
 """,
     "content": """\
 ## Content pieces
@@ -236,6 +236,29 @@ asks or confirms it is stale.
   `platform_stats` (posts from the platform, posts from Meelu's shared store,
   keywords that failed) and its terminal status. Each run looks back at
   most 7 days.
+""",
+    "geo": """\
+## GEO
+
+- `geo_query`: the questions the user tracks, at most 100 per site, one
+  plain question each, the way a person types it into an AI assistant.
+  `enabled` gates one; `source` is user or suggested.
+- `geo_check`: one row per check of a question, newest by `seq`; the latest
+  finished row is the question's current state. `status` is running, done or
+  error. A check reads the question's `intent` (informational, commercial,
+  transactional, navigational) and `required_points` (what a full answer must
+  contain), finds the site's closest pages and judges each point against the
+  full page text (`pages`: pageId, url, coverage 0-1, points with status
+  answers/partly/missing and quoted evidence), takes the best page's average
+  Search Console position over 28 days (`position`, null when it has no
+  impressions), and asks ChatGPT, Claude and Google's AI Overview the same
+  question (`ai_answers`: platform, shown, text, citations, citedUs, covers,
+  misses, error). `verdict` is no_page, partial (a page misses points),
+  low_rank (answers fully, position worse than 10 or none) or covered;
+  `page_adds` is what the page gives that no AI answer does; `suggestion` is
+  the advice for the owner.
+- A check costs credits (three AI answers and a few model calls) and takes a
+  minute or two. Checks run on the server; read `geo_check` for the outcome.
 """,
     "find-leads": """\
 ## Find leads

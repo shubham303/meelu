@@ -5,8 +5,8 @@ import { ChevronUp, Pencil, Plus, X } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/use-api";
-import type { SocialListeningConfig, SocialListeningQuery } from "@/lib/types";
-import type { PlatformInfo } from "./lib";
+import type { SocialListeningConfig, SocialListeningEstimate, SocialListeningQuery } from "@/lib/types";
+import { dollars, type PlatformInfo } from "./lib";
 
 const SUMMARY_CHIPS = 3;
 const FIND_AFTER = 5;
@@ -16,6 +16,7 @@ export function ListeningCard({
   queries,
   config,
   platformInfo,
+  estimate,
   expanded,
   onExpand,
   onCollapse,
@@ -25,6 +26,7 @@ export function ListeningCard({
   queries: SocialListeningQuery[];
   config: SocialListeningConfig | null;
   platformInfo: PlatformInfo[] | null;
+  estimate: SocialListeningEstimate | null;
   expanded: boolean;
   onExpand: () => void;
   onCollapse: () => void;
@@ -71,7 +73,7 @@ export function ListeningCard({
       )}
       {error && <p className="text-sm text-bad">{error}</p>}
       <div className="h-px bg-edge" />
-      <PlatformRow config={config} platformInfo={platformInfo} onToggle={togglePlatform} />
+      <PlatformRow config={config} platformInfo={platformInfo} estimate={estimate} onToggle={togglePlatform} />
     </Card>
   );
 }
@@ -199,7 +201,14 @@ function LineEditor({
                     )
                   }
                 />
-                <p className={cn("text-[13.5px]", q.enabled ? "text-ink" : "text-sub")}>{q.text}</p>
+                <div className="min-w-0">
+                  <p className={cn("text-[13.5px]", q.enabled ? "text-ink" : "text-sub")}>{q.text}</p>
+                  <p className="truncate text-[12px] text-faint">
+                    {q.keywords.length > 0
+                      ? `Searches ${q.keywords.map((k) => `“${k}”`).join(" · ")}`
+                      : "Search terms are written on the next run."}
+                  </p>
+                </div>
                 <span
                   className={cn(
                     "text-right text-[13px] font-semibold tabular-nums",
@@ -287,14 +296,19 @@ function Switch({ on, label, onToggle }: { on: boolean; label: string; onToggle:
 function PlatformRow({
   config,
   platformInfo,
+  estimate,
   onToggle,
 }: {
   config: SocialListeningConfig | null;
   platformInfo: PlatformInfo[] | null;
+  estimate: SocialListeningEstimate | null;
   onToggle: (id: string) => void;
 }) {
   const chosen = config?.platforms ?? [];
-  const paid = (platformInfo ?? []).filter((p) => p.access === "apify").map((p) => p.label);
+  const costOf = (id: string) => estimate?.platforms.find((e) => e.platform === id)?.maxCostMicros ?? null;
+  const chosenCosts = chosen.map(costOf);
+  const total = chosenCosts.reduce<number>((sum, c) => sum + (c ?? 0), 0);
+  const unpriced = chosenCosts.some((c) => c === null) || estimate === null;
   return (
     <div className="flex items-start gap-3">
       <span className="w-24 shrink-0 pt-1.5 text-[13px] text-sub">On</span>
@@ -315,6 +329,7 @@ function PlatformRow({
         ) : (
           platformInfo.map((p) => {
             const on = p.available && chosen.includes(p.id);
+            const cost = p.available ? costOf(p.id) : null;
             return (
               <button
                 key={p.id}
@@ -332,17 +347,19 @@ function PlatformRow({
                 )}
               >
                 {p.label}
+                {cost !== null && cost > 0 && <span className="ml-1.5 tabular-nums opacity-75">up to {dollars(cost)}</span>}
               </button>
             );
           })
         )}
-        {paid.length > 0 && <span className="text-xs text-sub">{listOf(paid)} use credits per result</span>}
+        {platformInfo !== null && chosen.length > 0 && !unpriced && (
+          <span className="text-xs text-sub">
+            {total > 0
+              ? `Next run costs up to ${dollars(total)}. You pay per post a platform returns, usually less.`
+              : "Next run costs nothing: these platforms are free or searched recently."}
+          </span>
+        )}
       </div>
     </div>
   );
-}
-
-function listOf(items: string[]): string {
-  if (items.length <= 1) return items.join("");
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

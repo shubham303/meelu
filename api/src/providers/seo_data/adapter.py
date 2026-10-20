@@ -22,6 +22,8 @@ SEO_CAPABILITIES = frozenset(
         "serp.competitors",
         "pages.lighthouse",
         "llm.mentions",
+        "ai.answer",
+        "serp.ai_overview",
     }
 )
 
@@ -84,6 +86,15 @@ class SeoDataAdapter(ProviderAdapter):
         self, targets: list[dict[str, Any]], platform: str, locale: dict, limit: int
     ) -> dict:
         raise self.unsupported("llm.mentions")
+
+    def ai_answer(self, platform: str, prompt: str, country: str | None, model: str) -> dict:
+        raise self.unsupported("ai.answer")
+
+    async def ai_models(self, platform: str) -> list[str]:
+        raise self.unsupported("ai.answer")
+
+    def serp_ai_overview(self, keyword: str, locale: dict) -> dict:
+        raise self.unsupported("serp.ai_overview")
 
     async def send(self, query: dict) -> VendorResponse:
         raise NotImplementedError

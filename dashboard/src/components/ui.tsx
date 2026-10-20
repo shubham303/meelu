@@ -466,30 +466,91 @@ export function ConfirmDelete({
   what: string;
 }) {
   const [busy, setBusy] = useState(false);
-  return (
-    <Modal open={open} onClose={onClose} title={`Delete ${what}?`}>
-      <p className="text-sm text-sub mb-5">This can&apos;t be undone.</p>
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose}>
-          Cancel
-        </Button>
-        <Button
-          variant="danger"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await onConfirm();
-              onClose();
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <Trash2 size={14} /> Delete
-        </Button>
+  const [shown, setShown] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  if (open && !shown) setShown(true);
+
+  useGSAP(
+    () => {
+      if (!shown || !cardRef.current) return;
+      if (open) {
+        gsap.fromTo(
+          cardRef.current,
+          { opacity: 0, scale: 0.96, y: 8 },
+          { opacity: 1, scale: 1, y: 0, duration: 0.2, ease: "power2.out" },
+        );
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.2 });
+      } else {
+        gsap.to(cardRef.current, { opacity: 0, scale: 0.96, duration: 0.15, ease: "power2.in" });
+        gsap.to(backdropRef.current, {
+          opacity: 0,
+          duration: 0.15,
+          onComplete: () => setShown(false),
+        });
+      }
+    },
+    { dependencies: [open, shown] },
+  );
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open, onClose]);
+
+  const confirm = async () => {
+    setBusy(true);
+    try {
+      await onConfirm();
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!shown || typeof document === "undefined") return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div
+        ref={backdropRef}
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+      <div
+        ref={cardRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-delete-title"
+        className="relative w-full max-w-sm rounded-2xl border border-edge2 bg-panel p-5 shadow-xl"
+      >
+        <div className="flex gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bad/10 text-bad">
+            <Trash2 size={16} />
+          </div>
+          <div className="min-w-0">
+            <h2 id="confirm-delete-title" className="text-[15px] font-semibold text-ink">
+              Delete {what}?
+            </h2>
+            <p className="mt-1 text-sm text-sub">This can&apos;t be undone.</p>
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="danger" disabled={busy} onClick={() => void confirm()} autoFocus>
+            <Trash2 size={14} /> {busy ? "Deleting…" : "Delete"}
+          </Button>
+        </div>
       </div>
-    </Modal>
+    </div>,
+    document.body,
   );
 }
 

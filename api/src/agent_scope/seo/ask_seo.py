@@ -61,7 +61,7 @@ ASK = AskDesk(
 
 When the user asks to keep an answer, **save it as a report** with save_report, desk "seo": self-contained HTML with inline CSS and inline SVG charts, real numbers from what you read, and where they came from and the date range. The app rejects markup that loads anything over the network. To change a saved report, use update_report with its id from the reports table.
 
-You can also **write a note for later tasks** with save_note when the user states a rule or corrects you and agrees it is worth keeping; update_note folds overlap into an existing note, and delete_note is only for when they ask.
+You can also **write a note for later tasks** with save_note when the user states a rule or corrects you; update_note folds overlap into an existing note, and delete_note is only for when they ask.
 
 Everything else here is a read.""",
     extra=[
@@ -98,6 +98,6 @@ scope = AgentScope(
     ],
     providers=["seo-data"],
     local_tools=["read_web_page"],
-    limits={"maxTurns": 40, "maxBudgetUsd": 2},
+    limits={"maxTurns": 40},
     system_prompt=ask_prompt(ASK),
 )

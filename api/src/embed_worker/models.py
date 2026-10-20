@@ -6,7 +6,7 @@ from typing import Generic, TypeVar
 from src.core.logging import get_logger
 from src.embed_worker.settings import search_settings
 
-log = get_logger("embed_worker.models")
+log = get_logger()
 
 T = TypeVar("T")
 
@@ -32,7 +32,7 @@ class LazyModel(Generic[T]):
             try:
                 self._instance = self._load()
             except Exception as e:
-                log.error("model_unavailable", model=self.name, error=str(e))
+                log.error("embed_worker.model.unavailable", model=self.name, error=str(e))
                 self._instance = None
             self._loaded = True
         return self._instance

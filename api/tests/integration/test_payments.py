@@ -218,3 +218,61 @@ async def test_paid_top_up_resumes_a_paused_site(client, email, dodo_config):
     assert state.get("pausedAt") is None
     r = await client.get("/api/v1/site/pages")
     assert r.status_code == 200, r.text
+
+
+class RecordingLog:
+    def __init__(self):
+        self.events = []
+
+    def __getattr__(self, level):
+        return lambda event, **fields: self.events.append((level, event, fields))
+
+
+async def test_second_dodo_payment_for_a_credited_top_up_is_flagged(
+    client, email, dodo_config, monkeypatch
+):
+    from src.payments import service
+
+    recorded = RecordingLog()
+    monkeypatch.setattr(service, "log", recorded)
+    await signup(client, email)
+    before = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+    payment_id = (await client.post("/api/v1/payments/checkout", json={"amountUsd": 20})).json()[
+        "data"
+    ]["paymentId"]
+
+    first, second = succeeded(payment_id), succeeded(payment_id)
+    for event in (first, second):
+        body, headers = signed(event)
+        r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
+        assert r.status_code == 200, r.text
+
+    after = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
+    assert after - before == 20_000_000
+
+    flagged = [e for e in recorded.events if e[1] == "payments.webhook.duplicate_payment"]
+    assert len(flagged) == 1
+    level, _, fields = flagged[0]
+    assert level == "error"
+    assert fields["payment_id"] == payment_id
+    assert fields["credited_dodo_payment_id"] == first["data"]["payment_id"]
+    assert fields["uncredited_dodo_payment_id"] == second["data"]["payment_id"]
+    assert fields["paid_amount"] == 2000
+
+
+async def test_replayed_webhook_is_not_flagged(client, email, dodo_config, monkeypatch):
+    from src.payments import service
+
+    recorded = RecordingLog()
+    monkeypatch.setattr(service, "log", recorded)
+    await signup(client, email)
+    payment_id = (await client.post("/api/v1/payments/checkout", json={"amountUsd": 20})).json()[
+        "data"
+    ]["paymentId"]
+
+    body, headers = signed(succeeded(payment_id))
+    for _ in range(2):
+        r = await client.post("/api/v1/payments/webhooks/dodo", content=body, headers=headers)
+        assert r.status_code == 200, r.text
+
+    assert not [e for e in recorded.events if e[1] == "payments.webhook.duplicate_payment"]

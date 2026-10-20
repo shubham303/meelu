@@ -10,6 +10,7 @@ from src.social_listening.schemas import (
     ConfigResponse,
     ConfigUpdateRequest,
     DeleteResponse,
+    EstimateResponse,
     GateResponse,
     JudgeResponse,
     PostFilters,
@@ -44,6 +45,14 @@ async def put_config(
     ctx: AuthContext = Depends(require_site),
 ) -> ConfigResponse:
     return await social_listening_service.update_config(db, ctx.user_id, ctx.site_id, body)
+
+
+@router.get("/social-listening/estimate")
+async def get_estimate(
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> EstimateResponse:
+    return await social_listening_service.estimate(db, ctx.site_id)
 
 
 @router.get("/social-listening/queries")

@@ -14,8 +14,7 @@ from src.social_listening.service import social_listening_service
 async def social_listening_save_queries(queries: list[QueryUpsertItem]) -> UpsertResponse:
     """Add or update the listening queries, upserted by text: [{text, enabled?, source?}].
     A query is one plain sentence describing a conversation worth joining; the run expands
-    it into search keywords itself. Use source "suggested" for ones you propose; save only
-    after the user agrees."""
+    it into search keywords itself. Use source "suggested" for ones you propose."""
     if not queries:
         raise ValueError("queries must not be empty.")
     ctx = require_site()

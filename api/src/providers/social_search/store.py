@@ -2,6 +2,8 @@ import statistics
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.core.database import unit_of_work
 from src.providers.registry import Caller
 from src.providers.social_search.identity import content_hash, native_id, post_key
@@ -53,6 +55,13 @@ def stale_keywords(
         for keyword, since in windows.items()
         if keyword not in fetched or fetched[keyword] < fresh_after
     }
+
+
+async def vendor_keywords(
+    db: AsyncSession, platform: str, windows: dict[str, datetime]
+) -> list[str]:
+    fetched = await social_search_cursors.by_keyword(db, platform, list(windows))
+    return list(stale_keywords(windows, fetched, datetime.now(UTC)))
 
 
 async def collect_posts(

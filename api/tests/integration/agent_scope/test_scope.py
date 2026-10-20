@@ -102,6 +102,7 @@ def test_scope_response_merges_added_desks():
         "analytics",
         "content",
         "find-leads",
+        "geo",
         "pages",
         "profile",
         "seo",
@@ -117,6 +118,7 @@ def test_scope_response_merges_added_desks():
     assert "content_pieces" in merged.system_prompt
     assert [d.name for d in merged.desks] == [
         "find-leads",
+        "geo",
         "pages",
         "profile",
         "seo",

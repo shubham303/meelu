@@ -30,6 +30,6 @@ scope = AgentScope(
     tables=TABLES,
     guides=GUIDES,
     writes=[content_create_piece, content_update_piece],
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=ask_prompt(ASK),
 )
