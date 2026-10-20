@@ -12,9 +12,12 @@ const SCREENS = [
   { label: "Technical SEO", path: "/demo/dashboard/site/technical-seo" },
   { label: "SEO", path: "/demo/dashboard/seo" },
   { label: "Search", path: "/demo/dashboard/seo/search" },
+  { label: "GEO", path: "/demo/dashboard/geo" },
   { label: "Content", path: "/demo/dashboard/content" },
   { label: "Social", path: "/demo/dashboard/social-listening" },
+  { label: "Find Leads", path: "/demo/dashboard/find-leads" },
   { label: "Analytics", path: "/demo/dashboard/analytics" },
+  { label: "Connections", path: "/demo/dashboard/connections" },
 ] as const;
 
 export function DemoFrame() {

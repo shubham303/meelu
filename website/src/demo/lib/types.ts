@@ -852,7 +852,19 @@ export interface SocialListeningPlatformStats {
   fromDatabase?: number;
   candidates?: number;
   failedKeywords?: string[];
+  costMicros?: number;
   error?: string;
+}
+
+export interface SocialListeningPlatformEstimate {
+  platform: string;
+  keywords: number;
+  vendorKeywords: number;
+  maxCostMicros: number | null;
+}
+
+export interface SocialListeningEstimate {
+  platforms: SocialListeningPlatformEstimate[];
 }
 
 export interface SocialListeningRun extends BaseEntity, SiteScoped {
@@ -900,4 +912,162 @@ export interface SocialListeningSummary {
   done: number;
   unprocessed: number;
   lastRun: SocialListeningRun | null;
+}
+
+export type LeadSource = "posts" | "linkedin" | "web";
+export type LeadBriefSource = "user" | "suggested";
+
+export interface LeadBriefPlan {
+  keywords?: string[];
+  linkedin?: { query: string; titles: string[]; locations: string[] };
+}
+
+export interface LeadBrief extends BaseEntity, SiteScoped {
+  text: string;
+  enabled: boolean;
+  source: LeadBriefSource;
+  sources: LeadSource[];
+  plan: LeadBriefPlan;
+  found: number;
+  kept: number;
+}
+
+export type LeadRunStatus = "running" | "done" | "stopped" | "error";
+
+export interface LeadSourceStats {
+  status?: "running" | "done" | "error";
+  candidates?: number;
+  skipped?: number;
+  fromVendor?: number;
+  fromStore?: number;
+  people?: number;
+  error?: string;
+}
+
+export interface LeadRun extends BaseEntity, SiteScoped {
+  status: LeadRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  foundCount: number;
+  shortlistedCount: number;
+  keptCount: number;
+  sourceStats: Record<string, LeadSourceStats>;
+  error: string | null;
+}
+
+export type LeadReviewStatus = "new" | "contacted" | "discarded";
+export type LeadStatus = LeadReviewStatus | "candidate" | "shortlisted";
+
+export interface LeadEvidence {
+  url: string;
+  quote: string;
+  at?: string | null;
+}
+
+export interface Lead extends BaseEntity, SiteScoped {
+  briefId: string | null;
+  runId: string | null;
+  source: LeadSource;
+  platform: string;
+  name: string | null;
+  handle: string | null;
+  headline: string | null;
+  profileUrl: string | null;
+  email: string | null;
+  emailSourceUrl: string | null;
+  website: string | null;
+  snippet: string | null;
+  evidence: LeadEvidence[];
+  reason: string | null;
+  angle: string | null;
+  status: LeadStatus;
+  contactedAt: string | null;
+  discardedAt: string | null;
+}
+
+export interface LeadSummary {
+  new: number;
+  contacted: number;
+  discarded: number;
+  unprocessed: number;
+  lastRun: LeadRun | null;
+}
+
+export type GeoIntent = "informational" | "commercial" | "transactional" | "navigational";
+export type GeoVerdict = "no_page" | "partial" | "low_rank" | "covered";
+export type GeoPointStatus = "answers" | "partly" | "missing";
+export type GeoPlatform = "chat_gpt" | "claude" | "ai_overview";
+
+export interface GeoPoint {
+  point: string;
+  status: GeoPointStatus;
+  evidence?: string;
+}
+
+export interface GeoPage {
+  pageId: ID;
+  url: string;
+  title?: string;
+  coverage: number;
+  points: GeoPoint[];
+}
+
+export interface GeoAiAnswer {
+  platform: GeoPlatform;
+  shown: boolean;
+  text: string;
+  citations: { url: string; title?: string }[];
+  citedUs: boolean;
+  covers: string[];
+  misses: string[];
+  error?: string;
+}
+
+export type GeoCheckStage = "pages" | "question" | "judge" | "compare";
+
+export interface GeoCheckProgress {
+  stage?: GeoCheckStage;
+  pagesFound?: number;
+  points?: number;
+  pagesJudged: number;
+  answersFetched: number;
+}
+
+export interface GeoCheck extends BaseEntity, SiteScoped {
+  queryId: ID;
+  status: "running" | "done" | "error" | "stopped";
+  progress: GeoCheckProgress;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+  intent?: GeoIntent;
+  requiredPoints: string[];
+  verdict?: GeoVerdict;
+  pageId?: ID;
+  pageUrl?: string;
+  position?: number;
+  pages: GeoPage[];
+  aiAnswers: GeoAiAnswer[];
+  pageAdds: string[];
+  suggestion?: string;
+  model?: string;
+}
+
+export interface GeoQuery extends BaseEntity, SiteScoped {
+  text: string;
+  source: "user" | "suggested";
+  enabled: boolean;
+  latestCheck?: GeoCheck;
+}
+
+export interface GeoSummary {
+  queries: number;
+  unchecked: number;
+  running: number;
+  noPage: number;
+  partial: number;
+  lowRank: number;
+  covered: number;
+  cited: number;
+  lastCheckedAt?: string;
 }

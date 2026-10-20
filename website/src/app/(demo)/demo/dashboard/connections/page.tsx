@@ -8,6 +8,7 @@ import { CATEGORY_LABEL, isInstallable, MCP_CATALOG, type CatalogEntry } from "@
 import { formatRelative } from "@demo/lib/utils";
 import { ModelPricingCard } from "@demo/features/llm-models/model-pricing-card";
 import { OwnKeyCard } from "@demo/features/llm-models/own-key-card";
+import { ConnectedAppsSection } from "@demo/features/connected-apps/connected-apps-section";
 import type { ConnectorsView } from "../agent-tasks";
 
 export default function ConnectionsPage() {
@@ -49,7 +50,7 @@ export default function ConnectionsPage() {
     <PageEnter>
       <PageHeader
         title="Connections"
-        description="The hands. Meelu is the memory; each platform you connect here is something the agent can act through — publishing, code, data. Keys are encrypted into this device's keychain and never touch Meelu's servers."
+        description="The hands. Meelu is the memory; each platform you connect here is something the agent can act through. Google keys are encrypted into this device's keychain and never touch Meelu's servers; email, CMS, CRM, docs and social accounts sign in through Composio."
       />
 
       <OwnKeyCard />
@@ -156,6 +157,8 @@ export default function ConnectionsPage() {
           })}
         </Stagger>
       )}
+
+      <ConnectedAppsSection />
 
       <ConfirmDelete
         open={disconnect !== null}

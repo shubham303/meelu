@@ -71,6 +71,14 @@ export const TOUR_STEPS: TourStep[] = [
     target: { text: "Connections" },
   },
   {
+    id: "connected-apps",
+    path: `${D}/connections`,
+    chapter: "Set up",
+    title: "Connect your own accounts",
+    body: "Connect this website's email, CMS, CRM, docs and social accounts: Gmail, Outlook, Mailchimp, Kit, Webflow, Contentful, HubSpot, Attio, Pipedrive, Notion, Google Docs, Reddit, LinkedIn and GitHub. Sign-in runs through Composio. Meelu saves drafts, records and new pages for you to approve. It never sends an email or publishes a page. The one exception: on a thread you picked, it can post a reply you approved.",
+    target: { text: "Your accounts" },
+  },
+  {
     id: "credits",
     path: `${D}/credits`,
     chapter: "Set up",
@@ -83,7 +91,7 @@ export const TOUR_STEPS: TourStep[] = [
     path: D,
     chapter: "The desks",
     title: "Overview",
-    body: "Start here each day. It shows what is waiting on you and what each desk holds.",
+    body: "Start here each day. Search clicks against the previous 28 days, the pages that moved, and what is waiting on you: link suggestions, conversations to answer, people to message and open issues. Ask a question and Meelu loads the desk it belongs to.",
   },
   {
     id: "pages",
@@ -159,6 +167,14 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Your Google Analytics data: where visitors come from, which pages they land on and what converts.",
   },
   {
+    id: "geo",
+    path: `${D}/geo`,
+    chapter: "The desks",
+    title: "GEO: answers in AI search",
+    body: "Track the questions people ask ChatGPT, Claude and Google's AI Overviews. For each one, Meelu checks whether one of your pages answers it, which points it misses, and whether the AI answers cite you. It suggests what to add. You decide what to write.",
+    target: { selector: `a[href="${D}/geo"]` },
+  },
+  {
     id: "content",
     path: `${D}/content`,
     chapter: "The desks",
@@ -171,8 +187,16 @@ export const TOUR_STEPS: TourStep[] = [
     path: `${D}/social-listening`,
     chapter: "The desks",
     title: "Social Listening",
-    body: "Posts where a reply from you belongs, found from what you describe. Meelu suggests an angle. You decide which to answer, and you post it yourself.",
+    body: "Posts on Reddit, X, LinkedIn, Hacker News and more where a reply from you belongs, found from what you describe. Meelu suggests an angle and drafts a reply in your voice. You decide which to answer. Post the reply yourself, or connect Reddit, LinkedIn or GitHub and Meelu posts the reply you approved to that thread.",
     target: { selector: `a[href="${D}/social-listening"]` },
+  },
+  {
+    id: "find-leads",
+    path: `${D}/find-leads`,
+    chapter: "The desks",
+    title: "Find Leads",
+    body: "Describe who you want to talk to in one sentence. Meelu searches post authors, LinkedIn and the web, checks each person's recent activity and keeps only the people worth a message, with the reason and an opening angle. You write and send the message yourself.",
+    target: { selector: `a[href="${D}/find-leads"]` },
   },
   {
     id: "analytics",

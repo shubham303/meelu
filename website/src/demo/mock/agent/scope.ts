@@ -145,6 +145,35 @@ export const SCOPES: Record<string, ScopeDef> = {
     writes: ["social_listening_update_post", "social_listening_save_queries", ...NOTES],
     prompt: "You help the owner decide which social posts deserve a reply and suggest angles. They write and send the reply themselves.",
   },
+  "ask-overview": {
+    desk: "overview",
+    writes: [...NOTES],
+    prompt: "You answer from the site's pages, crawl, Search Console and Analytics totals and the owner's notes, and load the desk a question belongs to in the same reply.",
+  },
+  "ask-geo": {
+    desk: "geo",
+    writes: ["geo_save_queries", "geo_remove_queries", "geo_check_queries", ...NOTES],
+    providers: ["seo-data"],
+    prompt: "You read the questions tracked for AI search, each check's verdict, the pages judged and what the AI answers cite, and suggest what to do. The SEO desk is always loaded here.",
+  },
+  "geo-setup": {
+    desk: "geo",
+    writes: ["geo_save_queries"],
+    limits: { maxTurns: 30, maxBudgetUsd: 1.5 },
+    providers: ["seo-data"],
+    prompt: "You propose questions this website should track in AI search, grounded in its pages and search data, and save them once the owner agrees.",
+  },
+  "ask-find-leads": {
+    desk: "find-leads",
+    writes: ["find_leads_update_lead", "find_leads_save_briefs", ...NOTES],
+    prompt: "You help the owner decide who on the list is worth a message and suggest the opening. They write and send every message themselves.",
+  },
+  "find-leads-setup": {
+    desk: "find-leads",
+    writes: ["find_leads_save_briefs"],
+    limits: { maxTurns: 30, maxBudgetUsd: 1.5 },
+    prompt: "You read the website and propose briefs describing who to look for, and save them once the owner agrees. Nothing here searches for people.",
+  },
   "compose-reply": {
     desk: "social-listening",
     writes: [...NOTES],
@@ -161,6 +190,13 @@ const DESK_BLURBS: Record<string, string> = {
   "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
   content: "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",
   "social-listening": "Social posts where a reply from the site belongs, found from the lines of text the user listens for — set reply angles and statuses, grow the list of lines.",
+  geo: "Questions people ask AI search — whether a page answers each one and what ChatGPT, Claude and AI Overviews cite; track questions and run checks.",
+  "find-leads": "People worth a personal message, found from the briefs the user writes — change a lead's status, add or reword briefs.",
+  email: "The user's own mailbox and newsletter tool — search and read mail, save draft emails and newsletters for the user to send.",
+  cms: "The user's own CMS — read collections and entries, save pages as drafts for the user to publish.",
+  crm: "The user's own CRM — look up contacts and deals, add the contacts and notes the user approves.",
+  docs: "The user's own docs — read pages, add new pages, rows and comments.",
+  social: "The user's own social accounts — post a reply the user approved to a thread they picked; never a new post.",
   analytics: "Analysis over this website's Search Console, Analytics and page data in the database — profiling, clustering, forecasting, period comparison, metric drivers; save reports.",
 };
 

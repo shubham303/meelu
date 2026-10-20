@@ -20,7 +20,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="whitespace-nowrap rounded-lg px-2 py-2 text-[13px] text-sub transition-colors hover:bg-panel2 hover:text-ink sm:px-3 sm:text-sm"
+              className="whitespace-nowrap rounded-lg px-1.5 py-2 text-[13px] text-sub transition-colors hover:bg-panel2 hover:text-ink sm:px-3 sm:text-sm"
             >
               <span className="sm:hidden">{link.short}</span>
               <span className="hidden sm:inline">{link.label}</span>

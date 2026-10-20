@@ -5,11 +5,15 @@ import { ROUTES as CONTENT } from "./routes/content";
 import { ROUTES as SOCIAL } from "./routes/social";
 import { ROUTES as ANALYTICS } from "./routes/analytics";
 import { ROUTES as AGENT } from "./routes/agent";
+import { ROUTES as LEADS } from "./routes/leads";
+import { ROUTES as GEO } from "./routes/geo";
+import { ROUTES as APPS } from "./routes/apps";
+import { ROUTES as OVERVIEW } from "./routes/overview";
 import { MockHttpError, type Route } from "./core";
 
 export { issuesCsv, markCrawled } from "./routes/site";
 
-const ROUTES: Route[] = [...ACCOUNT, ...SITE, ...SEO, ...CONTENT, ...SOCIAL, ...ANALYTICS, ...AGENT];
+const ROUTES: Route[] = [...ACCOUNT, ...SITE, ...SEO, ...CONTENT, ...SOCIAL, ...ANALYTICS, ...AGENT, ...LEADS, ...GEO, ...APPS, ...OVERVIEW];
 
 export interface MockResponse {
   status: number;

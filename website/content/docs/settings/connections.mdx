@@ -1,11 +1,11 @@
 ---
 title: Connections
-description: The Connections screen, where you connect Google, add your own Anthropic key and choose your default AI model.
+description: The Connections screen, where you connect Google, link your email, CMS, CRM, docs and social accounts, add your own Anthropic key and choose your default AI model.
 ---
 
-**Connections** is at the bottom of the sidebar. It holds the services Meelu reaches on your behalf. Everything you connect here is stored on this computer, encrypted, and never sent to Meelu's servers.
+**Connections** is at the bottom of the sidebar. It holds the services Meelu reaches on your behalf. Your Google sign-ins and your Anthropic key are stored on this computer, encrypted, and never sent to Meelu's servers. Your other accounts are linked per website under **Your accounts**.
 
-The screen has four cards, from top to bottom:
+The screen has four cards, then **Your accounts**:
 
 | Card | What it is for |
 | --- | --- |
@@ -14,7 +14,7 @@ The screen has four cards, from top to bottom:
 | **Google Search Console** | Your search numbers: impressions, clicks and positions for your own site. |
 | **Google Analytics 4** | Your traffic: sessions, sources and key events for your pages. |
 
-The first two cards are covered in [AI models](/docs/concepts/ai-models). This page covers the Google cards.
+The first two cards are covered in [AI models](/docs/concepts/ai-models). This page covers the Google cards and your accounts.
 
 ## Google Search Console
 
@@ -70,9 +70,25 @@ Click **Disconnect** on the card, then confirm. Meelu deletes the Google sign-in
 
 Data already imported stays with your website. Deleting the website removes it. See [Websites](/docs/settings/websites).
 
+## Your accounts
+
+Link the current website's own email, CMS, CRM, docs and social accounts. Each group becomes a desk the agent can load when a task needs it. Sign-in runs through Composio, which keeps the account's login. Meelu asks before every write.
+
+| Group | Apps | What Meelu does there |
+| --- | --- | --- |
+| **Email** | Gmail, Outlook, Mailchimp, Kit | Searches your mail and saves draft emails and newsletters. You send every one yourself. |
+| **CMS** | Webflow, Contentful | Reads your collections and saves pages as drafts. You publish them. |
+| **CRM** | HubSpot, Attio, Pipedrive | Looks up contacts and deals and adds the contacts and notes you approve. |
+| **Docs** | Notion, Google Docs | Reads your pages and adds new pages, rows and comments. It never edits what you wrote. |
+| **Social** | Reddit, LinkedIn, GitHub | Posts a reply you approved to a thread you picked, from your own account. It never starts a post. |
+
+Click **Connect** on an app and sign in in your browser. The card shows **Waiting for sign-in** until you finish, then **Connected**. Click **Check again** if it does not update. You can connect more than one account per app with **Connect another**, and remove one with **Disconnect**.
+
+These accounts belong to the website, not to the computer, so they work wherever you sign in to Meelu.
+
 ## Using another computer
 
-Connections are stored on one computer. If you install Meelu on a second computer, connect Google there too.
+Google connections and your Anthropic key are stored on one computer. If you install Meelu on a second computer, connect Google there too.
 
 ## What each button does
 
@@ -85,5 +101,8 @@ Connections are stored on one computer. If you install Meelu on a second compute
 | **Save key** | Your Anthropic key | Checks and saves your key. |
 | **Remove key** | Your Anthropic key | Deletes your key from this computer. |
 | **Claim credits** | Your Anthropic key | Opens Anthropic's page about monthly API credits for Max and Team plans. |
+| **Connect** / **Connect another** | Your accounts | Opens the app's sign-in in your browser. |
+| **Disconnect** / **Cancel** | Your accounts | Removes that account, or stops a sign-in that has not finished. |
+| **Check again** | Your accounts | Reloads the status of every account. |
 | **Use** | Default model | Makes that model the default for new tasks. |
 | **Show all** (number) **models** / **Show fewer** | Default model | Expands or shortens the model list. |
