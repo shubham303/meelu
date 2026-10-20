@@ -313,7 +313,7 @@ export default function SeoPage() {
               onPage={setPage}
             />
           )}
-          {waiting > 0 && <ScoreFooter waiting={waiting} onRan={reload} />}
+          {waiting > 0 && <ClusterFooter waiting={waiting} />}
         </Card>
       </section>
     </PageEnter>
@@ -563,41 +563,11 @@ function ClusterPager({
   );
 }
 
-function ScoreFooter({
-  waiting,
-  onRan,
-}: {
-  waiting: number;
-  onRan: () => void;
-}) {
-  const isApp = useIsApp();
-  const { launchTask } = useAgentTasks();
-  const target = chips.SCORE_CLUSTERS;
+function ClusterFooter({ waiting }: { waiting: number }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-edge px-4 py-3 text-xs text-sub">
-      <span>
-        Ranked by winnability, then monthly searches. {waiting} cluster
-        {waiting === 1 ? " is" : "s are"} not scored yet.
-      </span>
-      {isApp && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            launchTask({
-              title: `SEO — ${target.label}`,
-              endpoint: SEO_ASK,
-              emptyHint: target.blurb ?? target.label,
-              suggestions: chips.desk(),
-              draft: {},
-              autoStart: target.prompt,
-              onCreated: onRan,
-            })
-          }
-        >
-          Score them
-        </Button>
-      )}
+    <div className="border-t border-edge px-4 py-3 text-xs text-sub">
+      Ranked by winnability, then monthly searches. {waiting} cluster
+      {waiting === 1 ? " is" : "s are"} not scored yet.
     </div>
   );
 }

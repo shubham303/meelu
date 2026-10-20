@@ -135,13 +135,6 @@ export function desk(): PromptChip[] {
   ];
 }
 
-export const SCORE_CLUSTERS: PromptChip = {
-  label: "Score my clusters",
-  blurb: "Score the keyword clusters that have no score yet.",
-  prompt:
-    "Score my keyword clusters that have no score yet, starting with the ones people search most. Then show me the best ones to target.",
-};
-
 export function cluster(mainKeyword: string): PromptChip[] {
   return [
     {

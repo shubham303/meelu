@@ -5,6 +5,9 @@ import { profileAnswer } from "./profile";
 import { seoAnswer } from "./seo";
 import { pagesFallback, siteAnswer } from "./site";
 import { askSocial, composeReply } from "./social";
+import { geoAnswer } from "./geo";
+import { leadsAnswer } from "./leads";
+import { overviewAnswer } from "./overview";
 
 export type { Ctx, Memory, Script, Step } from "./common";
 
@@ -57,6 +60,14 @@ function byAction(ctx: Ctx): Script {
       return askSocial(ctx);
     case "compose-reply":
       return composeReply(ctx);
+    case "ask-geo":
+    case "geo-setup":
+      return geoAnswer(ctx);
+    case "ask-find-leads":
+    case "find-leads-setup":
+      return leadsAnswer(ctx);
+    case "ask-overview":
+      return overviewAnswer(ctx);
     default:
       return siteAnswer(ctx) ?? seoAnswer(ctx) ?? fallback(ctx);
   }
