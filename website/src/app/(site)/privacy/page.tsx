@@ -14,7 +14,7 @@ const path = "/privacy";
 const description =
   "What the Meelu app and website collect, why, where it is stored, who it is shared with, and how to delete it. Includes how Meelu handles Google Search Console and Google Analytics data.";
 
-const EFFECTIVE = "2026-10-18";
+const EFFECTIVE = "2026-10-20";
 
 export const metadata: Metadata = {
   title,
@@ -262,6 +262,13 @@ export default function PrivacyPage() {
             <strong className={strong}>Apify</strong> &mdash; the topics you watch in social
             listening and the searches Find Leads runs, to find public posts and public profiles,
             and the profile links of shortlisted people, to read their recent public posts.
+          </li>
+          <li>
+            <strong className={strong}>Composio</strong> &mdash; only if you connect your own
+            email, CMS, CRM, docs or social account to a website. Composio holds that
+            account&rsquo;s sign-in and runs the actions you approve on it: reading mail, contacts,
+            documents or posts, saving drafts or records, and posting a reply you approved. Disconnecting the account or deleting the website removes it from
+            Composio.
           </li>
           <li>
             <strong className={strong}>Dodo Payments</strong> &mdash; to process credit

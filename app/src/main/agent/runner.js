@@ -55,6 +55,7 @@ function desksServer(offers, onAdd, onRemove) {
 }
 
 const NO_WEB_DESKS = new Set(["site"]);
+const OUTSIDE_TEXT_DESKS = new Set(["email", "cms", "crm", "docs", "social"]);
 
 function webAllowed(scope) {
   return !NO_WEB_DESKS.has(scope.desk);
@@ -343,7 +344,7 @@ const CHARTS_PROMPT = `\n\n## Charts in the conversation\n\nThe chat draws chart
 
 function writesPrompt(writes, readOnly) {
   if (readOnly || writes.length === 0) return "";
-  return `\n\n## What this task may write\n\nYou can SEE every Meelu tool, because one server serves every task. This task may make exactly ${writes.length === 1 ? "one write" : `${writes.length} writes`}: ${writes.map((w) => `\`${w}\``).join(", ")}.\n\nCall no other tool that creates, updates or deletes anything, even if the user asks mid-run. If the work needs a write outside that list, load the desk that owns it if the list below offers one. Otherwise say which write you needed and why, and stop. Read whatever helps. Your workspace schema is scratch space, not a write in this sense, but nothing saved only there counts as delivered.`;
+  return `\n\n## What this task may write\n\nYou can SEE every Meelu tool, because one server serves every task. This task starts with ${writes.length === 1 ? "one write" : `${writes.length} writes`}: ${writes.map((w) => `\`${w}\``).join(", ")}. A desk you load with add_desk adds its own writes: the tool result names them, and from then on they are yours to call when the user asks, with the user approving each one.\n\nCall no other tool that creates, updates or deletes anything. If the work needs a write neither list has, load the desk that owns it if the list below offers one. Otherwise say which write you needed and why, and stop. Read whatever helps. Your workspace schema is scratch space, not a write in this sense, but nothing saved only there counts as delivered.`;
 }
 
 let modelList = { at: 0, models: [] };
@@ -658,6 +659,17 @@ async function buildConfig(session) {
     }
 
     const askPermission = session.turn?.askPermission;
+    const webCall = toolName === "WebSearch" || toolName === "WebFetch";
+    if (webCall && [...loadedDesks, ...desks].some((d) => OUTSIDE_TEXT_DESKS.has(d))) {
+      const decision = askPermission ? await askPermission({ tool: short, fullName: toolName, input }) : "deny";
+      if (decision === "deny") {
+        return {
+          behavior: "deny",
+          message: `The user declined ${short}. Text from connected accounts can carry instructions; do not try it again.`,
+        };
+      }
+      return { behavior: "allow", updatedInput: input };
+    }
     if (!askPermission || (!liveWrites.includes(short) && !reviewTool)) {
       return { behavior: "allow", updatedInput: input };
     }

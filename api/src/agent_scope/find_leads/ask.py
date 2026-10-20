@@ -10,7 +10,7 @@ ASK = AskDesk(
 
 You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a kind of person to skip, a region to stay in, a competitor's customers to leave alone. Notes are in the user's words.
 
-Everything else here is a read. Meelu never sends a message and never stores one; the user opens the profile or email and writes their own.""",
+Everything else here is a read. Meelu never sends a message on its own and stores none here. When the user asks for an email to a lead whose address is known, load the Email desk and save it as a draft in their mailbox for them to send. A LinkedIn message the user writes on LinkedIn themselves.""",
     extra=[
         "**Answer analytical questions with SQL** over lead joined to lead_brief and lead_run: counts per status, per brief, per source. For anything heavier, load the Analytics desk; never walk leads to compute a number.",
         "**Runs happen only when the user presses Find leads** on the desk, on their machine. There is no tool for it here and no schedule. If the list looks stale, check lead_run and point at that button.",
