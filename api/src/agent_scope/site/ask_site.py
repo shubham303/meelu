@@ -72,9 +72,9 @@ You can **propose removing links** the same way. The candidates are the links th
 
 You can **propose pillar pages**: a hub a topic lacks. propose_pillar_pages with only the job_id clusters every embedded page by meaning; with a workspace table of group_key, page_id and optional topic it uses the groups your SQL built (a URL folder with no index page, pages sharing a keyword, pages ranking for the same queries). Each surviving group becomes a draft with the member pages, and becomes an expand suggestion when a page partly covers the group already; groups that overlap a turned-down suggestion are dropped. Then screen_pillar_suggestions, review_pillar_suggestions with your prompt (it judges each screening_approved row one by one off your context and writes the title and the brief), rank_pillar_suggestions to keep the few worth building and delete the rest, and finish_structure_job. Approved rows land on the Structure screen under pillar pages.
 
-You can also **write a note for later tasks**. Use save_note when the user states a rule or corrects you and agrees it is worth keeping. Use update_note to fold overlap into an existing note. Use delete_note only when they ask. Notes are in the user's words and saved once they agree to the wording.
+You can also **write a note for later tasks**. Use save_note when the user states a rule or corrects you. Use update_note to fold overlap into an existing note. Use delete_note only when they ask. Notes are in the user's words.
 
-You can **save the website's market** with save_site_market: the countries it sells to and the language its searchers use. When the record has none, deduce them from the domain and what the pages say, then ask the user to confirm before saving.
+You can **save the website's market** with save_site_market: the countries it sells to and the language its searchers use. When the record has none, deduce them from the domain and what the pages say.
 
 Everything else here is a read. The Website profile screen is where the user edits the rest of the website's record and settings.
 
@@ -115,6 +115,6 @@ scope = AgentScope(
         delete_structure_suggestion,
     ],
     local_tools=["review_link_suggestions", "review_pillar_suggestions"],
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=ask_prompt(ASK),
 )

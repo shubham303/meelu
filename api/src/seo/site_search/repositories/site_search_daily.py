@@ -647,5 +647,33 @@ class SiteSearchDailyRepository:
             for r in rows
         ]
 
+    async def page_positions(
+        self, db: AsyncSession, site_id: str, pages: list[str], days: int = WINDOW_DAYS
+    ) -> dict[str, tuple[float, int]]:
+        if not pages:
+            return {}
+        stmt = text(
+            """
+            select regexp_replace(page, '/+$', '') as page,
+                   sum(position * impressions) / sum(impressions) as position,
+                   sum(impressions) as impressions
+              from site_search_daily
+             where site_id = :site_id
+               and regexp_replace(page, '/+$', '') in :pages
+               and day > (select max(day) from site_search_daily where site_id = :site_id) - :days
+             group by 1
+            having sum(impressions) > 0
+            """
+        ).bindparams(bindparam("pages", expanding=True))
+        rows = await db.execute(
+            stmt,
+            {
+                "site_id": site_id,
+                "pages": list({strip_slash(p) for p in pages}),
+                "days": days,
+            },
+        )
+        return {str(r.page): (float(r.position), int(r.impressions)) for r in rows}
+
 
 site_search_dailies = SiteSearchDailyRepository()

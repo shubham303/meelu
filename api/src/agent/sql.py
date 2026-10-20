@@ -10,6 +10,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 from src.agent.context import AgentContext
+from src.core.logging import log_connection_checkouts
 from src.settings import settings
 
 engine = create_engine(
@@ -19,6 +20,7 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=1800,
 )
+log_connection_checkouts(engine, "agent_sql")
 
 
 def quote_ident(name: str) -> str:

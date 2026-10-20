@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
 import { ArrowLeft, Check, Copy, PanelRight, Sparkles } from "lucide-react";
 import { Button, Card, ConfirmDelete, Spinner } from "@/components/ui";
+import { siteHeader } from "@/lib/current-site";
 import { api, useApi } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
 import { cn, formatRelative } from "@/lib/utils";
@@ -302,7 +303,8 @@ export default function ContentPiecePage() {
 
   const copyMarkdown = async () => {
     await flush();
-    const res = await fetch(`/api/v1/content/pieces/${id}/markdown`);
+    const res = await fetch(`/api/v1/content/pieces/${id}/markdown`, { headers: siteHeader() });
+    if (!res.ok) return;
     const text = await res.text();
     await navigator.clipboard.writeText(text);
     setCopied(true);

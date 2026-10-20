@@ -7,7 +7,7 @@ from src.agent.workspace_expiry import sweep
 from src.core.logging import get_logger
 from src.settings import settings
 
-log = get_logger("agent.cron")
+log = get_logger()
 
 SWEEP_ID = "workspace_expiry"
 
@@ -16,11 +16,11 @@ async def expire_workspaces() -> None:
     try:
         result = await run_in_threadpool(sweep)
     except Exception as exc:
-        log.error("workspace_expiry_failed", error=str(exc))
+        log.error("agent.cron.workspace_expiry_failed", error=str(exc))
         return
     if result.orphans or result.dropped or result.models:
         log.info(
-            "workspace_expiry",
+            "agent.cron.workspaces_expired",
             orphans=result.orphans,
             dropped=result.dropped,
             models=result.models,

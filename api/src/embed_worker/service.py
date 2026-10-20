@@ -1,15 +1,17 @@
 import asyncio
-import sys
 
 from src.core.database import unit_of_work
+from src.core.logging import get_logger
 from src.embed_worker.chunking import chunk_body, page_chunk
 from src.embed_worker.embedding import passage_input, post_input, query_input
+from src.providers.social_search.repository import social_posts
 from src.site_pages.repositories.chunks import site_chunks
 from src.site_pages.repositories.links import site_page_links
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas import SitePageChunkSource
 from src.social_listening.repositories.queries import social_listening_queries
-from src.providers.social_search.repository import social_posts
+
+log = get_logger()
 
 MAX_EMBED_ATTEMPTS = 3
 MAX_ERROR_CHARS = 500
@@ -36,7 +38,7 @@ class EmbedWorkerService:
                 if page is None:
                     raise
                 failed.append(page.id)
-                print(f"embed-worker: could not chunk {page.url} — {e}", file=sys.stderr)
+                log.error("embed_worker.chunk.page_failed", url=page.url, error=str(e))
         return pages, chunks
 
     async def run_embed_pass(

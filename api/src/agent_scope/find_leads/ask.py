@@ -6,9 +6,9 @@ from src.find_leads.tools import find_leads_save_briefs, find_leads_update_lead
 ASK = AskDesk(
     title="Find Leads",
     produces="a short list of people worth a personal message, each with the reason and a link to reach them",
-    pen="""Two writes on this desk. You can **change a lead's status** with find_leads_update_lead: new, contacted or discarded. Move a lead the user says they messaged to contacted and one they wave off to discarded; a discarded person never comes back in a later run. You can **add or reword briefs** with find_leads_save_briefs, only after the user agrees to the wording.
+    pen="""Two writes on this desk. You can **change a lead's status** with find_leads_update_lead: new, contacted or discarded. Move a lead the user says they messaged to contacted and one they wave off to discarded; a discarded person never comes back in a later run. You can **add or reword briefs** with find_leads_save_briefs.
 
-You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a kind of person to skip, a region to stay in, a competitor's customers to leave alone. Notes are in the user's words and saved once they agree to the wording.
+You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a kind of person to skip, a region to stay in, a competitor's customers to leave alone. Notes are in the user's words.
 
 Everything else here is a read. Meelu never sends a message and never stores one; the user opens the profile or email and writes their own.""",
     extra=[
@@ -28,6 +28,6 @@ scope = AgentScope(
     tables=TABLES,
     guides=GUIDES,
     writes=[find_leads_update_lead, find_leads_save_briefs],
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=ask_prompt(ASK),
 )

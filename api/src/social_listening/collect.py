@@ -5,7 +5,7 @@ from typing import Any
 
 from src.core.database import unit_of_work
 from src.core.logging import get_logger
-from src.providers.registry import Caller
+from src.providers.registry import Caller, SpendMeter
 from src.providers.social_search.store import collect_posts
 from src.social_listening.repositories.cursors import social_listening_cursors
 from src.social_listening.repositories.posts import social_listening_posts
@@ -13,7 +13,7 @@ from src.social_listening.repositories.queries import social_listening_queries
 from src.social_listening.repositories.runs import social_listening_runs
 from src.social_listening.schemas import LOOKBACK_DAYS, PER_KEYWORD
 
-log = get_logger("social_listening.collect")
+log = get_logger()
 
 HEARTBEAT_SECONDS = 20
 SILENT_AFTER_SECONDS = 90
@@ -66,7 +66,10 @@ async def _heartbeat(run_id: str, platform: str) -> None:
                 )
         except Exception as exc:
             log.warning(
-                "collect_heartbeat_failed", run_id=run_id, platform=platform, error=str(exc)
+                "social_listening.collect.heartbeat_failed",
+                run_id=run_id,
+                platform=platform,
+                error=str(exc),
             )
 
 
@@ -77,7 +80,9 @@ async def collect_platform(user_id: str, site_id: str, run_id: str, platform: st
     try:
         stats, union = await _collect(user_id, site_id, run_id, platform)
     except Exception as exc:
-        log.error("collect_failed", run_id=run_id, platform=platform, error=str(exc))
+        log.error(
+            "social_listening.collect.failed", run_id=run_id, platform=platform, error=str(exc)
+        )
         stats = {"status": "error", "error": str(exc)}
     finally:
         beat.cancel()
@@ -106,12 +111,14 @@ async def _collect(
             "fromVendor": 0,
             "fromDatabase": 0,
             "candidates": 0,
+            "costMicros": 0,
             "failedKeywords": [],
         }, []
 
     windows = keyword_windows(keywords, cursors, datetime.now(UTC))
+    spend = SpendMeter()
     collected = await collect_posts(
-        Caller(user_id=user_id, site_id=site_id), platform, windows, PER_KEYWORD
+        Caller(user_id=user_id, site_id=site_id, spend=spend), platform, windows, PER_KEYWORD
     )
     failed = [normalize_keyword(k) for k in collected.failed_keywords]
     vendor_ids = collected.vendor_ids
@@ -132,6 +139,7 @@ async def _collect(
         "fromVendor": len(vendor_ids),
         "fromDatabase": len(set(database_ids) - set(vendor_ids)),
         "candidates": candidates,
+        "costMicros": spend.micros,
         "failedKeywords": failed,
     }
     if collected.error:

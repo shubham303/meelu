@@ -16,4 +16,4 @@ async def get_stats(
 ) -> StatsResponse:
     if ctx.site_id is None:
         return StatsResponse.model_validate(stats_service.empty())
-    return StatsResponse.model_validate(await stats_service.get(db, ctx.site_id))
+    return StatsResponse.model_validate(await stats_service.get(db, ctx.user_id, ctx.site_id))

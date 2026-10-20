@@ -23,6 +23,14 @@ SUMMARY_COLUMNS = (
 
 
 class ReportRepository:
+    async def count(self, db: AsyncSession, user_id: str, site_id: str) -> int:
+        total = await db.scalar(
+            select(func.count())
+            .select_from(Report)
+            .where(*self._conditions(user_id, site_id, None, None))
+        )
+        return int(total or 0)
+
     async def page_summaries(
         self,
         db: AsyncSession,

@@ -216,40 +216,6 @@ async def test_social_search_falls_back_to_second_actor(client, email, monkeypat
     assert "apify/fatihtahta~reddit-scraper-search-fast" in providers
 
 
-async def test_facebook_runs_once_per_keyword(client, email, monkeypatch):
-    from src.providers import apify
-    from src.settings import settings
-
-    monkeypatch.setattr(settings, "apify_api_key", "test-key")
-    queries = []
-
-    async def run_actor(provider_id, actor_id, actor_input, max_items, charges):
-        queries.append((actor_input["query"], max_items))
-        if actor_input["query"] == "broken":
-            raise ProviderRequestError(provider_id, 502, "down")
-        return VendorResponse(
-            [
-                {
-                    "postId": f"{actor_input['query']}-1",
-                    "url": f"https://www.facebook.com/x/posts/{actor_input['query']}",
-                    "postText": actor_input["query"],
-                    "timestamp": 4070908800000,
-                    "author": {"name": "A"},
-                }
-            ],
-            1_000,
-        )
-
-    monkeypatch.setattr(apify, "run_actor", run_actor)
-    user_id = await user_id_of(client, email)
-    result = await social_search.search_platform(
-        Caller(user_id=user_id), "facebook", ["one", "broken", "two"], None, 25
-    )
-    assert sorted(queries) == [("broken", 25), ("one", 25), ("two", 25)]
-    assert sorted(p["id"] for p in result["posts"]) == ["one-1", "two-1"]
-    assert result["failedKeywords"] == ["broken"]
-
-
 async def test_public_api_reports_failed_keywords(client, email, monkeypatch):
     from src.providers.social_search import meelu_public
 

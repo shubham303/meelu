@@ -1,5 +1,6 @@
 import asyncio
 import re
+from datetime import UTC, datetime
 
 from src.providers.errors import ProviderRequestError
 from src.providers.http import vendor_request
@@ -11,13 +12,20 @@ from src.settings import settings
 PAGE_SIZE = 30
 STACK_SITES = ("stackoverflow", "webmasters")
 DEVTO_TAGS_PER_KEYWORD = 2
+BLUESKY_SEARCH = "https://api.bsky.app/xrpc/app.bsky.feed.searchPosts"
 
 
 class MeeluPublicAdapter(SocialSearchAdapter):
     id = "meelu-public"
     name = "Meelu public APIs"
     capabilities = frozenset(
-        {"search.hackernews", "search.stackexchange", "search.devto", "search.github"}
+        {
+            "search.hackernews",
+            "search.stackexchange",
+            "search.devto",
+            "search.github",
+            "search.bluesky",
+        }
     )
     charges = False
 
@@ -27,6 +35,7 @@ class MeeluPublicAdapter(SocialSearchAdapter):
             "stackexchange": self.stack_exchange,
             "devto": self.dev_to,
             "github": self.github,
+            "bluesky": self.bluesky,
         }.get(platform)
         if handler is None:
             raise self.unsupported(f"search.{platform}")
@@ -192,3 +201,40 @@ class MeeluPublicAdapter(SocialSearchAdapter):
                 )
             )
         return out
+
+    async def bluesky(self, keyword, since, limit, seen):
+        start = epoch_seconds(since)
+        res = await vendor_request(
+            self.id,
+            BLUESKY_SEARCH,
+            query={
+                "q": keyword,
+                "sort": "latest",
+                "lang": "en",
+                "limit": limit,
+                "since": datetime.fromtimestamp(start, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+                if start
+                else None,
+            },
+        )
+        return [bluesky_post(item) for item in (res or {}).get("posts") or []]
+
+
+def bluesky_post(item: dict) -> dict | None:
+    author = item.get("author") or {}
+    record = item.get("record") or {}
+    handle = author.get("handle")
+    rkey = str(item.get("uri") or "").rsplit("/", 1)[-1]
+    return post(
+        "bluesky",
+        {
+            "id": item.get("uri"),
+            "url": f"https://bsky.app/profile/{handle}/post/{rkey}" if handle and rkey else None,
+            "handle": handle,
+            "displayName": author.get("displayName"),
+            "text": record.get("text") or "",
+            "createdAt": record.get("createdAt") or item.get("indexedAt"),
+            "score": item.get("likeCount"),
+            "comments": item.get("replyCount"),
+        },
+    )

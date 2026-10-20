@@ -11,12 +11,15 @@ from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits.service import credit_service
 from src.providers.social_search.platforms import PLATFORMS
 from src.providers.social_search.service import social_search
+from src.providers.social_search.store import vendor_keywords
 from src.social_listening.collect import (
     SILENT_ERROR,
     collect_platform,
     is_silent,
+    keyword_windows,
     normalize_keyword,
     running_stats,
+    site_keywords,
 )
 from src.social_listening.models.config import SocialListeningConfig
 from src.social_listening.models.query import SocialListeningQuery
@@ -32,13 +35,16 @@ from src.social_listening.schemas import (
     MAX_LINES_PER_SITE,
     MIN_SIMILARITY,
     MINIMUM_BALANCE_USD,
+    PER_KEYWORD,
     POST_STATUSES,
     RUN_STATUSES,
     USER_STATUSES,
     ConfigResponse,
     ConfigUpdateRequest,
+    EstimateResponse,
     GateResponse,
     JudgeResponse,
+    PlatformEstimate,
     PostFilters,
     PostPatchRequest,
     PostResponse,
@@ -275,6 +281,33 @@ class SocialListeningService:
         if silent:
             await db.refresh(row)
         return row
+
+    async def estimate(self, db: AsyncSession, site_id: str) -> EstimateResponse:
+        lines = await social_listening_queries.list_enabled(db, site_id)
+        ready = [line for line in lines if len(line.keywords or []) == KEYWORDS_PER_LINE]
+        pending = KEYWORDS_PER_LINE * (len(lines) - len(ready))
+        keywords = site_keywords(ready)
+        now = datetime.now(UTC)
+        out = []
+        for platform in social_search.available_platforms():
+            if not platform["available"]:
+                continue
+            cursors = await social_listening_cursors.by_keyword(
+                db, site_id, platform["id"], keywords
+            )
+            windows = keyword_windows(keywords, cursors, now)
+            searched = len(await vendor_keywords(db, platform["id"], windows)) + pending
+            out.append(
+                PlatformEstimate(
+                    platform=platform["id"],
+                    keywords=len(keywords) + pending,
+                    vendor_keywords=searched,
+                    max_cost_micros=await social_search.max_cost_micros(
+                        platform["id"], searched, PER_KEYWORD
+                    ),
+                )
+            )
+        return EstimateResponse(platforms=out)
 
     async def gate_posts(self, db: AsyncSession, site_id: str) -> GateResponse:
         waiting_lines = await social_listening_queries.count_waiting_for_embedding(

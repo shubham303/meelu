@@ -33,7 +33,7 @@ from src.providers.errors import ProviderRequestError
 from src.providers.http import client
 from src.settings import settings
 
-log = get_logger("llm")
+log = get_logger()
 
 DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
 STREAM_HEADERS = {"cache-control": "no-cache, no-transform", "x-accel-buffering": "no"}
@@ -112,7 +112,7 @@ class LlmService:
         try:
             model = await model_catalog.get(model_id)
         except ProviderRequestError as exc:
-            log.error("llm_catalog_unavailable", error=str(exc))
+            log.error("llm.catalog.unavailable", error=str(exc))
             return anthropic_error(503, "api_error", "The model list is unavailable. Try again.")
         if model is None:
             return anthropic_error(
@@ -265,7 +265,7 @@ class LlmService:
             return billed
         if usage.generation_id or usage.input_tokens or usage.output_tokens:
             log.error(
-                "llm_cost_missing",
+                "llm.call.cost_missing",
                 user_id=call.user_id,
                 model=call.model.id,
                 generation_id=usage.generation_id,
@@ -318,7 +318,7 @@ class LlmService:
                 await llm_calls.set_charged(db, row.id, charged)
         except Exception as exc:
             log.error(
-                "llm_call_not_recorded",
+                "llm.call.not_recorded",
                 user_id=call.user_id,
                 model=call.model.id,
                 error=str(exc),

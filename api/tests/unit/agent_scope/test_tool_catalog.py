@@ -162,7 +162,7 @@ def test_prompts_name_only_tools_the_desk_can_call():
     schema = schema_words()
     for action, scope in AGENT_SCOPES.items():
         body = agent_scope_service.scope_response(action, scope, None if scope.is_global else SITE)
-        allowed = allowed_for({scope.desk}, body.writes) | {"add_desk"}
+        allowed = allowed_for({scope.desk, *body.loaded_desks}, body.writes) | {"add_desk"}
         for token in set(TOKEN.findall(body.system_prompt)):
             if token in schema:
                 continue

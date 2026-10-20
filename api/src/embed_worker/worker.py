@@ -4,11 +4,14 @@ import sys
 
 import src.core.tables  # noqa: F401
 from src.core.database import engine
+from src.core.logging import configure_logging, get_logger
 from src.site_pages.llm_extraction.classify import site_page_classifier
 
 from .embedding import Embedder
 from .service import embed_worker_service
 from .settings import WorkerSettings
+
+log = get_logger()
 
 stopping = False
 
@@ -22,10 +25,10 @@ async def run_embed_passes(settings: WorkerSettings, embedder: Embedder) -> int:
     model = settings.meelu_embed_model
     pages, chunks = await embed_worker_service.run_chunk_pass(settings.meelu_chunk_page_batch)
     if pages > 0:
-        print(f"embed-worker: re-chunked {pages} page(s) into {chunks} passage(s)")
+        log.info("embed_worker.chunk.pages_rechunked", pages=pages, chunks=chunks)
     embedded = await embed_worker_service.run_embed_pass(embedder, model)
     if embedded > 0:
-        print(f"embed-worker: embedded {embedded} chunk(s)")
+        log.info("embed_worker.embed.chunks_embedded", chunks=embedded)
     listening = await embed_worker_service.run_listening_pass(
         embedder,
         model,
@@ -33,14 +36,14 @@ async def run_embed_passes(settings: WorkerSettings, embedder: Embedder) -> int:
         settings.meelu_listening_max_batches,
     )
     if listening > 0:
-        print(f"embed-worker: embedded {listening} listening row(s)")
+        log.info("embed_worker.embed.posts_embedded", posts=listening)
     return pages + embedded + listening
 
 
 async def run_extraction_passes() -> int:
     extracted = await site_page_classifier.run_extraction_pass()
     if extracted > 0:
-        print(f"embed-worker: extracted {extracted} page(s)")
+        log.info("embed_worker.extraction.pages_extracted", pages=extracted)
     return extracted
 
 
@@ -53,19 +56,17 @@ async def loop(name: str, passes, interval: float, once: bool) -> None:
             if worked == 0:
                 await asyncio.sleep(interval)
         except Exception as e:
-            print(f"embed-worker: {name} pass failed — {e}", file=sys.stderr)
+            log.error("embed_worker.loop.pass_failed", loop=name, error=str(e))
             if once:
                 return
             await asyncio.sleep(interval)
 
 
 async def run(settings: WorkerSettings) -> None:
-    print(f"embed-worker: loading {settings.meelu_embed_model}…")
+    log.info("embed_worker.model.loading", model=settings.meelu_embed_model)
     embedder = Embedder(settings.meelu_embed_model, settings.meelu_onnx_threads)
     interval = settings.meelu_embed_interval_ms / 1000
-    print(
-        f"embed-worker: ready — chunking and embedding every {settings.meelu_embed_interval_ms}ms"
-    )
+    log.info("embed_worker.loop.ready", interval_ms=settings.meelu_embed_interval_ms)
     once = settings.meelu_embed_once == "1"
     try:
         await asyncio.gather(
@@ -77,14 +78,15 @@ async def run(settings: WorkerSettings) -> None:
 
 
 def main():
+    configure_logging()
     settings = WorkerSettings()
 
     if not settings.database_url:
-        print("embed-worker: DATABASE_URL is not set", file=sys.stderr)
+        log.error("embed_worker.startup.database_url_missing")
         sys.exit(1)
 
     if settings.meelu_embed_disabled == "1":
-        print("embed-worker: disabled (MEELU_EMBED_DISABLED=1) — exiting rather than idle forever")
+        log.info("embed_worker.startup.disabled")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, request_stop)

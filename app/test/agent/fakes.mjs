@@ -42,6 +42,12 @@ export const SCOPES = {
     silentWrites: ["screen_link_suggestions", "rank_link_suggestions"],
     systemPrompt: "SITE DESK PROMPT.\n\n## The database\n\n- site_link_suggestions: id text",
   },
+  "ask-geo": {
+    desk: "geo",
+    loadedDesks: ["analytics"],
+    writes: NOTE_WRITES,
+    systemPrompt: "GEO DESK PROMPT.",
+  },
   "ask-pages+content": {
     desk: "pages",
     writes: [...NOTE_WRITES, "content_create_piece", "content_update_piece"],
@@ -52,7 +58,7 @@ export const SCOPES = {
 function scopeBody(action, desks) {
   const key = desks ? `${action}+${desks}` : action;
   const base = SCOPES[key] ?? SCOPES[action];
-  const loaded = new Set([base.desk, ...(desks ? desks.split(",") : [])]);
+  const loaded = new Set([base.desk, ...(base.loadedDesks ?? []), ...(desks ? desks.split(",") : [])]);
   const offers = ["analytics", "content", "profile"]
     .filter((d) => !loaded.has(d))
     .map((d) => ({ name: d, blurb: `${d} desk`, brief: `The ${d} desk is loaded. BRIEF FOR ${d.toUpperCase()}.` }));
@@ -68,6 +74,7 @@ function scopeBody(action, desks) {
     localTools: base.localTools ?? [],
     silentWrites: base.silentWrites ?? [],
     desks: offers,
+    loadedDesks: base.loadedDesks ?? [],
     systemPrompt: base.systemPrompt,
   };
 }

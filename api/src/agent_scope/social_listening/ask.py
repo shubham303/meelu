@@ -9,9 +9,9 @@ from src.social_listening.tools import (
 ASK = AskDesk(
     title="Social Listening",
     produces="a triage of the found posts and a reply angle for each one worth answering",
-    pen="""Two families of writes on this desk. You can **set a post's angle and status** with social_listening_update_post: a suggestedAngle is two or three sentences on how a reply from this site would belong in that thread (the stance, what to lead with, what not to pitch), never the reply itself; the user writes every reply in their own words. Statuses are to_reply, drafted, replied, skipped and rejected; move a post the user waves off to skipped, one they call a wrong match to rejected, and back to to_reply if they change their mind. You can **grow the list of lines** with social_listening_save_queries, only after the user agrees to the wording. A brand or competitor is watched by a line like any other.
+    pen="""Two families of writes on this desk. You can **set a post's angle and status** with social_listening_update_post: a suggestedAngle is two or three sentences on how a reply from this site would belong in that thread (the stance, what to lead with, what not to pitch), never the reply itself; the user writes every reply in their own words. Statuses are to_reply, drafted, replied, skipped and rejected; move a post the user waves off to skipped, one they call a wrong match to rejected, and back to to_reply if they change their mind. You can **grow the list of lines** with social_listening_save_queries. A brand or competitor is watched by a line like any other.
 
-You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a subreddit to avoid, a tone to keep, a competitor never to name. Notes are in the user's words and saved once they agree to the wording.
+You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a subreddit to avoid, a tone to keep, a competitor never to name. Notes are in the user's words.
 
 Everything else here is a read. Posting a reply happens on the platform itself; the user copies their finished text from this desk.""",
     extra=[
@@ -33,6 +33,6 @@ scope = AgentScope(
         social_listening_update_post,
         social_listening_save_queries,
     ],
-    limits={"maxTurns": 60, "maxBudgetUsd": 3},
+    limits={"maxTurns": 60},
     system_prompt=ask_prompt(ASK),
 )

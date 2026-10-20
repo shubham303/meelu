@@ -23,4 +23,5 @@ class AgentScopeResponse(EntityModel):
     local_tools: list[str]
     silent_writes: list[str]
     desks: list[DeskOffer]
+    loaded_desks: list[str]
     system_prompt: str
