@@ -6,13 +6,22 @@ from src.agent_scope.guides import render_guides
 from src.agent_scope.lib import AgentScope, SiteRef
 from src.agent_scope.registry import (
     AGENT_SCOPES,
+    WORKSPACE,
     DESK_BLURBS,
     LOADABLE_DESKS,
     desk_addition,
 )
 from src.agent_scope.schemas import AgentScopeResponse, DeskOffer
+from src.connected_apps.catalog import DESKS as ACCOUNT_DESKS
 from src.core.orm import Base
 from src.sites.repository import sites
+
+
+ACCOUNTS_PROMPT = """
+
+## The user's own accounts
+
+The {desks} desks act inside accounts the user connects: draft emails and newsletters, CMS drafts, CRM contacts and notes, Notion and Google Docs pages, and replies on Reddit, LinkedIn and GitHub. When the user asks for one of those, load that desk; if the account is not connected yet, it hands you a sign-in link for the user. Where this prompt says Meelu never sends, posts or publishes, that means never on its own: through those desks you act only when the user asks, and the user approves each write. No desk can send a LinkedIn direct message or post on X; say so plainly when asked."""
 
 
 class AgentScopeService:
@@ -73,12 +82,17 @@ class AgentScopeService:
             name for name in dict.fromkeys([*scope.loaded_desks, *requested]) if name != scope.desk
         ]
 
+    def accounts_prompt(self, scope: AgentScope) -> str:
+        if scope.is_global or scope.desk == WORKSPACE:
+            return ""
+        return ACCOUNTS_PROMPT.format(desks=", ".join(ACCOUNT_DESKS))
+
     def desk_brief(self, desk_name: str) -> str:
         addition = desk_addition(desk_name)
         writes = ", ".join(f"`{w}`" for w in addition.write_names) or "none"
         return (
             f"The {desk_name} desk is loaded. Its tools are in your tool list now. "
-            f"Writes it adds: {writes}."
+            f"Writes it adds, which this task may now call (the user approves each): {writes}."
             + (self.render_tables(addition.tables) if addition.tables else "")
             + render_guides(addition.guides)
         )
@@ -86,11 +100,7 @@ class AgentScopeService:
     def scope_response(
         self, action: str, scope: AgentScope, site: SiteRef | None, desks: str = ""
     ) -> AgentScopeResponse:
-        extra = (
-            []
-            if scope.standalone
-            else [desk_addition(name) for name in self.resolve_extra_desks(scope, desks)]
-        )
+        extra = [desk_addition(name) for name in self.resolve_extra_desks(scope, desks)]
         loaded = {scope.desk, *(a.desk for a in extra)}
 
         writes = list(dict.fromkeys(scope.write_names + [w for a in extra for w in a.write_names]))
@@ -120,15 +130,16 @@ class AgentScopeService:
             providers=scope.providers,
             local_tools=local_tools,
             silent_writes=silent,
-            loaded_desks=[] if scope.standalone else list(scope.loaded_desks),
+            loaded_desks=list(scope.loaded_desks),
             desks=[
                 DeskOffer(name=name, blurb=blurb, brief=self.desk_brief(name))
                 for name, blurb in sorted(DESK_BLURBS.items())
-                if name not in loaded and not scope.standalone
+                if name not in loaded
             ],
             system_prompt=scope.system_prompt(site)
             + self.render_tables(tables)
-            + render_guides(guides),
+            + render_guides(guides)
+            + self.accounts_prompt(scope),
         )
 
 

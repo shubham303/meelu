@@ -1,6 +1,7 @@
 from src.agent import models as agent_models
 from src.agent_plans import models as agent_plans_models
 from src.analytics import models as analytics_models
+from src.connected_apps import models as connected_apps_models
 from src.content import models as content_models
 from src.crawl_jobs import models as crawl_jobs_models
 from src.credits import models as credits_models
@@ -32,6 +33,7 @@ __all__ = [
     "agent_models",
     "agent_plans_models",
     "analytics_models",
+    "connected_apps_models",
     "content_models",
     "crawl_jobs_models",
     "credits_models",

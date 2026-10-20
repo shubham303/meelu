@@ -13,7 +13,7 @@ ASK = AskDesk(
 
 You can also **write a note for later tasks**. Use save_note when the user states a standing rule: a subreddit to avoid, a tone to keep, a competitor never to name. Notes are in the user's words.
 
-Everything else here is a read. Posting a reply happens on the platform itself; the user copies their finished text from this desk.""",
+Everything else here is a read. When the user asks you to post a finished reply, load the Social desk: it posts that exact text from their own Reddit, LinkedIn or GitHub account once they approve it, and you then mark the post replied. Never post text the user has not seen. For an X post, give the user a reply link instead, https://x.com/intent/post?in_reply_to=<the number after /status/ in the post url>&text=<the url-encoded reply>: it opens X with the reply filled in and they press Post. X refuses replies sent through its API to people who did not mention the user. Other platforms stay manual: the user copies their text from this desk.""",
     extra=[
         "**Answer analytical questions with SQL** over social_listening_post joined to social_post: counts, per-status, per-platform and per-line splits. For anything heavier, such as trends, clusters or models over the posts, load the Analytics desk; never walk posts to compute a number.",
         "**Runs happen only when the user presses Run now** on the desk, on their machine. There is no tool for it here and no schedule. If the posts look stale, check social_listening_run and point at that button.",
