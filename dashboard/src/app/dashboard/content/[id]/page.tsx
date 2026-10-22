@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
-import { ArrowLeft, Check, Copy, PanelRight, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Copy, Eye, PanelRight, PencilLine, Sparkles } from "lucide-react";
 import { Button, Card, ConfirmDelete, Spinner } from "@/components/ui";
 import { siteHeader } from "@/lib/current-site";
+import type { SiteProfile } from "@/lib/types";
 import { api, useApi } from "@/lib/use-api";
 import { useIsApp } from "@/lib/use-app-mode";
 import { cn, formatRelative } from "@/lib/utils";
@@ -93,6 +94,8 @@ export default function ContentPiecePage() {
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [docVersion, setDocVersion] = useState(0);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const { data: site } = useApi<SiteProfile>("/api/v1/site");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const editorRef = useRef<Editor | null>(null);
   const togglePanel = (next: Exclude<Panel, null>) => setPanel((p) => (p === next ? null : next));
@@ -341,7 +344,25 @@ export default function ContentPiecePage() {
   return (
     <div data-full-bleed className="-mx-8 -my-8 flex h-screen flex-col overflow-hidden">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-edge bg-panel px-8">
-        <Back />
+        <div className="flex items-center gap-4">
+          <Back />
+          <div className="flex rounded-lg border border-edge2 p-0.5 text-xs">
+            {(["edit", "preview"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-colors cursor-pointer",
+                  mode === m ? "bg-accent-soft text-accent" : "text-sub hover:text-ink",
+                )}
+              >
+                {m === "edit" ? <PencilLine size={13} /> : <Eye size={13} />}
+                {m === "edit" ? "Edit" : "Preview"}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center gap-3">
           <span className={cn("text-xs", saveState === "error" ? "text-bad" : "text-faint")} title={saveError ?? undefined}>
             {saveLabel}
@@ -411,6 +432,8 @@ export default function ContentPiecePage() {
                 anchors={activeAnchor ? [activeAnchor] : []}
                 activeAnchor={activeAnchor}
                 editorRef={editorRef}
+                editable={mode === "edit"}
+                siteOrigin={site?.domain ? `https://${site.domain}` : undefined}
               />
             )}
           </div>

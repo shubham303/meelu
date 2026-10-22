@@ -189,3 +189,6 @@ body {
   background: #2563eb2b;
   box-shadow: 0 2px 0 var(--color-accent);
 }
+.piece-doc[contenteditable="false"] a {
+  cursor: pointer;
+}
