@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FindBar } from "./find-bar";
 import { FindInDoc } from "./find-in-doc";
-import { HtmlBlock } from "./html-block";
+import { HtmlBlock, htmlSnippet } from "./html-block";
 import { openDocLink } from "./links";
 import { findText, highlightKey, IssueHighlights } from "./issue-highlights";
 
@@ -116,9 +116,17 @@ export function Document({
         const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
           f.type.startsWith("image/"),
         );
-        if (files.length === 0) return false;
+        if (files.length > 0) {
+          event.preventDefault();
+          void insertFiles(files);
+          return true;
+        }
+        const html = htmlSnippet(event.clipboardData?.getData("text/plain") ?? "");
+        if (!html) return false;
         event.preventDefault();
-        void insertFiles(files);
+        view.dispatch(
+          view.state.tr.replaceSelectionWith(view.state.schema.nodes.htmlBlock.create({ html })),
+        );
         return true;
       },
       handleDrop: (view, event) => {

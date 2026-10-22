@@ -9,7 +9,33 @@ import {
   type ReactNodeViewProps,
 } from "@tiptap/react";
 import { Code2, Eye, Trash2 } from "lucide-react";
+import { Lexer } from "marked";
 import { openDocLink } from "./links";
+
+const WRAP_OPEN = "<div data-meelu-html>";
+const WRAP_CLOSE = "</div>";
+
+function readsAsBlock(html: string): boolean {
+  const tokens = Lexer.lex(html).filter((t) => t.type !== "space");
+  return tokens.length === 1 && tokens[0].type === "html" && Boolean(tokens[0].block);
+}
+
+export function htmlToMarkdown(html: string): string {
+  const trimmed = html.trim();
+  if (!trimmed || readsAsBlock(trimmed)) return trimmed;
+  const compact = trimmed.replace(/\n\s*\n/g, "\n");
+  return readsAsBlock(compact) ? compact : `${WRAP_OPEN}\n${compact}\n${WRAP_CLOSE}`;
+}
+
+export function htmlFromMarkdown(raw: string): string {
+  const trimmed = raw.trim();
+  const open = `${WRAP_OPEN}\n`;
+  const close = `\n${WRAP_CLOSE}`;
+  if (trimmed.startsWith(open) && trimmed.endsWith(close)) {
+    return trimmed.slice(open.length, trimmed.length - close.length);
+  }
+  return trimmed;
+}
 
 export const HtmlBlock = Node.create({
   name: "htmlBlock",
@@ -42,17 +68,24 @@ export const HtmlBlock = Node.create({
 
   parseMarkdown: (token, helpers) => {
     if (!token.block) return [];
-    const html = String(token.raw ?? token.text ?? "").trim();
+    const html = htmlFromMarkdown(String(token.raw ?? token.text ?? ""));
     if (!html) return [];
     return helpers.createNode("htmlBlock", { html });
   },
 
-  renderMarkdown: (node) => String(node.attrs?.html ?? ""),
+  renderMarkdown: (node) => htmlToMarkdown(String(node.attrs?.html ?? "")),
 
   addNodeView() {
     return ReactNodeViewRenderer(HtmlBlockView);
   },
 });
+
+export function htmlSnippet(text: string): string | null {
+  const html = text.trim();
+  if (!/^<[a-zA-Z][\w-]*[\s>/]/.test(html) || !html.endsWith(">")) return null;
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  return parsed.body.children.length > 0 || parsed.head.children.length > 0 ? html : null;
+}
 
 function frameDocument(html: string): string {
   const style = typeof document === "undefined" ? null : getComputedStyle(document.body);
