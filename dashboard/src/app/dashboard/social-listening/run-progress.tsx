@@ -100,6 +100,11 @@ export function RunProgress({ live, platformLabel }: { live: LiveRun; platformLa
           );
         })}
       </div>
+      {live.problems.map((message) => (
+        <p key={message} className="text-[13px] text-bad">
+          Some posts were not checked: {message}
+        </p>
+      ))}
       {live.error && <p className="text-sm text-bad">{live.error}</p>}
     </Card>
   );

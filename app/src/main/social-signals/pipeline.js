@@ -19,9 +19,10 @@ const KEYWORDS_PER_LINE = 2;
 const JUDGE_CONCURRENCY = 5;
 const JUDGE_ATTEMPTS = 2;
 const POLL_MS = 3000;
+const ALIVE_MS = 30_000;
 const GATE_TIMEOUT_MS = 60 * 60 * 1000;
 
-const PROGRESS_EVENTS = new Set(["stage", "terms", "platform", "saved", "gate", "judged"]);
+const PROGRESS_EVENTS = new Set(["stage", "terms", "platform", "saved", "gate", "judged", "problem"]);
 
 const running = new Map();
 const runningBySite = new Map();
@@ -193,7 +194,7 @@ async function judgeWithRetry(posts, judgeCtx, ctx) {
       lastError = err;
     }
   }
-  ctx.send("judge-error", { message: lastError instanceof Error ? lastError.message : String(lastError) });
+  ctx.problem(lastError instanceof Error ? lastError.message : String(lastError));
   return null;
 }
 
@@ -262,13 +263,22 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
     send(event, data);
   };
   const llm = { cookieHeader, siteId: input.siteId, purpose: "social_listening" };
-  const ctx = { state, send, llm, cookieHeader, siteId: input.siteId };
+  const problems = [];
+  const problem = (message) => {
+    if (problems.includes(message)) return;
+    problems.push(message);
+    send("problem", { message });
+  };
+  const ctx = { state, send, llm, cookieHeader, siteId: input.siteId, problem };
   let runId = null;
+  let alive = null;
   const counts = { matchedCount: 0, keptCount: 0 };
 
   const finishPatch = (status, extra = {}) => {
+    clearInterval(alive);
     if (!runId) return Promise.resolve();
-    return patchRun(input.siteId, runId, { status, ...counts, ...extra }, cookieHeader).catch(
+    const error = problems.length ? { error: problems.join(" · ") } : {};
+    return patchRun(input.siteId, runId, { status, ...counts, ...error, ...extra }, cookieHeader).catch(
       () => {},
     );
   };
@@ -284,6 +294,9 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
     const siteContext = siteContextOf(setup.site);
     const run = await until(state, createRun(input.siteId, cookieHeader));
     runId = run?.id ?? null;
+    alive = setInterval(() => {
+      patchRun(input.siteId, runId, {}, cookieHeader).catch(() => {});
+    }, ALIVE_MS);
 
     const lines = await searchTerms(enabledLines, siteContext, ctx);
     const collected = await collectStage(input, runId, ctx);
@@ -298,6 +311,7 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
       inserted: collected.inserted,
       matched: counts.matchedCount,
       kept: counts.keptCount,
+      problems,
       platforms: Object.fromEntries(
         Object.entries(collected.platforms ?? {}).map(([id, stats]) => [
           id,

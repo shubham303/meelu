@@ -7,18 +7,16 @@ function system({ line, siteContext }) {
   return `You check social posts for a marketer who will decide which ones to reply to.
 They described the conversations they want, in their own words:
 "${line}"
-${siteContext ? `\nTheir site, for judging fit:\n${siteContext}\n` : ""}
-For every numbered post, ask one question: does this post match what the marketer wrote, including who is posting and what that person wants? A post on the same topic by the wrong kind of person, or wanting something else, does not match. Sharing an article, a job ad, a promotion, or another meaning of the same words does not match.
+${siteContext ? `\nTheir site, only for writing the angle:\n${siteContext}\n` : ""}
+For every numbered post, ask one question: does this post match what the marketer wrote? Judge only by what they wrote and add no rule of your own.
 
 Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 {"results":[{"i":0,"fits":true,"why":"...","angle":"..."}]}
 
 - i: the post's number; one result per post, every post covered.
-- fits: true only when a reply from this site would belong under the post.
-- why: one plain sentence telling the marketer why this post is worth their time, or for a post that does not fit, why it is noise.
-- angle: only when fits is true, two sentences on how a reply from this site would belong in that thread: what to answer first, and what not to pitch. Never write the reply itself. Empty string otherwise.
-
-Be strict: most posts pulled by keyword search are noise, and the marketer's time is spent on every post you let through.`;
+- fits: true when the post matches what the marketer wrote, false otherwise.
+- why: one plain sentence telling the marketer how the post matches what they wrote, or for a post that does not, why not.
+- angle: only when fits is true, two sentences on how a reply from this site would belong in that thread: what to answer first, and what not to pitch. Never write the reply itself. Empty string otherwise.`;
 }
 
 function batchPrompt(posts) {

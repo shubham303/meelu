@@ -161,6 +161,7 @@ export default function SocialListeningPage() {
           fetched: m.event === "done" ? n(d.fetched) : prev.fetched,
           inserted: m.event === "done" ? n(d.inserted) : prev.inserted,
           kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
+          problems: prev.problems,
           platforms:
             m.event === "done"
               ? ((d.platforms ?? {}) as RunOutcome["platforms"])
@@ -273,7 +274,7 @@ export default function SocialListeningPage() {
   const runLine = running
     ? "Running now"
     : lastRun
-      ? `Last run ${hoursAgo(lastRun.startedAt) === "just now" ? "just now" : `${hoursAgo(lastRun.startedAt)} ago`} · ${lastRun.fetchedCount} found → ${lastRun.matchedCount} close in meaning → ${lastRun.keptCount} kept${lastRun.status !== "done" ? ` · ${lastRun.status}` : ""}`
+      ? `Last run ${hoursAgo(lastRun.startedAt) === "just now" ? "just now" : `${hoursAgo(lastRun.startedAt)} ago`} · ${lastRun.fetchedCount} found → ${lastRun.matchedCount} close in meaning → ${lastRun.keptCount} kept${lastRun.status !== "done" ? ` · ${lastRun.status}` : ""}${lastRun.error && lastRun.status !== "running" ? ` · ${lastRun.error}` : ""}`
       : "";
   const posts = postsPage?.data ?? [];
   const hasMore = postsPage?.pagination.has_next ?? false;
