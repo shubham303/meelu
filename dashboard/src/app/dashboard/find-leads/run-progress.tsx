@@ -110,6 +110,11 @@ export function RunProgress({ live }: { live: LiveRun }) {
           );
         })}
       </div>
+      {live.problems.map((message) => (
+        <p key={message} className="text-[13px] text-bad">
+          Some people were not checked: {message}
+        </p>
+      ))}
       {live.error && <p className="text-sm text-bad">{live.error}</p>}
     </Card>
   );

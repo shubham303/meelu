@@ -7,22 +7,20 @@ const MAX_ITEMS = 12;
 const MAX_EVIDENCE = 3;
 
 function system({ brief, siteContext }) {
-  return `You make the final call on people a founder might contact personally about their product. The founder writes and sends every message themselves.
+  return `You make the final call on people a founder found while looking for people to contact personally. The founder writes and sends every message themselves.
 The founder described who they are looking for:
 "${brief}"
-${siteContext ? `\nTheir site:\n${siteContext}\n` : ""}
-Each numbered person comes with what surfaced them and numbered items of their own recent activity. Decide whether this person is worth a personal message now.
+${siteContext ? `\nTheir site, only for writing the angle:\n${siteContext}\n` : ""}
+Each numbered person comes with what surfaced them and numbered items of their own recent activity. Decide whether this person fits the brief. Judge only by what the brief asks for and add no rule of your own.
 
 Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 {"results":[{"i":0,"worth":true,"why":"...","angle":"...","evidence":[0,2]}]}
 
 - i: the person's number; one result per person, every person covered.
-- worth: true only when their own words or activity show they fit the brief and would plausibly welcome hearing about the site.
-- why: one plain sentence telling the founder why this person is worth a message, citing what they said or did. For worth false, why it is not.
+- worth: true when they fit what the brief asks for, false otherwise.
+- why: one plain sentence telling the founder why this person fits, citing what shows it. For worth false, why not.
 - angle: when worth is true, one sentence on what to open with. Never write the message itself. Empty string otherwise.
-- evidence: when worth is true, the numbers (up to ${MAX_EVIDENCE}) of the items that back up why. Only numbers shown for that person.
-
-Be strict: a person who merely shares a topic, sells the same thing, or shows no need does not qualify.`;
+- evidence: when worth is true, the numbers (up to ${MAX_EVIDENCE}) of the items that back up why, or an empty list when the fit comes from their profile alone. Only numbers shown for that person.`;
 }
 
 export function itemsOf(lead) {

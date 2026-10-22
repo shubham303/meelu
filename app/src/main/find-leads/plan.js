@@ -14,7 +14,7 @@ Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 - linkedin.query: a short LinkedIn people-search query for who these people are (a role or business type), not their problem.
 - linkedin.titles: up to ${MAX_TITLES} job titles these people hold. Empty if the brief does not imply one.
 - linkedin.locations: up to ${MAX_LOCATIONS} places, ONLY when the brief names a place. Otherwise empty.
-- web: exactly ${WEB_ANGLES} different web search angles for finding these people, each a short instruction such as "freelance digital marketers with their own portfolio site" or "small marketing agencies listed on Clutch". Cover different places they show up: their own sites, directories and marketplaces, and posts they write. When the brief names more than one kind of person, give each kind its own angle.
+- web: exactly ${WEB_ANGLES} different web search angles for finding these people, each a short instruction naming who to look for and where, taken from the brief. Cover different places they show up: their own sites, directories and marketplaces, and posts they write. When the brief names more than one kind of person, give each kind its own angle.
 
 Use the description of the founder's site to read ambiguous words the way their customers would. Never invent people or places the brief does not support.`;
 
