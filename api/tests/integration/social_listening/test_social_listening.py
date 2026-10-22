@@ -206,7 +206,7 @@ async def test_run_needs_five_dollars_and_one_at_a_time(client, email):
     assert r.status_code == 409
 
     sql(
-        "update social_listening_run set started_at = now() - interval '3 hours' where id = %s",
+        "update social_listening_run set updated_at = now() - interval '3 minutes' where id = %s",
         (run["id"],),
     )
     second = await start_run(client)
@@ -443,7 +443,7 @@ async def test_purge_drops_old_posts_and_stale_runs(client, email, vendor):
         "now() - interval '31 days', now())"
     )
     sql(
-        "update social_listening_run set started_at = now() - interval '3 hours' where id = %s",
+        "update social_listening_run set updated_at = now() - interval '3 hours' where id = %s",
         (run["id"],),
     )
 

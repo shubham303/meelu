@@ -1,6 +1,8 @@
 import { ENV_DEFAULTS, meeluAuthHeaders } from "../config.js";
 import { apiFetch } from "../net.js";
 
+const REQUEST_TIMEOUT_MS = 60_000;
+
 function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
   const headers = {
     ...meeluAuthHeaders(cookieHeader),
@@ -11,6 +13,7 @@ function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
     method,
     headers,
     ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).then(async (res) => {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {

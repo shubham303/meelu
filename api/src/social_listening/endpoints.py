@@ -182,7 +182,7 @@ async def get_summary(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SummaryResponse:
-    return await social_listening_service.summary(db, ctx.site_id)
+    return await social_listening_service.summary(db, ctx.user_id, ctx.site_id)
 
 
 @router.get("/social-listening/posts/{post_id}")

@@ -41,6 +41,7 @@ export interface LiveRun {
   inserted: number;
   gate: { pending: number; kept: number; dropped: number } | null;
   judged: { judged: number; total: number; kept: number } | null;
+  problems: string[];
   error: string | null;
 }
 
@@ -53,6 +54,7 @@ export const EMPTY_LIVE: LiveRun = {
   inserted: 0,
   gate: null,
   judged: null,
+  problems: [],
   error: null,
 };
 
@@ -82,6 +84,10 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
   if (event === "saved") return { ...prev, fetched: n(d.fetched), inserted: n(d.inserted) };
   if (event === "gate") return { ...prev, gate: { pending: n(d.pending), kept: n(d.kept), dropped: n(d.dropped) } };
   if (event === "judged") return { ...prev, judged: { judged: n(d.judged), total: n(d.total), kept: n(d.kept) } };
+  if (event === "problem") {
+    const message = String(d.message ?? "");
+    return message && !prev.problems.includes(message) ? { ...prev, problems: [...prev.problems, message] } : prev;
+  }
   return prev;
 }
 
