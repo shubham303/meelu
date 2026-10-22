@@ -10,6 +10,7 @@ import { Markdown } from "@tiptap/markdown";
 import {
   ArrowUp,
   Bold,
+  Code2,
   Heading2,
   Heading3,
   ImagePlus,
@@ -21,6 +22,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { HtmlBlock } from "./html-block";
+import { openDocLink } from "./links";
 import { findText, highlightKey, IssueHighlights } from "./issue-highlights";
 
 export interface SelectionRequest {
@@ -38,6 +41,7 @@ export interface DocumentProps {
   activeAnchor: string | null;
   editorRef: React.MutableRefObject<Editor | null>;
   editable?: boolean;
+  siteOrigin?: string;
 }
 
 const QUICK: Array<{ label: string; sentence: string }> = [
@@ -74,6 +78,7 @@ export function Document({
   activeAnchor,
   editorRef,
   editable = true,
+  siteOrigin,
 }: DocumentProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -89,12 +94,20 @@ export function Document({
       Image.configure({ allowBase64: false }),
       Placeholder.configure({ placeholder: "Start writing, or hand the agent a brief…" }),
       Markdown,
+      HtmlBlock,
       IssueHighlights,
     ],
     content: markdown,
     contentType: "markdown",
     editorProps: {
       attributes: { class: "piece-doc focus:outline-none" },
+      handleClick: (view, _pos, event) => {
+        if (view.editable) return false;
+        const anchor = (event.target as Element | null)?.closest("a") ?? null;
+        if (!anchor) return false;
+        event.preventDefault();
+        return openDocLink(anchor, view.dom);
+      },
       handlePaste: (view, event) => {
         const files = Array.from(event.clipboardData?.files ?? []).filter((f) =>
           f.type.startsWith("image/"),
@@ -122,7 +135,9 @@ export function Document({
   }, [editor, editorRef]);
 
   useEffect(() => {
-    if (editor && editor.isEditable !== editable) editor.setEditable(editable);
+    if (!editor || editor.isEditable === editable) return;
+    editor.setEditable(editable, false);
+    editor.view.dispatch(editor.state.tr.setMeta("editable", editable));
   }, [editor, editable]);
 
   useEffect(() => {
@@ -155,11 +170,13 @@ export function Document({
   if (!editor) return null;
 
   return (
-    <div className="relative">
+    <div className="relative" data-site-origin={siteOrigin}>
       <BubbleMenu
         editor={editor}
         options={{ placement: "bottom-start", offset: 8 }}
-        shouldShow={({ editor, state }) => !state.selection.empty && !editor.isActive("image")}
+        shouldShow={({ editor, state }) =>
+          editor.isEditable && !state.selection.empty && !editor.isActive("image")
+        }
         className="z-30"
       >
         <SelectionMenu
@@ -172,16 +189,31 @@ export function Document({
 
       <EditorContent editor={editor} />
 
-      <div className="mt-8 flex items-center gap-3 border-t border-edge pt-4 text-xs text-faint">
-        <button
-          type="button"
-          onClick={() => fileInput.current?.click()}
-          className="inline-flex items-center gap-1.5 text-sub transition-colors hover:text-ink cursor-pointer"
-        >
-          <ImagePlus size={14} /> Add an image or GIF
-        </button>
-        <span>Paste or drop one anywhere in the text. Markdown shortcuts work: # for a heading, - for a list.</span>
-      </div>
+      {editable && (
+        <div className="mt-8 flex items-center gap-3 border-t border-edge pt-4 text-xs text-faint">
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            className="inline-flex items-center gap-1.5 text-sub transition-colors hover:text-ink cursor-pointer"
+          >
+            <ImagePlus size={14} /> Add an image or GIF
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              editor
+                .chain()
+                .focus()
+                .insertContent({ type: "htmlBlock", attrs: { html: "", editing: true } })
+                .run()
+            }
+            className="inline-flex items-center gap-1.5 text-sub transition-colors hover:text-ink cursor-pointer"
+          >
+            <Code2 size={14} /> Add HTML
+          </button>
+          <span>Paste or drop an image anywhere in the text. Markdown shortcuts work: # for a heading, - for a list.</span>
+        </div>
+      )}
       {uploadError && <p className="mt-2 text-xs text-bad">{uploadError}</p>}
       <input
         ref={fileInput}
