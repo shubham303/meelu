@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Notification, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, Menu, Notification, session, shell } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -655,6 +655,39 @@ function guardNavigation(contents) {
   });
 }
 
+function goHome() {
+  if (!win || win.isDestroyed()) return;
+  void loadDashboard();
+}
+
+function installMenu() {
+  const history = () => win?.webContents.navigationHistory;
+  const template = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    {
+      label: "Go",
+      submenu: [
+        {
+          label: "Back",
+          accelerator: process.platform === "darwin" ? "Cmd+[" : "Alt+Left",
+          click: () => history()?.canGoBack() && history().goBack(),
+        },
+        {
+          label: "Forward",
+          accelerator: process.platform === "darwin" ? "Cmd+]" : "Alt+Right",
+          click: () => history()?.canGoForward() && history().goForward(),
+        },
+        { label: "Home", accelerator: "CmdOrCtrl+Shift+H", click: goHome },
+      ],
+    },
+    { role: "viewMenu" },
+    { role: "windowMenu" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function boot() {
   lockDownDefaultSession();
   registerAgentIpc();
@@ -677,6 +710,13 @@ function boot() {
   });
 
   guardNavigation(win.webContents);
+  installMenu();
+
+  win.webContents.on("render-process-gone", (_ev, details) => {
+    if (details.reason === "clean-exit") return;
+    log(`page process gone (${details.reason}) — reloading the dashboard`);
+    goHome();
+  });
 
   registerScreenshotShortcut();
 
