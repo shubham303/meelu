@@ -60,8 +60,8 @@ from src.social_listening.schemas import (
 
 EMBED_MAX_ATTEMPTS = 3
 CURSOR_RETENTION_DAYS = 30
-STALE_RUN_HOURS = 2
-STALE_RUN_ERROR = "The run stopped reporting and was closed."
+QUIET_RUN_SECONDS = 120
+QUIET_RUN_ERROR = "The app stopped working on this run before it finished, so it was closed."
 PLATFORM_IDS = tuple(p["id"] for p in PLATFORMS)
 
 
@@ -196,13 +196,16 @@ class SocialListeningService:
         await social_listening_queries.delete(db, row)
         return query_id
 
-    async def create_run(self, db: AsyncSession, user_id: str, site_id: str) -> RunResponse:
-        await social_listening_runs.fail_running_before(
+    async def _close_quiet_runs(self, db: AsyncSession, user_id: str) -> None:
+        await social_listening_runs.fail_quiet_since(
             db,
-            datetime.now(UTC) - timedelta(hours=STALE_RUN_HOURS),
-            STALE_RUN_ERROR,
+            datetime.now(UTC) - timedelta(seconds=QUIET_RUN_SECONDS),
+            QUIET_RUN_ERROR,
             user_id=user_id,
         )
+
+    async def create_run(self, db: AsyncSession, user_id: str, site_id: str) -> RunResponse:
+        await self._close_quiet_runs(db, user_id)
         if await social_listening_runs.running_for_user(db, user_id) is not None:
             raise HTTPException(
                 409,
@@ -386,7 +389,8 @@ class SocialListeningService:
         await social_listening_posts.update(db, row, values)
         return await self.get_post(db, site_id, post_id)
 
-    async def summary(self, db: AsyncSession, site_id: str) -> SummaryResponse:
+    async def summary(self, db: AsyncSession, user_id: str, site_id: str) -> SummaryResponse:
+        await self._close_quiet_runs(db, user_id)
         statuses = await social_listening_posts.status_counts(db, site_id)
         return SummaryResponse(
             to_reply=statuses.get("to_reply", 0),
@@ -404,8 +408,8 @@ class SocialListeningService:
         cutoff = now - timedelta(days=CURSOR_RETENTION_DAYS)
         return {
             "cursors": await social_listening_cursors.delete_older_than(db, cutoff),
-            "runs": await social_listening_runs.fail_running_before(
-                db, now - timedelta(hours=STALE_RUN_HOURS), STALE_RUN_ERROR
+            "runs": await social_listening_runs.fail_quiet_since(
+                db, now - timedelta(seconds=QUIET_RUN_SECONDS), QUIET_RUN_ERROR
             ),
         }
 

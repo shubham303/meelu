@@ -41,10 +41,10 @@ class SocialListeningRunRepository:
         )
         return result.scalars().first()
 
-    async def fail_running_before(
+    async def fail_quiet_since(
         self, db: AsyncSession, cutoff: datetime, message: str, user_id: str | None = None
     ) -> int:
-        conds = [SocialListeningRun.status == "running", SocialListeningRun.started_at < cutoff]
+        conds = [SocialListeningRun.status == "running", SocialListeningRun.updated_at < cutoff]
         if user_id is not None:
             conds.append(SocialListeningRun.user_id == user_id)
         result = await db.execute(

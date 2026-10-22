@@ -9,6 +9,7 @@ export interface RunOutcome {
   fetched: number;
   inserted: number;
   kept: number;
+  problems: string[];
   platforms: Record<
     string,
     { error?: string | null; fromVendor?: number; fromDatabase?: number; costMicros?: number; kept?: number }
@@ -78,6 +79,12 @@ export function RunResult({
             {platformLabel(id)} failed: {s.error}
           </p>
         ))}
+        {outcome.problems.length > 0 && (
+          <p className="text-[13px] text-bad">
+            Some posts were not checked: {outcome.problems.join(" · ")} They stay in the queue and are
+            checked again next run.
+          </p>
+        )}
       </div>
       <button
         type="button"
