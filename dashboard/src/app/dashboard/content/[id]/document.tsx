@@ -22,6 +22,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FindBar } from "./find-bar";
+import { FindInDoc } from "./find-in-doc";
 import { HtmlBlock } from "./html-block";
 import { openDocLink } from "./links";
 import { findText, highlightKey, IssueHighlights } from "./issue-highlights";
@@ -81,6 +83,7 @@ export function Document({
   siteOrigin,
 }: DocumentProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [findSignal, setFindSignal] = useState(0);
   const fileInput = useRef<HTMLInputElement>(null);
   const lastVersion = useRef(version);
 
@@ -96,6 +99,7 @@ export function Document({
       Markdown,
       HtmlBlock,
       IssueHighlights,
+      FindInDoc,
     ],
     content: markdown,
     contentType: "markdown",
@@ -167,10 +171,22 @@ export function Document({
     [editor],
   );
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFindSignal((n) => n + 1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   if (!editor) return null;
 
   return (
     <div className="relative" data-site-origin={siteOrigin}>
+      {findSignal > 0 && <FindBar editor={editor} focusSignal={findSignal} onClose={() => setFindSignal(0)} />}
       <BubbleMenu
         editor={editor}
         options={{ placement: "bottom-start", offset: 8 }}
