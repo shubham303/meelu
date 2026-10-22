@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { createProviders } from "../providers/index.js";
 import { JUDGE_BATCH, judgeBatch } from "./judge.js";
 import { morePlans, needsPlan, planBriefs } from "./plan.js";
-import { SCREEN_BATCH, screenBatch } from "./screen.js";
 import {
   createRun,
   fetchSetup,
@@ -12,10 +11,10 @@ import {
   patchRun,
   saveCandidates,
   saveJudged,
-  saveScreened,
   siteContextOf,
   startCollect,
   startEnrich,
+  startScreen,
 } from "./store.js";
 import { searchWeb } from "./web.js";
 
@@ -23,11 +22,12 @@ const LLM_CONCURRENCY = 5;
 const WEB_CONCURRENCY = 2;
 const ATTEMPTS = 2;
 const POLL_MS = 3000;
+const ALIVE_MS = 30_000;
 export const MAX_ROUNDS = 10;
 export const DEFAULT_TARGET = 20;
 export const MAX_TARGET = 100;
 
-const PROGRESS_EVENTS = new Set(["round", "stage", "plan", "source", "screened", "enriched", "judged"]);
+const PROGRESS_EVENTS = new Set(["round", "stage", "plan", "source", "screened", "enriched", "judged", "problem"]);
 
 const running = new Map();
 const runningBySite = new Map();
@@ -131,9 +131,7 @@ async function withRetry(ctx, call) {
       lastError = err;
     }
   }
-  ctx.send("judge-error", {
-    message: lastError instanceof Error ? lastError.message : String(lastError),
-  });
+  ctx.problem(lastError instanceof Error ? lastError.message : String(lastError));
   return null;
 }
 
@@ -292,44 +290,38 @@ function batchesByBrief(leads, briefs, size, siteContext) {
   return out;
 }
 
-async function screenStage(briefs, siteContext, ctx) {
-  const { state, send, llm, siteId, cookieHeader } = ctx;
+async function jobStats(runId, key, ctx) {
+  const { state, siteId, cookieHeader } = ctx;
+  while (true) {
+    const run = await until(state, getRun(siteId, runId, cookieHeader));
+    const stats = run?.sourceStats?.[key];
+    if (stats && stats.status !== "running") return stats;
+    await until(state, sleep(POLL_MS));
+  }
+}
+
+async function screenStage(runId, ctx) {
+  const { state, send, siteId, cookieHeader } = ctx;
   send("stage", { stage: "screen" });
-  const candidates = await until(state, listLeads(siteId, "candidate", cookieHeader));
-  send("screened", { screened: 0, total: candidates.length, kept: 0 });
-  let screened = 0;
-  let kept = 0;
-  await pool(batchesByBrief(candidates, briefs, SCREEN_BATCH, siteContext), LLM_CONCURRENCY, async (batch) => {
-    guard(state);
-    const verdicts = await withRetry(ctx, () => screenBatch(batch.leads, batch.judgeCtx, llm));
-    if (!verdicts) return;
-    const saved = await until(state, saveScreened(siteId, verdicts, cookieHeader));
-    screened += verdicts.length;
-    kept += saved?.kept ?? 0;
-    send("screened", { screened, total: candidates.length, kept });
-  });
-  return kept;
+  await until(state, startScreen(siteId, runId, cookieHeader));
+  const stats = await jobStats(runId, "screen", ctx);
+  send("screened", { screened: stats.screened ?? 0, total: stats.total ?? 0, kept: stats.kept ?? 0 });
+  if (stats.error) ctx.problem(`Shortlisting: ${stats.error}`);
+  return stats.kept ?? 0;
 }
 
 async function enrichStage(runId, ctx) {
   const { state, send, siteId, cookieHeader } = ctx;
   send("stage", { stage: "enrich" });
   await until(state, startEnrich(siteId, runId, cookieHeader));
-  while (true) {
-    const run = await until(state, getRun(siteId, runId, cookieHeader));
-    const stats = run?.sourceStats?.enrich;
-    if (stats && stats.status !== "running") {
-      send("enriched", {
-        status: stats.status === "error" ? "error" : "done",
-        people: stats.people ?? 0,
-        fromVendor: stats.fromVendor ?? 0,
-        fromStore: stats.fromStore ?? 0,
-        ...(stats.error ? { error: stats.error } : {}),
-      });
-      return;
-    }
-    await until(state, sleep(POLL_MS));
-  }
+  const stats = await jobStats(runId, "enrich", ctx);
+  send("enriched", {
+    status: stats.status === "error" ? "error" : "done",
+    people: stats.people ?? 0,
+    fromVendor: stats.fromVendor ?? 0,
+    fromStore: stats.fromStore ?? 0,
+    ...(stats.error ? { error: stats.error } : {}),
+  });
 }
 
 async function judgeStage(briefs, siteContext, ctx) {
@@ -420,13 +412,22 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
     send(event, data);
   };
   const llm = { cookieHeader, siteId, purpose: "find_leads" };
-  const ctx = { state, send, llm, cookieHeader, siteId };
+  const problems = [];
+  const problem = (message) => {
+    if (problems.includes(message)) return;
+    problems.push(message);
+    send("problem", { message });
+  };
+  const ctx = { state, send, llm, cookieHeader, siteId, problem };
   let runId = null;
+  let alive = null;
   const counts = { shortlistedCount: 0, keptCount: 0 };
 
   const finishPatch = (status, extra = {}) => {
+    clearInterval(alive);
     if (!runId) return Promise.resolve();
-    return patchRun(siteId, runId, { status, ...counts, ...extra }, cookieHeader).catch(() => {});
+    const error = problems.length ? { error: problems.join(" · ") } : {};
+    return patchRun(siteId, runId, { status, ...counts, ...error, ...extra }, cookieHeader).catch(() => {});
   };
 
   try {
@@ -439,6 +440,9 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
     const siteContext = siteContextOf(setup.site);
     const run = await until(state, createRun(siteId, target, cookieHeader));
     runId = run?.id ?? null;
+    alive = setInterval(() => {
+      patchRun(siteId, runId, {}, cookieHeader).catch(() => {});
+    }, ALIVE_MS);
 
     const planned = await planStage(enabled, siteContext, ctx);
     const used = new Map();
@@ -452,7 +456,7 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
       send("round", { round, maxRounds: MAX_ROUNDS, kept: counts.keptCount, target });
       await until(state, patchRun(siteId, runId, { round, ...counts }, cookieHeader));
       found = await collectStage(roundBriefs, platforms, siteContext, runId, round, ctx);
-      counts.shortlistedCount += await screenStage(planned, siteContext, ctx);
+      counts.shortlistedCount += await screenStage(runId, ctx);
       await enrichStage(runId, ctx);
       counts.keptCount += await judgeStage(planned, siteContext, ctx);
       guard(state);
@@ -465,6 +469,7 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
       kept: counts.keptCount,
       target,
       rounds: round,
+      problems,
     });
   } catch (err) {
     if (err instanceof Stopped) {

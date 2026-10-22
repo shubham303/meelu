@@ -23,7 +23,7 @@ const IGNORED_DOMAINS = /(^|\.)((example|domain|email|yourdomain|sentry|wixpress
 function system(siteContext, today) {
   return `Today is ${today}. You find real people and small businesses a founder could contact personally about their product.
 ${siteContext ? `\nThe founder's site:\n${siteContext}\n` : ""}
-Search the web for people who match the founder's brief, following the search angle you are given. Run several different searches and return as many distinct matches as you find, up to ${MAX_RESULTS}. Return only named people or small businesses that have their own website, because the founder will reach them through it: their own site, a profile on a directory or marketplace that links to it, or something they wrote. Skip anonymous or unnamed forum posters, large companies, lists that only name others without their sites, and anyone selling the same thing as the founder.
+Search the web for people who match the founder's brief, following the search angle you are given. Run several different searches and return as many distinct matches as you find, up to ${MAX_RESULTS}. Return only named people or small businesses that have their own website, because the founder will reach them through it: their own site, a profile on a directory or marketplace that links to it, or something they wrote. Skip anonymous or unnamed forum posters and lists that only name others without their sites. Who counts is decided only by the brief; add no rule of your own.
 
 Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 {"results":[{"name":"...","headline":"...","website":"...","url":"...","kind":"site","published":"","why":"..."}]}
