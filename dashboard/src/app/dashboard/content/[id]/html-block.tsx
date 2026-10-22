@@ -37,6 +37,31 @@ export function htmlFromMarkdown(raw: string): string {
   return trimmed;
 }
 
+const TEXT_TAGS = new Set([
+  "a", "b", "strong", "i", "em", "code", "s", "del", "strike", "u", "br", "img",
+]);
+
+function loneHtmlElement(raw: string): string | null {
+  const html = htmlSnippet(raw);
+  if (!html) return null;
+  const body = new DOMParser().parseFromString(html, "text/html").body;
+  const nodes = Array.from(body.childNodes).filter(
+    (n) => n.nodeType !== 3 || (n.textContent ?? "").trim() !== "",
+  );
+  if (nodes.length !== 1 || nodes[0].nodeType !== 1) return null;
+  return TEXT_TAGS.has((nodes[0] as Element).tagName.toLowerCase()) ? null : html;
+}
+
+export function blockifyHtml(markdown: string): string {
+  return Lexer.lex(markdown)
+    .map((token) => {
+      if (token.type !== "paragraph") return token.raw;
+      const html = loneHtmlElement(token.raw);
+      return html ? token.raw.replace(html, htmlToMarkdown(html)) : token.raw;
+    })
+    .join("");
+}
+
 export const HtmlBlock = Node.create({
   name: "htmlBlock",
   group: "block",
