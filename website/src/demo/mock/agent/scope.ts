@@ -81,7 +81,6 @@ export const SCOPES: Record<string, ScopeDef> = {
       "create_keyword_clusters_from_search_console",
       "create_keyword_clusters_from_competitors",
       "add_keywords_to_clusters",
-      "compute_metrics_for_cluster",
       "remove_keywords_from_cluster",
       "delete_keyword_clusters",
       "save_report",

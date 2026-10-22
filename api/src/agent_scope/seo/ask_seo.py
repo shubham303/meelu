@@ -5,7 +5,6 @@ from src.reports.tools import save_report, update_report
 from src.seo.keyword_clusters.models.seo_keyword_cluster import SeoKeywordCluster
 from src.seo.keyword_clusters.tools import (
     add_keywords_to_clusters,
-    compute_metrics_for_cluster,
     create_keyword_clusters_from_competitors,
     create_keyword_clusters_from_search_console,
     create_keyword_clusters_from_seeds,
@@ -90,7 +89,6 @@ scope = AgentScope(
         create_keyword_clusters_from_search_console,
         create_keyword_clusters_from_competitors,
         add_keywords_to_clusters,
-        compute_metrics_for_cluster,
         remove_keywords_from_cluster,
         delete_keyword_clusters,
         save_report,

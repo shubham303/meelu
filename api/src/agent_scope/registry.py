@@ -53,7 +53,7 @@ DESK_NAMES = frozenset(scope.desk for scope in AGENT_SCOPES.values())
 DESK_BLURBS: dict[str, str] = {
     "profile": "The business profile record — who the user is, what they sell, voice and positioning; save or clear its fields.",
     "site": "The website record and site-wide technical issues — record one the audit missed, reject or restore one.",
-    "seo": "Keyword research and search competition — build keyword clusters and score how winnable they are (with intent and importance), read live and past Google results and search suggestions, track search volume, and curate competitors and backlink opportunities over Search Console and Analytics.",
+    "seo": "Keyword research and search competition — build keyword clusters (with intent and importance), read live and past Google results and search suggestions, track search volume, and curate competitors and backlink opportunities over Search Console and Analytics.",
     "pages": "The crawled page corpus — search pages by text or crawl facts.",
     "technical-seo": "The technical audit — open issues, turn-downs, reject or restore findings.",
     "content": "Web pages written for the site — create and revise pieces with their title, H1, meta description, slug and target keyword.",

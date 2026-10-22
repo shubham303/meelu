@@ -1,14 +1,12 @@
 import pytest
 
 from src.core.database import unit_of_work
-from src.providers.registry import Caller, VendorResponse
+from src.providers.registry import VendorResponse
 from src.providers.seo_data.dataforseo import ENDPOINTS, DataForSeoAdapter
 from src.providers.seo_data.service import seo_data
 from src.seo.keyword_clusters.repository import seo_keyword_clusters
 from src.seo.keyword_clusters.schemas import ClusterDraft
-from src.seo.keyword_clusters.service import keyword_cluster_service
 from src.seo.serp_results.poisoning import organic, rated, sibling_check, verdict
-from src.sites.service import site_service
 from tests.conftest import signup
 
 REAL = ["https://moz.com/ai", "https://ahrefs.com/ai", "https://semrush.com/ai"]
@@ -194,41 +192,3 @@ async def test_weak_results_out_of_line_with_the_cluster_are_poisoned(client, em
     )
     assert r.status_code == 200, r.text
     assert [q["endpoint"] for q in vendor.sent[4:]] == [ENDPOINTS["serp"]] * 3
-
-
-async def test_a_cluster_with_a_poisoned_results_page_is_not_scored(client, email, vendor):
-    await signup(client, email)
-    user_id = (await client.get("/api/auth/me")).json()["data"]["id"]
-    r = await client.post("/api/v1/sites", json={"domain": "example.com", "name": "Example"})
-    assert r.status_code == 201, r.text
-    site_id = r.json()["data"]["id"]
-    async with unit_of_work() as db:
-        [saved] = await seo_keyword_clusters.upsert_many(
-            db,
-            user_id,
-            site_id,
-            [
-                ClusterDraft(
-                    main_keyword="seo with ai",
-                    keywords=["seo with ai", "ai seo", "ai seo tools"],
-                    core_keyword=None,
-                    seeds=["seo with ai"],
-                    location_code=2840,
-                    language_code="en",
-                    volume=500,
-                )
-            ],
-        )
-    async with unit_of_work() as db:
-        site = await site_service.get(db, user_id, site_id)
-        computed = await keyword_cluster_service.compute_metrics(
-            db, Caller(user_id=user_id, site_id=site_id), site, [saved.id]
-        )
-
-    assert (computed.computed, computed.failed, computed.poisoned) == (0, [], ["seo with ai"])
-    r = await client.get("/api/v1/site/seo/clusters")
-    [cluster] = r.json()["data"]
-    assert cluster["serpVerdict"] == "poisoned"
-    assert "winnability" not in cluster
-    assert cluster["climb"] == []
-    assert cluster["metricsAt"]

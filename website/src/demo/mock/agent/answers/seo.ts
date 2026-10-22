@@ -198,7 +198,7 @@ function longTailFollowUp(ctx: Ctx): Script {
     "Commercial and transactional first, as asked. Two of the questions had no measurable volume and are left out.",
   );
   ctx.memory.pending = () => [
-    clusterWrite("seeds", kw, `Saved the 6 clusters for **${kw}**. They are on the SEO screen, not scored yet.`),
+    clusterWrite("seeds", kw, `Saved the 6 clusters for **${kw}**. They are on the SEO screen.`),
   ];
   return [tool("get_search_suggestions"), tool("get_serp_results"), tool("seo_trend"), text(lines(answer, "", "Say **yes** to save these as keyword clusters (about $0.10 of vendor credit), or tell me which to drop."))];
 }
@@ -206,7 +206,7 @@ function longTailFollowUp(ctx: Ctx): Script {
 function seedIdeasFollowUp(ctx: Ctx): Script {
   const kw = topicFrom(ctx.message).toLowerCase();
   ctx.memory.pending = () => [
-    clusterWrite("seeds", kw, `Saved them. **${kw}** now has 11 clusters on the SEO screen; score them when you want to see which are winnable.`),
+    clusterWrite("seeds", kw, `Saved them. **${kw}** now has 11 clusters on the SEO screen.`),
   ];
   return [
     tool("seo_ranked_keywords"),
@@ -251,7 +251,7 @@ function matchCompetitorFollowUp(ctx: Ctx): Script {
         `| retainer agreement | 1,000 | none | New page | ${link("/templates/quote")} |`,
         `| mileage deduction rate | 6,600 | ${link("/blog/deductible-expenses-freelancers")} | New page — a section will not hold it | ${link("/blog/deductible-expenses-freelancers")} |`,
         "",
-        "These are suggestions; which to write is yours. Say **yes** to save the 10 as keyword clusters so you can score them.",
+        "These are suggestions; which to write is yours. Say **yes** to save the 10 as keyword clusters.",
       ),
     ),
   ];
@@ -306,37 +306,6 @@ function topicPlanQuestions(ctx: Ctx): Script {
   ];
 }
 
-function scoreClusters(): Script {
-  return [
-    tool("run_sql"),
-    {
-      kind: "write",
-      tool: "compute_metrics_for_cluster",
-      input: { clusters: 6 },
-      apply: () => {
-        for (const c of call<Array<{ id: string }>>("GET", "/api/v1/site/seo/clusters?scored=false&page_size=6") ?? []) {
-          call("POST", `/api/v1/site/seo/clusters/${c.id}/metrics`);
-        }
-      },
-      after: lines(
-        "Scored the 6 unscored clusters, most searched first. The best to target now, by winnability then volume:",
-        "",
-        "| Cluster | Searches/mo | Winnable | Where you stand |",
-        "|---|---|---|---|",
-        "| invoice payment terms | 3,600 | 78 | /blog/invoice-payment-terms at 12 |",
-        "| freelance hourly rate calculator | 1,900 | 74 | your tool at 5 |",
-        "| late payment reminder email | 2,900 | 69 | your template at 6 |",
-        "| freshbooks alternative | 2,400 | 66 | /compare/freshbooks at 6 |",
-        "",
-        "**receipt scanner app** got no score: Google served fake-looking results for it to the rank tracker, so its vendor data is not trustworthy. Check it by hand before planning anything there.",
-        "",
-        "What the score cannot see is content quality. Which to pursue is yours to decide.",
-      ),
-      declined: "Not scored — no vendor credit spent.",
-    },
-  ];
-}
-
 function buildClustersFollowUp(ctx: Ctx): Script {
   const topic = topicFrom(ctx.message).toLowerCase();
   const seeds = [`${topic}`, `${topic} for freelancers`, `${topic} software`, `how to ${topic}`, `${topic} template`];
@@ -349,7 +318,7 @@ function buildClustersFollowUp(ctx: Ctx): Script {
         "",
         `Biggest by monthly searches: **${topic}** (8,100), **${topic} for freelancers** (2,400), **best ${topic} app** (1,900).`,
         "",
-        "They are on the SEO screen. Score them when you want to see which are winnable — I have not planned any.",
+        "They are on the SEO screen. I have not planned any.",
       ),
     ),
   ];
@@ -495,26 +464,6 @@ function clusterChip(ctx: Ctx): Script | null {
       ),
     ];
   }
-  if (l.includes("explain the winnability score")) {
-    return [
-      tool("seo_relevant_pages"),
-      text(
-        lines(
-          `Winnability for **${kw}**, result by result above you:`,
-          "",
-          "| # | Result | Their link strength vs yours | Serves the search? | Chance to pass |",
-          "|---|---|---|---|---|",
-          "| 1 | freshbooks.com guide | Much stronger | Yes | Low |",
-          "| 2 | investopedia.com | Much stronger | Partly — a definition | Low |",
-          "| 3 | reddit.com thread | Weaker | Partly | **High** |",
-          "| 4 | smallbizhub blog | Weaker | Yes, but 2021 | **High** |",
-          "| 5 | a bank's product page | Similar | No | **High** |",
-          "",
-          "Three of five are passable, which is where the score comes from. It cannot see content quality — if your page is not better than #4, the score means nothing.",
-        ),
-      ),
-    ];
-  }
   if (l.includes("existing page of this website could own")) {
     return [
       tool("run_sql"),
@@ -545,7 +494,7 @@ function trackMainKeywords(ctx: Ctx): Script {
       declined: "Not tracked — no credit spent.",
     },
   ];
-  return [tool("run_sql"), text(`${kws.length} clusters have a winnability of 50 or more, so that is ${kws.length} main keywords. Recording their search volume costs about $0.05 per market. Say **yes** to start.`)];
+  return [tool("run_sql"), text(`${kws.length} clusters are marked hot or warm, so that is ${kws.length} main keywords. Recording their search volume costs about $0.05 per market. Say **yes** to start.`)];
 }
 
 function movers(): Script {
@@ -613,7 +562,6 @@ export function seoAnswer(ctx: Ctx): Script | null {
     ctx.memory.awaiting = topicPlanQuestions;
     return [text("Which topic? A few words is enough — for example \"freelance taxes\".")];
   }
-  if (l.includes("score my keyword clusters that have no score yet")) return scoreClusters();
   if (l.includes("choose a handful of seed keywords")) {
     ctx.memory.awaiting = buildClustersFollowUp;
     return [text("Which topic? A few words is enough — for example \"recurring invoices\" or \"self-employed tax\".")];
@@ -625,7 +573,7 @@ export function seoAnswer(ctx: Ctx): Script | null {
         "",
         "Biggest by monthly searches: **invoice template** (22,000), **freelance tax deductions** (9,900), **quickbooks alternative** (6,600), **invoice payment terms** (4,400).",
         "",
-        "They are on the SEO screen now. None is a recommendation yet — score them when you want to see which are winnable.",
+        "They are on the SEO screen now. None is a recommendation yet.",
       )),
     ];
     return [tool("run_sql"), text("2,140 Search Console queries have impressions in the last 28 days. Clustering them spends about $0.60 of vendor credit. Say **yes** to build the clusters.")];

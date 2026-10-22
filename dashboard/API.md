@@ -255,7 +255,6 @@ The SEO desk: the website's SEO lists, keyword clusters and tracked rankings.
 | POST | `/site/seo/{name}/remove` | Remove items from that list. |
 | GET | `/site/seo/clusters` | List keyword clusters. |
 | GET, DELETE | `/site/seo/clusters/{cluster_id}` | Get or delete a cluster. |
-| POST | `/site/seo/clusters/{cluster_id}/metrics` | Score the cluster again. |
 | GET | `/site/seo/tracked` | Tracked keywords overview. |
 | POST | `/site/seo/tracked/rankings` | Fetch and record current rankings. |
 

@@ -20,29 +20,13 @@ NOISE_SHARE_OF_CORE = 0.02
 
 LLM_BATCH = 25
 
-RELEVANCE_BATCH = 100
+RELEVANCE_BATCH = 25
 
-LLM_CONCURRENCY = 8
-
-TOP_N = 10
+LLM_CONCURRENCY = 16
 
 SERP_DEPTH = 30
 
 SERP_DEVICE = "desktop"
-
-PAGE_WEIGHT = 0.85
-
-MARGIN = 50.0
-
-SCALE = 50.0
-
-INTENT_FIT = {"full": 1.0, "partial": 0.5, "none": 0.0}
-
-MAX_METRICS_LIMIT = 50
-
-NO_CLUSTER_IDS = "Pass the ids of the clusters to score."
-
-TOO_MANY_CLUSTER_IDS = f"Score at most {MAX_METRICS_LIMIT} clusters at a time."
 
 CLUSTER_NOT_FOUND = "No such keyword cluster on this website."
 

@@ -6,16 +6,15 @@ from src.agent_scope.guides import render_guides
 from src.agent_scope.lib import AgentScope, SiteRef
 from src.agent_scope.registry import (
     AGENT_SCOPES,
-    WORKSPACE,
     DESK_BLURBS,
     LOADABLE_DESKS,
+    WORKSPACE,
     desk_addition,
 )
 from src.agent_scope.schemas import AgentScopeResponse, DeskOffer
 from src.connected_apps.catalog import DESKS as ACCOUNT_DESKS
 from src.core.orm import Base
 from src.sites.repository import sites
-
 
 ACCOUNTS_PROMPT = """
 
