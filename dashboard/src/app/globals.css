@@ -192,3 +192,11 @@ body {
 .piece-doc[contenteditable="false"] a {
   cursor: pointer;
 }
+.find-mark {
+  background: color-mix(in srgb, var(--color-warn) 25%, transparent);
+  border-radius: 2px;
+}
+.find-mark-active {
+  background: color-mix(in srgb, var(--color-warn) 55%, transparent);
+  outline: 1px solid var(--color-warn);
+}
