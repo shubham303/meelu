@@ -111,7 +111,13 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
         }
 
     async def complete(
-        self, system: str, user: str, name: str, schema: dict[str, Any], timeout_s: float
+        self,
+        system: str,
+        user: str,
+        name: str,
+        schema: dict[str, Any],
+        timeout_s: float,
+        reasoning: bool,
     ) -> Any:
         return await vendor_request(
             self.id,
@@ -130,13 +136,19 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
                     "json_schema": {"name": name, "strict": True, "schema": schema},
                 },
                 "usage": {"include": True},
+                "reasoning": {"enabled": reasoning},
             },
             timeout_s=timeout_s,
         )
 
     async def decide(self, state: Any, questions: dict[str, Question]) -> VendorResponse:
         body = await self.complete(
-            SYSTEM_PROMPT, user_prompt(state, questions), "answers", answer_schema(questions), 120
+            SYSTEM_PROMPT,
+            user_prompt(state, questions),
+            "answers",
+            answer_schema(questions),
+            120,
+            reasoning=False,
         )
         answers = read_answers(self.id, body, questions)
         return VendorResponse(
@@ -151,6 +163,7 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
             "result",
             schema,
             300,
+            reasoning=True,
         )
         return VendorResponse(
             {"model": body.get("model"), "result": read_json(self.id, body)},
