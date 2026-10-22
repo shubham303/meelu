@@ -64,7 +64,7 @@ export default async function BlogPost({ params }: PageProps<"/blog/[slug]">) {
         <p className="mt-4 text-lg text-sub text-pretty">{post.description}</p>
       </header>
       <div
-        className="prose mt-10 max-w-none prose-headings:font-display prose-headings:tracking-tight prose-headings:text-ink prose-p:text-ink/90 prose-a:text-accent prose-strong:text-ink prose-li:text-ink/90 prose-img:rounded-xl prose-img:border prose-img:border-edge prose-img:bg-panel prose-code:text-ink prose-pre:border prose-pre:border-edge prose-pre:bg-panel prose-pre:text-ink prose-blockquote:border-l-accent prose-blockquote:text-sub prose-th:text-ink prose-td:text-ink/90"
+        className="prose mt-10 max-w-none prose-headings:font-display prose-headings:tracking-tight prose-headings:text-ink prose-p:text-ink/90 prose-a:text-accent prose-strong:text-ink prose-li:text-ink/90 prose-img:rounded-xl prose-img:border prose-img:border-edge prose-img:bg-panel prose-code:text-ink prose-pre:border prose-pre:border-edge prose-pre:bg-panel prose-pre:text-ink prose-blockquote:border-l-accent prose-blockquote:text-sub prose-th:text-ink prose-td:text-ink/90 [&_[data-meelu-html]]:my-8 [&_[data-meelu-html]_svg]:h-auto [&_[data-meelu-html]_svg]:w-full"
         dangerouslySetInnerHTML={{ __html: post.html }}
       />
 
