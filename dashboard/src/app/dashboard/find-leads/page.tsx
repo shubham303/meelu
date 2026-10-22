@@ -272,6 +272,7 @@ export default function FindLeadsPage() {
           shortlisted: m.event === "done" ? n(d.shortlisted) : (prev.screened?.kept ?? 0),
           kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
           failed,
+          problems: prev.problems,
         });
       }
       jobRef.current = null;
@@ -368,6 +369,7 @@ export default function FindLeadsPage() {
         {lastRun.shortlistedCount} shortlisted →{" "}
         <strong className="font-semibold text-ink">{lastRun.keptCount} worth contacting</strong>
         {lastRun.status !== "done" && lastRun.status !== "running" ? ` · ${lastRun.status}` : ""}
+        {lastRun.error && lastRun.status !== "running" ? ` · ${lastRun.error}` : ""}
         {Object.keys(lastRun.sourceStats).some((k) => k.startsWith("posts:")) && ` · Post authors ${lastTotals.posts}`}
         {lastRun.sourceStats.linkedin && ` · LinkedIn ${lastTotals.linkedin}`}
         {lastRun.sourceStats.web && ` · Web ${lastTotals.web}`}

@@ -3,6 +3,7 @@ import { apiFetch } from "../net.js";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 40;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
   const headers = {
@@ -14,6 +15,7 @@ function api(path, { method = "GET", body, siteId, cookieHeader } = {}) {
     method,
     headers,
     ...(body ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   }).then(async (res) => {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -66,6 +68,10 @@ export function startCollect(siteId, runId, request, cookieHeader) {
   });
 }
 
+export function startScreen(siteId, runId, cookieHeader) {
+  return api(`/find-leads/runs/${runId}/screen`, { method: "POST", body: {}, siteId, cookieHeader });
+}
+
 export function startEnrich(siteId, runId, cookieHeader) {
   return api(`/find-leads/runs/${runId}/enrich`, { method: "POST", body: {}, siteId, cookieHeader });
 }
@@ -78,11 +84,6 @@ export function saveCandidates(siteId, runId, leads, cookieHeader) {
     siteId,
     cookieHeader,
   });
-}
-
-export function saveScreened(siteId, leads, cookieHeader) {
-  if (leads.length === 0) return Promise.resolve({ kept: 0, removed: 0 });
-  return api("/find-leads/leads/screened", { method: "POST", body: { leads }, siteId, cookieHeader });
 }
 
 export function saveJudged(siteId, leads, cookieHeader) {

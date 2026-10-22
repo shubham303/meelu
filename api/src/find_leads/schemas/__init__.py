@@ -115,15 +115,6 @@ class CandidatesRequest(RequestModel):
     leads: list[CandidateItem]
 
 
-class ScreenVerdict(RequestModel):
-    id: str
-    keep: bool
-
-
-class ScreenRequest(RequestModel):
-    leads: list[ScreenVerdict]
-
-
 class JudgeVerdict(RequestModel):
     id: str
     keep: bool

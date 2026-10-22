@@ -11,6 +11,7 @@ export interface RunOutcome {
   shortlisted: number;
   kept: number;
   failed: string[];
+  problems: string[];
 }
 
 function Notice({
@@ -150,6 +151,13 @@ export function RunResult({
     <div className="space-y-2.5">
       {main}
       {failures}
+      {outcome.problems.length > 0 && (
+        <Notice
+          tone="bad"
+          title="Some people were not checked this run."
+          hint={`${outcome.problems.join(" · ")} They stay in the queue and are checked again next run.`}
+        />
+      )}
     </div>
   );
 }

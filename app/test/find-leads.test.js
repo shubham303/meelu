@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { itemsOf, judgeVerdicts } from "../src/main/find-leads/judge.js";
 import { needsPlan, plansByBrief } from "../src/main/find-leads/plan.js";
-import { screenVerdicts } from "../src/main/find-leads/screen.js";
 import { candidateOf, contactPages, emailIn, webResults } from "../src/main/find-leads/web.js";
 
 test("a brief needs a plan only for the sources it uses", () => {
@@ -47,18 +46,6 @@ test("plans keep two cleaned keywords and a tidy linkedin search per known brief
     },
   });
   assert.deepEqual(out.get("c"), { keywords: ["x y", "z w"] });
-});
-
-test("screen verdicts skip unanswered or malformed results", () => {
-  const leads = [{ id: "l0" }, { id: "l1" }, { id: "l2" }];
-  const out = screenVerdicts(
-    { results: [{ i: 0, keep: true }, { i: 1, keep: "yes" }, { i: 2, keep: false }, { i: 9, keep: true }] },
-    leads,
-  );
-  assert.deepEqual(out, [
-    { id: "l0", keep: true },
-    { id: "l2", keep: false },
-  ]);
 });
 
 test("judge verdicts map evidence numbers to the lead's own items", () => {
