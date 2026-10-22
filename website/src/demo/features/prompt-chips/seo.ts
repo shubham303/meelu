@@ -147,15 +147,6 @@ export function cluster(mainKeyword: string): PromptChip[] {
       ].join(" "),
     },
     {
-      label: "Why is this winnable?",
-      blurb: "Walk through the results above and say which ones a good page can pass.",
-      prompt: [
-        `Explain the winnability score of the keyword cluster "${mainKeyword}".`,
-        "Walk through the results above us one by one: their link strength against ours, whether they serve the search well, and the chance of passing each.",
-        "Say plainly what the score cannot see, such as content quality.",
-      ].join(" "),
-    },
-    {
       label: "Is a page of mine close?",
       blurb: "Check whether an existing page could be edited to own this instead.",
       prompt: [
@@ -212,7 +203,7 @@ export function tracked(): PromptChip[] {
       label: "Track my main keywords",
       blurb: "Start tracking the main keyword of every cluster you plan to target.",
       prompt: [
-        "Start tracking search volume for the main keyword of every keyword cluster with a winnability of 50 or more.",
+        "Start tracking search volume for the main keyword of every keyword cluster marked hot or warm.",
         "Tell me how many keywords that is before you start, since tracking spends vendor credit.",
       ].join(" "),
     },

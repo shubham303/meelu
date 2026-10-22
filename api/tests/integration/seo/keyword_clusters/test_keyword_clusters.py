@@ -4,12 +4,10 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import delete
 
 from src.core.database import unit_of_work
 from src.providers.json_data_extractor.adapter import DECIDE, JsonDataExtractorAdapter
 from src.providers.json_data_extractor.service import json_data_extractor
-from src.providers.models.provider_cache import ProviderCache
 from src.providers.registry import Caller, VendorResponse
 from src.providers.seo_data.dataforseo import ENDPOINTS, DataForSeoAdapter
 from src.providers.seo_data.service import seo_data
@@ -43,29 +41,9 @@ def envelope(items: list[dict]) -> dict:
     }
 
 
-def serp(results: list[tuple[str, str]]) -> dict:
-    items = [
-        {
-            "type": "organic",
-            "rank_group": seat,
-            "url": url,
-            "domain": url.split("/")[2],
-            "title": title,
-        }
-        for seat, (url, title) in enumerate(results, start=1)
-    ]
-    return {
-        "status_code": 20000,
-        "cost": 0.002,
-        "tasks": [{"status_code": 20000, "cost": 0.002, "result": [{"items": items}]}],
-    }
-
-
 class FakeDataForSeo(DataForSeoAdapter):
     def __init__(self):
         self.sent: list[dict] = []
-        self.serp_results: list[tuple[str, str]] = []
-        self.ranks: dict[str, tuple[int, int]] = {}
         self.competitor_keywords: list[str] = []
 
     def configured(self) -> bool:
@@ -107,16 +85,6 @@ class FakeDataForSeo(DataForSeoAdapter):
                     for k in self.competitor_keywords
                 ]
             )
-        elif endpoint == ENDPOINTS["serp"]:
-            body = serp(self.serp_results)
-        elif endpoint == ENDPOINTS["bulk_pages_summary"]:
-            body = envelope(
-                [
-                    {"url": url, "rank": self.ranks[url][0], "main_domain_rank": self.ranks[url][1]}
-                    for url in task["targets"]
-                    if url in self.ranks
-                ]
-            )
         else:
             raise AssertionError(endpoint)
         return VendorResponse(body, 10_000)
@@ -143,8 +111,7 @@ class FakeJudge(JsonDataExtractorAdapter):
                 asked = re.findall(r'"([^"]+)"', text)[0]
                 pick = "yes" if asked.startswith("best ") else "no"
             else:
-                seat = int(re.findall(r"result (\d+)", text)[0]) - 1
-                pick = "none" if "Login" in (state[f"result {seat + 1}"]["title"] or "") else "full"
+                raise AssertionError(text)
             answers[key] = {"type": "choice", "choice": pick, "confidence": 0.9}
         return VendorResponse({"model": "fake", "answers": answers}, 100)
 
@@ -233,7 +200,6 @@ async def test_relevance_then_noise_then_same_results_split(client, email, vendo
     assert cluster["keywords"] == ["espresso machine", "best espresso machine"]
     assert cluster["coreKeyword"] == "espresso machine"
     assert cluster["isRanked"] is True
-    assert cluster["competitors"] == []
     labels = {
         main: (c["intent"], c["importance"], c["isBrandKeyword"])
         for main, c in (await clusters_by_main(client)).items()
@@ -249,90 +215,6 @@ async def test_relevance_then_noise_then_same_results_split(client, email, vendo
 async def test_a_hard_minimum_replaces_the_relative_floor(client, email, vendor):
     user_id, site, caller = await make_site(client, email)
     assert await create(user_id, site, caller, min_volume=1000) == ["espresso machine"]
-
-
-def rival(seat: int, tag: str) -> str:
-    return f"https://{tag}{seat}.com/espresso"
-
-
-async def score(client, email, vendor, rival_rank: int, our_domain_rank: int, tag: str):
-    user_id, site, caller = await make_site(client, email)
-    await search_console(client, ["best espresso machine"])
-    await create(user_id, site, caller, min_volume=1000)
-    ids = await cluster_ids(client)
-    vendor.serp_results = [
-        (rival(s, tag), "Login" if s == 3 else f"Guide {s}") for s in range(1, 11)
-    ]
-    vendor.ranks = {rival(s, tag): (rival_rank, rival_rank) for s in range(1, 11)}
-    vendor.ranks["https://example.com/"] = (0, our_domain_rank)
-    async with unit_of_work() as db:
-        await db.execute(delete(ProviderCache).where(ProviderCache.capability == "serp.organic"))
-    async with unit_of_work() as db:
-        computed = await asyncio.wait_for(
-            keyword_cluster_service.compute_metrics(db, caller, site, ids),
-            timeout=30,
-        )
-    assert computed.computed == 1 and computed.failed == [] and computed.poisoned == []
-    r = await client.get("/api/v1/site/seo/clusters")
-    return r.json()["data"][0]
-
-
-async def test_strong_results_above_a_new_page_are_hard_to_win(client, email, vendor):
-    cluster = await score(client, email, vendor, rival_rank=500, our_domain_rank=100, tag="strong")
-    assert "ourPosition" not in cluster
-    assert cluster["likelyPosition"] == 11
-    assert cluster["winnability"] < 5
-    r = await client.get("/api/v1/site/seo/clusters", params={"ranked": False})
-    assert r.json()["data"] == []
-    assert cluster["isRanked"] is True
-    r = await client.post(f"/api/v1/site/seo/clusters/{cluster['id']}/metrics")
-    assert r.status_code == 200, r.text
-    assert r.json()["data"]["winnability"] == cluster["winnability"]
-    login = next(c for c in cluster["climb"] if c["position"] == 3)
-    assert login["intentFit"] == 0.0 and login["passChance"] == 1.0
-    assert cluster["intentFit"] == pytest.approx(0.9)
-
-
-async def test_weak_results_above_a_strong_domain_are_winnable(client, email, vendor):
-    cluster = await score(client, email, vendor, rival_rank=60, our_domain_rank=1000, tag="weak")
-    assert cluster["winnability"] > 70
-    assert cluster["likelyPosition"] <= 3
-
-
-async def test_clusters_scored_together_share_one_page_rank_request(client, email, vendor):
-    user_id, site, caller = await make_site(client, email)
-    assert len(await create(user_id, site, caller)) == 2
-    ids = await cluster_ids(client)
-    vendor.serp_results = [(rival(s, "shared"), f"Guide {s}") for s in range(1, 11)]
-    vendor.ranks = {rival(s, "shared"): (60, 60) for s in range(1, 11)}
-    async with unit_of_work() as db:
-        await db.execute(
-            delete(ProviderCache).where(
-                ProviderCache.capability.in_(["serp.organic", "backlinks.pages_summary"])
-            )
-        )
-    vendor.sent.clear()
-
-    async with unit_of_work() as db:
-        computed = await asyncio.wait_for(
-            keyword_cluster_service.compute_metrics(db, caller, site, ids),
-            timeout=30,
-        )
-
-    assert computed.computed == 2
-    summaries = [q for q in vendor.sent if q["endpoint"] == ENDPOINTS["bulk_pages_summary"]]
-    assert len(summaries) == 1
-    assert "https://example.com/" in summaries[0]["task"]["targets"]
-
-
-async def test_scoring_needs_explicit_cluster_ids(client, email):
-    _, site, caller = await make_site(client, email)
-    async with unit_of_work() as db:
-        with pytest.raises(HTTPException) as empty:
-            await keyword_cluster_service.compute_metrics(db, caller, site, [])
-        with pytest.raises(HTTPException) as many:
-            await keyword_cluster_service.compute_metrics(db, caller, site, ["x"] * 51)
-    assert empty.value.status_code == 422 and many.value.status_code == 422
 
 
 async def clusters_by_main(client) -> dict[str, dict]:
