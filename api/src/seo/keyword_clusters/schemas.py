@@ -21,7 +21,6 @@ from src.seo.keyword_clusters.constants import (
     SearchIntent,
 )
 from src.seo.market import country_of
-from src.seo.serp_results.constants import Verdict
 
 
 def normalize_keyword(raw: Any) -> str:
@@ -94,32 +93,6 @@ class ClusterDraft(BaseModel):
     is_brand_keyword: bool | None = None
 
 
-class Competitor(BaseModel):
-    position: int
-    url: str
-    domain: str
-    title: str | None = None
-    page_rank: int | None = None
-    domain_rank: int | None = None
-    strength: float
-    smoothed_strength: float
-    intent_fit: float
-    pass_chance: float
-
-
-class ClusterMetrics(BaseModel):
-    winnability: float
-    p_top_three: float
-    p_page_one: float
-    likely_position: int
-    our_position: int | None
-    our_url: str | None
-    our_strength: float
-    intent_fit: float | None
-    serp_verdict: Verdict
-    climb: list[dict[str, Any]]
-
-
 class ClusterRecord(EntityModel):
     id: str
     site_id: str
@@ -133,19 +106,7 @@ class ClusterRecord(EntityModel):
     intent: SearchIntent | None = None
     importance: Importance | None = None
     is_brand_keyword: bool | None = None
-    winnability: float | None = None
-    p_top_three: float | None = None
-    p_page_one: float | None = None
-    likely_position: int | None = None
-    our_position: int | None = None
-    our_url: str | None = None
-    our_strength: float | None = None
-    intent_fit: float | None = None
-    serp_verdict: Verdict | None = None
     is_ranked: bool
-    competitors: list[str]
-    climb: list[Any]
-    metrics_at: JsDateTime | None = None
     created_at: JsDateTime
     updated_at: JsDateTime
 
@@ -153,14 +114,6 @@ class ClusterRecord(EntityModel):
     @property
     def country(self) -> str | None:
         return country_of(self.location_code)
-
-
-class ClusterBrief(EntityModel):
-    id: str
-    main_keyword: str
-    size: int
-    volume: int
-    winnability: float | None = None
 
 
 class ClusterDeleted(EntityModel):
@@ -198,15 +151,7 @@ class ClustersDeleted(EntityModel):
     unclustered_keywords: list[str]
 
 
-class MetricsComputed(EntityModel):
-    computed: int
-    failed: list[str]
-    poisoned: list[str]
-    clusters: list[ClusterBrief]
-
-
 class ClusterFilters(RequestModel):
     search: str | None = None
     min_volume: int | None = None
-    scored: bool | None = None
     ranked: bool | None = None

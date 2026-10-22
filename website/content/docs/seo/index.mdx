@@ -16,11 +16,11 @@ Meelu reads this evidence, points at the best openings and explains why. You dec
 ## The screens
 
 <Cards>
-  <Card title="SEO home" href="/docs/seo#the-seo-home-screen" description="Keyword clusters ranked by winnability, plus a summary of every other screen." />
+  <Card title="SEO home" href="/docs/seo#the-seo-home-screen" description="Keyword clusters by search demand, plus a summary of every other screen." />
   <Card title="Search performance" href="/docs/seo/search-performance" description="Clicks, impressions, CTR and position from Search Console." />
   <Card title="Indexation" href="/docs/seo/indexation" description="Which of your pages Google actually holds in its index." />
   <Card title="Traffic" href="/docs/seo/traffic" description="Sessions, channels, landing pages and key events from Google Analytics." />
-  <Card title="Keyword clusters" href="/docs/seo/keyword-clusters" description="Groups of searches one page can win, and how winnable each is." />
+  <Card title="Keyword clusters" href="/docs/seo/keyword-clusters" description="Groups of searches one page can win, and who searches them." />
   <Card title="Tracked keywords" href="/docs/seo/tracked-keywords" description="Your rank and monthly search demand over twelve months." />
   <Card title="Competitors" href="/docs/seo/competitors" description="The domains that chase the same searchers as you." />
   <Card title="Backlink opportunities" href="/docs/seo/backlinks" description="Sites that link to your competitors but not to you." />
@@ -37,15 +37,15 @@ Open **SEO** in the sidebar. The top of the screen shows your **Market** badge. 
   width={1280}
   height={1100}
   caption="The SEO home screen."
-  markers={[{ x: 95.3, y: 5.5, label: "Ask Meelu" }, { x: 71.2, y: 89.1, label: "Plan a page for a cluster" }, { x: 63.1, y: 273.1, label: "Score the clusters not scored yet" }, { x: 72.9, y: 46.1, label: "Save a prompt of your own" }]}
+  markers={[{ x: 95.3, y: 5.5, label: "Ask Meelu" }, { x: 71.2, y: 89.1, label: "Plan a page for a cluster" }, { x: 72.9, y: 46.1, label: "Save a prompt of your own" }]}
 />
 
 Below the header you see four summary cards:
 
 | Card | What it shows |
 | --- | --- |
-| **Clusters** | How many keyword clusters you have, and how many are scored or still waiting. |
-| **Best odds** | The winnability score of your most winnable cluster. Click it to open that cluster. |
+| **Clusters** | How many keyword clusters you have, and how many of them you already rank for. |
+| **Biggest cluster** | The monthly searches of your most searched cluster. Click it to open that cluster. |
 | **Search clicks · 28d** | Clicks from Google in the last 28 days, and the change from the 28 days before. Click it to open Search performance. |
 | **Tracked keywords** | How many keywords you track, and how many moved in Search Console position since last month. Click it to open Tracked keywords. |
 
@@ -65,9 +65,8 @@ On the right, four cards link to the other screens:
 | **Ask Meelu** (sparkle icon, top right) | Opens a task with Meelu about clusters, search performance, competitors or tracked keywords. Desktop app only. |
 | Task cards under **Start a task** | Start a ready-made task with one click. See [Asking the SEO desk](/docs/seo/asking-the-seo-desk). Desktop app only. |
 | **New prompt** under **Your prompts** | Save your own prompt as a card for this website. Desktop app only. |
-| **All**, **Scored**, **Not scored**, **We rank** | Filter the cluster table. |
+| **All**, **We rank**, **We don't rank** | Filter the cluster table. |
 | **Plan a page** (on a cluster row) | Asks Meelu to write a page brief for that cluster. Desktop app only. |
-| **Score them** (below the table) | Asks Meelu to score the clusters that have no score yet. Desktop app only. |
 
 <Callout type="info" title="Web dashboard and desktop app">
 The web dashboard and the desktop app show the same screens. Anything that runs Meelu, or that talks to your Google account, works only in the desktop app. That includes the Ask button, task cards, syncing Search Console and Analytics, and checking index status.
@@ -90,9 +89,6 @@ The web dashboard and the desktop app show the same screens. Anything that runs 
   </Accordion>
   <Accordion title="Search volume (searches per month)">
     An estimate of how many times people search a phrase in a month, in your market. It tells you how much demand there is, not how much of it you will get.
-  </Accordion>
-  <Accordion title="Keyword difficulty and winnability">
-    Many SEO tools give a keyword one "difficulty" number for everyone. Meelu shows **winnability** instead. It is a score from 0 to 100 for your site: it compares your strength with each page that ranks today and checks whether those pages really answer the search. See [Keyword clusters](/docs/seo/keyword-clusters).
   </Accordion>
   <Accordion title="Striking distance">
     A search where you already rank just outside the top ten, at about positions 8 to 15. A small push, such as better content or more internal links, can move it onto page one. These are often the fastest wins.

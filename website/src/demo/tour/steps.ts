@@ -120,7 +120,7 @@ export const TOUR_STEPS: TourStep[] = [
     path: `${D}/seo`,
     chapter: "The desks",
     title: "SEO: what to target next",
-    body: "Keyword clusters ranked by how winnable they are and how many people search them. Google sometimes serves fake results to rank trackers, so each results page is checked first and a poisoned one is not scored.",
+    body: "Keyword clusters: groups of searches one page can win, with how many people search them and how close those searchers are to what you offer.",
     target: { selector: `a[href="${D}/seo"]` },
   },
   {

@@ -103,18 +103,6 @@ export function opportunityDomains(): string[] {
   return opportunities().map((o) => o.domain);
 }
 
-function belongsTo(domain: string, owner: string): boolean {
-  return domain === owner || domain.endsWith(`.${owner}`);
-}
-
-function withCompetitors(cluster: KeywordCluster): KeywordCluster {
-  const serp = cluster.climb.map((r) => r.domain);
-  return {
-    ...cluster,
-    competitors: competitorDomains().filter((c) => serp.some((d) => belongsTo(d, c))),
-  };
-}
-
 function findCluster(id: string): KeywordCluster {
   const cluster = state.clusters.find((c) => c.id === id);
   if (!cluster) throw new MockHttpError(404, "No such keyword cluster on this website.");
@@ -131,33 +119,14 @@ function listClusters(q: URLSearchParams) {
   if (needle) rows = rows.filter((c) => c.mainKeyword.includes(needle) || c.keywords.join(" ").includes(needle));
   const minVolume = num(q.get("minVolume"));
   if (minVolume !== null) rows = rows.filter((c) => c.volume >= minVolume);
-  const scored = bool(q.get("scored"));
-  if (scored !== null) rows = rows.filter((c) => (c.metricsAt !== undefined) === scored);
   const ranked = bool(q.get("ranked"));
   if (ranked !== null) rows = rows.filter((c) => c.isRanked === ranked);
   rows.sort(
     (a, c) =>
-      (c.winnability ?? -1) - (a.winnability ?? -1) ||
       c.volume - a.volume ||
       a.mainKeyword.localeCompare(c.mainKeyword),
   );
-  return paginate(rows.map(withCompetitors), q);
-}
-
-function rescore(id: string): KeywordCluster {
-  const cluster = findCluster(id);
-  const seed = seo.CLUSTER_SEEDS.get(id);
-  if (!seed) throw new MockHttpError(404, "No such keyword cluster on this website.");
-  const stamp = now();
-  if (seed.verdict === "poisoned") {
-    const cleared = { ...cluster, metricsAt: stamp, updatedAt: stamp };
-    state.clusters = state.clusters.map((c) => (c.id === id ? cleared : c));
-    return withCompetitors(cleared);
-  }
-  const scored = { ...cluster, ...seo.scoreCluster(seed), serpVerdict: seo.verdictOf({ ...seed, scoredDaysAgo: 0 }), metricsAt: stamp, updatedAt: stamp };
-  if (scored.ourPosition !== undefined) scored.isRanked = true;
-  state.clusters = state.clusters.map((c) => (c.id === id ? scored : c));
-  return withCompetitors(scored);
+  return paginate(rows, q);
 }
 
 function siteMarkets(): Array<{ locationCode: number; languageCode: string; country: string }> {
@@ -409,8 +378,7 @@ export const ROUTES: Route[] = [
     ok(dismissOpportunities(cleanDomains(b(body, "domains"))))],
 
   ["GET", /^\/api\/v1\/site\/seo\/clusters$/, (_m, q) => listClusters(q)],
-  ["GET", /^\/api\/v1\/site\/seo\/clusters\/([^/]+)$/, (m) => ok(withCompetitors(findCluster(m[1])))],
-  ["POST", /^\/api\/v1\/site\/seo\/clusters\/([^/]+)\/metrics$/, (m) => ok(rescore(m[1]))],
+  ["GET", /^\/api\/v1\/site\/seo\/clusters\/([^/]+)$/, (m) => ok(findCluster(m[1]))],
   ["DELETE", /^\/api\/v1\/site\/seo\/clusters\/([^/]+)$/, (m) => {
     findCluster(m[1]);
     state.clusters = state.clusters.filter((c) => c.id !== m[1]);

@@ -33,16 +33,14 @@ import type {
   KeywordCluster,
   TrackedOverview,
 } from "./types";
-import { WinnabilityBar, position } from "./winnability";
 import { ImportanceBadge, IntentBadge } from "./signals";
 
-type Filter = "all" | "scored" | "unscored" | "ranked";
+type Filter = "all" | "ranked" | "unranked";
 
 const FILTERS: Array<{ key: Filter; label: string; query: string }> = [
   { key: "all", label: "All", query: "" },
-  { key: "scored", label: "Scored", query: "&scored=true" },
-  { key: "unscored", label: "Not scored", query: "&scored=false" },
   { key: "ranked", label: "We rank", query: "&ranked=true" },
+  { key: "unranked", label: "We don't rank", query: "&ranked=false" },
 ];
 
 const PAGE_SIZE = 25;
@@ -87,11 +85,8 @@ export default function SeoPage() {
   const { data: all } = usePagedApi<KeywordCluster>(
     "/api/v1/site/seo/clusters?page_size=1",
   );
-  const { data: unscored } = usePagedApi<KeywordCluster>(
-    "/api/v1/site/seo/clusters?page_size=1&scored=false",
-  );
-  const { data: best } = usePagedApi<KeywordCluster>(
-    "/api/v1/site/seo/clusters?page_size=1&scored=true",
+  const { data: ranked } = usePagedApi<KeywordCluster>(
+    "/api/v1/site/seo/clusters?page_size=1&ranked=true",
   );
   const { data: searchData } = useApi<SearchSummary>(
     "/api/v1/site/search-data",
@@ -109,15 +104,15 @@ export default function SeoPage() {
   if (clusters.data && page > lastPage) setPage(lastPage);
 
   const total = all?.pagination.total ?? 0;
-  const waiting = unscored?.pagination.total ?? 0;
-  const top = best?.data[0];
+  const rankedTotal = ranked?.pagination.total ?? 0;
+  const top = all?.data[0];
   const reload = () => void clusters.refresh();
 
   return (
     <PageEnter>
       <PageHeader
         title="SEO"
-        description="What to target next, ranked by how winnable it is and how many people search it."
+        description="What to target next, by how many people search it and who they are."
         actions={
           <div className="flex items-center gap-2">
             <Badge tone="neutral" className="px-3 py-1 text-xs">
@@ -150,7 +145,7 @@ export default function SeoPage() {
           value={total}
           hint={
             total
-              ? `${total - waiting} scored · ${waiting} waiting`
+              ? `you rank for ${rankedTotal}`
               : "none built yet"
           }
         />
@@ -159,11 +154,9 @@ export default function SeoPage() {
           className="block"
         >
           <StatCard
-            label="Best odds"
-            value={
-              top?.winnability !== undefined ? Math.round(top.winnability) : "—"
-            }
-            hint={top?.mainKeyword ?? "nothing scored yet"}
+            label="Biggest cluster"
+            value={top ? top.volume.toLocaleString() : "—"}
+            hint={top?.mainKeyword ?? "none built yet"}
           />
         </Link>
         <Link href="/dashboard/seo/search" className="block">
@@ -313,7 +306,6 @@ export default function SeoPage() {
               onPage={setPage}
             />
           )}
-          {waiting > 0 && <ClusterFooter waiting={waiting} />}
         </Card>
       </section>
     </PageEnter>
@@ -403,17 +395,15 @@ function ClusterTable({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[840px] border-collapse text-sm">
+      <table className="w-full min-w-[680px] border-collapse text-sm">
         <thead>
           <tr className="text-left text-xs uppercase tracking-wide text-sub">
             <th className="px-4 py-2.5 font-medium">Main keyword</th>
             <th className="px-3 py-2.5 font-medium">Importance</th>
             <th className="px-3 py-2.5 font-medium">Intent</th>
-            <th className="px-3 py-2.5 font-medium">Winnability</th>
             <th className="px-3 py-2.5 text-right font-medium">
               Searches / mo
             </th>
-            <th className="px-3 py-2.5 font-medium">Likely spot</th>
             <th className="px-3 py-2.5 font-medium">We rank</th>
             <th className="px-4 py-2.5">
               <span className="sr-only">Actions</span>
@@ -446,25 +436,11 @@ function ClusterTable({
               <td className="px-3 py-3">
                 <IntentBadge intent={c.intent} />
               </td>
-              <td className="px-3 py-3">
-                <WinnabilityBar
-                  score={c.winnability}
-                  poisoned={c.serpVerdict === "poisoned"}
-                />
-              </td>
               <td className="px-3 py-3 text-right tabular-nums">
                 {c.volume.toLocaleString()}
               </td>
               <td className="px-3 py-3 text-sub">
-                {position(c.likelyPosition)}
-              </td>
-              <td className="px-3 py-3 text-sub">
-                {c.ourPosition ? position(c.ourPosition) : c.isRanked ? "yes" : "—"}
-                {c.competitors.length > 0 && (
-                  <span className="block text-xs text-faint">
-                    {c.competitors.length} competitor{c.competitors.length === 1 ? "" : "s"}
-                  </span>
-                )}
+                {c.isRanked ? "yes" : "—"}
               </td>
               <td className="px-4 py-3">
                 <span className="flex items-center justify-end gap-1.5">
@@ -559,15 +535,6 @@ function ClusterPager({
       >
         <ChevronRight size={14} />
       </IconButton>
-    </div>
-  );
-}
-
-function ClusterFooter({ waiting }: { waiting: number }) {
-  return (
-    <div className="border-t border-edge px-4 py-3 text-xs text-sub">
-      Ranked by winnability, then monthly searches. {waiting} cluster
-      {waiting === 1 ? " is" : "s are"} not scored yet.
     </div>
   );
 }

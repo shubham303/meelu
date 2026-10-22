@@ -13,7 +13,6 @@ from src.seo.keyword_clusters.models.seo_keyword_cluster import SeoKeywordCluste
 from src.seo.keyword_clusters.schemas import (
     ClusterDraft,
     ClusterFilters,
-    ClusterMetrics,
     ClusterRecord,
 )
 
@@ -27,7 +26,6 @@ MERGED = {
 }
 
 RANKED = (
-    SeoKeywordCluster.winnability.desc().nulls_last(),
     SeoKeywordCluster.volume.desc(),
     SeoKeywordCluster.main_keyword,
 )
@@ -68,10 +66,6 @@ class KeywordClusterRepository:
             )
         if filters.min_volume is not None:
             query = query.where(SeoKeywordCluster.volume >= filters.min_volume)
-        if filters.scored is True:
-            query = query.where(SeoKeywordCluster.metrics_at.is_not(None))
-        if filters.scored is False:
-            query = query.where(SeoKeywordCluster.metrics_at.is_(None))
         if filters.ranked is not None:
             query = query.where(SeoKeywordCluster.is_ranked.is_(filters.ranked))
         return await PaginationService.paginate_query(
@@ -217,58 +211,6 @@ class KeywordClusterRepository:
             .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id.in_(cluster_ids))
             .values(is_ranked=True, updated_at=datetime.now(UTC))
         )
-
-    async def set_metrics(
-        self,
-        db: AsyncSession,
-        site_id: str,
-        cluster_id: str,
-        metrics: ClusterMetrics,
-        competitors: list[str],
-    ) -> ClusterRecord:
-        now = datetime.now(UTC)
-        ranked = {"is_ranked": True} if metrics.our_position is not None else {}
-        row = await db.scalar(
-            update(SeoKeywordCluster)
-            .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id == cluster_id)
-            .values(
-                **metrics.model_dump(),
-                **ranked,
-                competitors=competitors,
-                metrics_at=now,
-                updated_at=now,
-            )
-            .returning(SeoKeywordCluster)
-            .execution_options(populate_existing=True)
-        )
-        return ClusterRecord.model_validate(row)
-
-    async def clear_metrics(
-        self, db: AsyncSession, site_id: str, cluster_id: str, serp_verdict: str
-    ) -> ClusterRecord:
-        now = datetime.now(UTC)
-        row = await db.scalar(
-            update(SeoKeywordCluster)
-            .where(SeoKeywordCluster.site_id == site_id, SeoKeywordCluster.id == cluster_id)
-            .values(
-                winnability=None,
-                p_top_three=None,
-                p_page_one=None,
-                likely_position=None,
-                our_position=None,
-                our_url=None,
-                our_strength=None,
-                intent_fit=None,
-                serp_verdict=serp_verdict,
-                climb=[],
-                competitors=[],
-                metrics_at=now,
-                updated_at=now,
-            )
-            .returning(SeoKeywordCluster)
-            .execution_options(populate_existing=True)
-        )
-        return ClusterRecord.model_validate(row)
 
     async def set_members(
         self,

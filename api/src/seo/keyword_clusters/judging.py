@@ -5,7 +5,6 @@ from src.providers.json_data_extractor.adapter import Question, choice
 from src.providers.json_data_extractor.service import json_data_extractor
 from src.providers.registry import Caller
 from src.seo.keyword_clusters.constants import (
-    INTENT_FIT,
     LLM_BATCH,
     LLM_CONCURRENCY,
     RELEVANCE_BATCH,
@@ -38,12 +37,6 @@ IMPORTANCE = {
 BRAND = {
     "yes": "names a company, brand, product or website, this one or any other",
     "no": "a general search that names no company, brand, product or website",
-}
-
-FITS = {
-    "full": "the page is exactly what a person searching this wants, in the format they expect",
-    "partial": "the page touches the need but is broader, narrower, a different format or a different audience",
-    "none": "the page does not serve this search: a different meaning, a homepage, a login, an unrelated list",
 }
 
 
@@ -184,26 +177,3 @@ async def split_groups(
 
     split = await asyncio.gather(*(run(g, leaders) for g, leaders in groups))
     return [cluster for clusters in split for cluster in clusters]
-
-
-async def intent_fits(caller: Caller, keyword: str, results: list[dict[str, Any]]) -> list[float]:
-    if not results:
-        return []
-    questions = {
-        f"r{seat}": choice(
-            f"Judging by its title and description, how well does result {seat + 1} serve a "
-            f'person searching "{keyword}"?',
-            FITS,
-        )
-        for seat in range(len(results))
-    }
-    shown = {
-        f"result {seat + 1}": {"title": r.get("title"), "description": r.get("description")}
-        for seat, r in enumerate(results)
-    }
-    answers = await ask(
-        caller, {"task": "intent_fit", "keyword": keyword, "results": shown}, shown, questions
-    )
-    return [
-        INTENT_FIT.get(chosen(answers, f"r{seat}") or "full", 1.0) for seat in range(len(results))
-    ]
