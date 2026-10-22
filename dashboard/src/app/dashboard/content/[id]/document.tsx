@@ -24,7 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FindBar } from "./find-bar";
 import { FindInDoc } from "./find-in-doc";
-import { HtmlBlock, htmlSnippet } from "./html-block";
+import { blockifyHtml, HtmlBlock, htmlSnippet } from "./html-block";
 import { openDocLink } from "./links";
 import { findText, highlightKey, IssueHighlights } from "./issue-highlights";
 
@@ -101,7 +101,7 @@ export function Document({
       IssueHighlights,
       FindInDoc,
     ],
-    content: markdown,
+    content: blockifyHtml(markdown),
     contentType: "markdown",
     editorProps: {
       attributes: { class: "piece-doc focus:outline-none" },
@@ -155,7 +155,7 @@ export function Document({
   useEffect(() => {
     if (!editor || version === lastVersion.current) return;
     lastVersion.current = version;
-    editor.commands.setContent(markdown, { contentType: "markdown", emitUpdate: false });
+    editor.commands.setContent(blockifyHtml(markdown), { contentType: "markdown", emitUpdate: false });
   }, [editor, markdown, version]);
 
   useEffect(() => {
