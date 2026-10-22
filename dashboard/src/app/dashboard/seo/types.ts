@@ -1,16 +1,3 @@
-export interface ClimbResult {
-  position: number;
-  url: string;
-  domain: string;
-  title?: string | null;
-  pageRank?: number | null;
-  domainRank?: number | null;
-  strength: number;
-  smoothedStrength: number;
-  intentFit: number;
-  passChance: number;
-}
-
 export type SearchIntent =
   | "informational"
   | "navigational"
@@ -31,19 +18,7 @@ export interface KeywordCluster {
   volume: number;
   intent?: SearchIntent;
   importance?: ClusterImportance;
-  winnability?: number;
-  pTopThree?: number;
-  pPageOne?: number;
-  likelyPosition?: number;
-  ourPosition?: number;
-  ourUrl?: string;
-  ourStrength?: number;
-  intentFit?: number;
   isRanked: boolean;
-  competitors: string[];
-  climb: ClimbResult[];
-  serpVerdict?: "clean" | "suspect" | "poisoned";
-  metricsAt?: string;
   createdAt: string;
   updatedAt: string;
 }

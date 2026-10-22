@@ -7,10 +7,8 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
-from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller
 from src.providers.seo_data.service import seo_data
-from src.providers.seo_data.shape import own_domain
 from src.seo.keyword_clusters.constants import (
     CLUSTER_NOT_FOUND,
     COMPETITOR_KEYWORDS_PER_CLUSTER,
@@ -18,45 +16,32 @@ from src.seo.keyword_clusters.constants import (
     KEYWORD_NOT_IN_CLUSTER,
     MAIN_KEYWORD_STAYS,
     MAX_COMPETITOR_KEYWORDS_PER_DOMAIN,
-    MAX_METRICS_LIMIT,
     MIN_COMPETITOR_KEYWORDS_PER_DOMAIN,
-    NO_CLUSTER_IDS,
     NO_SAVED_COMPETITORS,
     NOISE_SHARE_OF_CORE,
-    PAGE_WEIGHT,
     RELEVANCE_ROUND,
-    TOO_MANY_CLUSTER_IDS,
-    TOP_N,
 )
 from src.seo.keyword_clusters.judging import (
-    intent_fits,
     label_keywords,
     relevant_keywords,
     split_groups,
 )
 from src.seo.keyword_clusters.repository import seo_keyword_clusters
 from src.seo.keyword_clusters.schemas import (
-    ClusterBrief,
     ClusterDeleted,
     ClusterDraft,
     ClusterFilters,
-    ClusterMetrics,
     ClusterRecord,
     ClustersDeleted,
     ClustersDeleteRequest,
     CompetitorClustersRequest,
     KeywordFacts,
     KeywordsClusterRequest,
-    MetricsComputed,
     SearchConsoleClustersRequest,
     SeedClustersRequest,
     normalize_keyword,
 )
-from src.seo.keyword_clusters.winnability import climb, pass_chance, smoothed, strength
 from src.seo.market import markets
-from src.seo.serp_results.constants import Verdict
-from src.seo.serp_results.schemas import SerpPull
-from src.seo.serp_results.service import serp_results_service
 from src.seo.site_search.repositories.site_search_daily import site_search_dailies
 from src.seo.site_seo.competitor_repository import site_competitors
 from src.sites.schemas import SiteRecord
@@ -80,10 +65,6 @@ def website_of(site: SiteRecord) -> dict[str, str]:
     return {"domain": site.domain, "about": site.summary or ""}
 
 
-def belongs_to(domain: str, site_domain: str) -> bool:
-    return domain == site_domain or domain.endswith(f".{site_domain}")
-
-
 def cluster_volume(
     members: list[str], existing: ClusterRecord | None, facts: dict[str, KeywordFacts]
 ) -> int:
@@ -103,33 +84,6 @@ def cluster_ids_of(keywords: list[str], records: list[ClusterRecord]) -> dict[st
     return found
 
 
-def serp_targets(serp: dict, site_domain: str) -> tuple[list[dict], dict | None, list[dict], str]:
-    organic = sorted(
-        (
-            {
-                "position": int(i["rank_group"]),
-                "url": str(i["url"]),
-                "domain": own_domain(i["url"]),
-                "title": i.get("title"),
-                "description": i.get("description"),
-            }
-            for i in serp.get("items") or []
-            if isinstance(i, dict)
-            and i.get("type") == "organic"
-            and i.get("url")
-            and isinstance(i.get("rank_group"), int)
-        ),
-        key=lambda r: r["position"],
-    )
-    ours = next((r for r in organic if belongs_to(r["domain"], site_domain)), None)
-    start = ours["position"] if ours else TOP_N + 1
-    above = [
-        r for r in organic if r["position"] < start and not belongs_to(r["domain"], site_domain)
-    ]
-    our_target = ours["url"] if ours else f"https://{site_domain}/"
-    return organic, ours, above, our_target
-
-
 def rows_per_competitor(limit: int, competitors: int) -> int:
     wanted = math.ceil(COMPETITOR_KEYWORDS_PER_CLUSTER * limit / max(competitors, 1))
     return min(MAX_COMPETITOR_KEYWORDS_PER_DOMAIN, max(MIN_COMPETITOR_KEYWORDS_PER_DOMAIN, wanted))
@@ -137,16 +91,6 @@ def rows_per_competitor(limit: int, competitors: int) -> int:
 
 def by_volume(records: list[ClusterRecord]) -> list[ClusterRecord]:
     return sorted(records, key=lambda r: (-r.volume, r.main_keyword))
-
-
-def brief(record: ClusterRecord) -> ClusterBrief:
-    return ClusterBrief(
-        id=record.id,
-        main_keyword=record.main_keyword,
-        size=len(record.keywords),
-        volume=record.volume,
-        winnability=record.winnability,
-    )
 
 
 class KeywordClusterService:
@@ -217,7 +161,7 @@ class KeywordClusterService:
             cluster_id,
             remaining,
             max(cluster.volume - removed, 0),
-            bool(searched.intersection(remaining)) or cluster.our_position is not None,
+            bool(searched.intersection(remaining)),
         )
         return updated
 
@@ -440,118 +384,6 @@ class KeywordClusterService:
         )
         return saved
 
-    async def compute_metrics(
-        self,
-        db: AsyncSession,
-        caller: Caller,
-        site: SiteRecord,
-        cluster_ids: list[str],
-    ) -> MetricsComputed:
-        if not cluster_ids:
-            raise HTTPException(422, NO_CLUSTER_IDS)
-        if len(cluster_ids) > MAX_METRICS_LIMIT:
-            raise HTTPException(422, TOO_MANY_CLUSTER_IDS)
-        clusters = await seo_keyword_clusters.get_many(db, site.id, cluster_ids)
-        done: list[ClusterRecord] = []
-        failed: list[str] = []
-        poisoned: list[str] = []
-        for cluster, scored in await self._score(db, caller, site, clusters):
-            if not isinstance(scored, ClusterRecord):
-                failed.append(cluster.main_keyword)
-                continue
-            if scored.serp_verdict == "poisoned":
-                poisoned.append(cluster.main_keyword)
-                continue
-            done.append(scored)
-        return MetricsComputed(
-            computed=len(done),
-            failed=failed,
-            poisoned=poisoned,
-            clusters=[brief(r) for r in done],
-        )
-
-    async def rescore(
-        self, db: AsyncSession, caller: Caller, site: SiteRecord, cluster_id: str
-    ) -> ClusterRecord:
-        cluster = await self.get(db, site.id, cluster_id)
-        [(_, scored)] = await self._score(db, caller, site, [cluster])
-        if isinstance(scored, ProviderRequestError):
-            raise scored
-        if scored is None:
-            raise HTTPException(502, f"No results page came back for {cluster.main_keyword}.")
-        return scored
-
-    async def _score(
-        self, db: AsyncSession, caller: Caller, site: SiteRecord, clusters: list[ClusterRecord]
-    ) -> list[tuple[ClusterRecord, ClusterRecord | ProviderRequestError | None]]:
-        site_domain = own_domain(site.domain)
-        pulls: dict[str, SerpPull | ProviderRequestError] = {}
-        for cluster in clusters:
-            market = {
-                "location_code": cluster.location_code,
-                "language_code": cluster.language_code,
-            }
-            try:
-                pulls[cluster.id] = await serp_results_service.pull(
-                    db, caller, site, cluster.main_keyword, market, refresh=False
-                )
-            except ProviderRequestError as err:
-                pulls[cluster.id] = err
-
-        urls: list[str] = []
-        for pulled in pulls.values():
-            if not isinstance(pulled, SerpPull):
-                continue
-            urls += [r["url"] for r in pulled.main]
-            if pulled.serp is not None:
-                _, _, above, our_target = serp_targets(pulled.serp, site_domain)
-                urls += [r["url"] for r in above] + [our_target]
-        await db.commit()
-        try:
-            ranks = await seo_data.pages_summary(caller, urls)
-        except ProviderRequestError as err:
-            return [
-                (c, pulls[c.id] if isinstance(pulls[c.id], Exception) else err) for c in clusters
-            ]
-
-        saved = await site_competitors.list(db, site.id)
-        scored: list[tuple[ClusterRecord, ClusterRecord | ProviderRequestError | None]] = []
-        for cluster in clusters:
-            pulled = pulls[cluster.id]
-            if not isinstance(pulled, SerpPull):
-                scored.append((cluster, pulled))
-                continue
-            check = serp_results_service.judge(pulled, ranks, site.domain)
-            if check.verdict == "poisoned":
-                cleared = await seo_keyword_clusters.clear_metrics(
-                    db, site.id, cluster.id, check.verdict
-                )
-                scored.append((cluster, cleared))
-                continue
-            try:
-                found = await self._metrics(
-                    db, caller, site_domain, cluster, pulled.serp, ranks, check.verdict
-                )
-            except ProviderRequestError as err:
-                scored.append((cluster, err))
-                continue
-            if found is None:
-                scored.append((cluster, None))
-                continue
-            metrics, serp_domains = found
-            ranking = sorted(
-                c.domain for c in saved if any(belongs_to(d, c.domain) for d in serp_domains)
-            )
-            scored.append(
-                (
-                    cluster,
-                    await seo_keyword_clusters.set_metrics(
-                        db, site.id, cluster.id, metrics, ranking
-                    ),
-                )
-            )
-        return scored
-
     async def _save(
         self,
         db: AsyncSession,
@@ -620,79 +452,6 @@ class KeywordClusterService:
         items = await seo_data.keyword_overview(caller, keywords, market)
         facts = [keyword_facts(i) for i in items]
         return {f.keyword: f for f in facts if f.keyword}
-
-    async def _metrics(
-        self,
-        db: AsyncSession,
-        caller: Caller,
-        site_domain: str,
-        cluster: ClusterRecord,
-        serp: dict | None,
-        ranks: dict[str, dict],
-        serp_verdict: Verdict,
-    ) -> tuple[ClusterMetrics, set[str]] | None:
-        if serp is None:
-            return None
-        organic, ours, above, our_target = serp_targets(serp, site_domain)
-        start = ours["position"] if ours else TOP_N + 1
-
-        def rank_of(url: str) -> dict:
-            return (
-                ranks.get(url)
-                or ranks.get(url.rstrip("/"))
-                or ranks.get(f"{url.rstrip('/')}/")
-                or {}
-            )
-
-        mine = rank_of(our_target)
-        our_strength = (
-            strength(mine.get("rank"), mine.get("main_domain_rank"))
-            if ours
-            else (1 - PAGE_WEIGHT) * (mine.get("main_domain_rank") or 0)
-        )
-        theirs = [
-            strength(rank_of(r["url"]).get("rank"), rank_of(r["url"]).get("main_domain_rank"))
-            for r in above
-        ]
-        flattened = smoothed(theirs)
-        await db.commit()
-        fits = await intent_fits(caller, cluster.main_keyword, above)
-
-        passes = [1.0] * (start - 1)
-        climb_rows = []
-        for result, raw, smooth, fit in zip(above, theirs, flattened, fits, strict=True):
-            chance = pass_chance(smooth, our_strength, fit)
-            passes[result["position"] - 1] = chance
-            facts = rank_of(result["url"])
-            climb_rows.append(
-                {
-                    "position": result["position"],
-                    "url": result["url"],
-                    "domain": result["domain"],
-                    "title": result["title"],
-                    "pageRank": whole(facts.get("rank")),
-                    "domainRank": whole(facts.get("main_domain_rank")),
-                    "strength": round(raw, 1),
-                    "smoothedStrength": round(smooth, 1),
-                    "intentFit": fit,
-                    "passChance": round(chance, 3),
-                }
-            )
-        outcome = climb(passes, start)
-        top_fits = fits[:TOP_N]
-        metrics = ClusterMetrics(
-            winnability=outcome["winnability"],
-            p_top_three=round(outcome["p_top_three"], 4),
-            p_page_one=round(outcome["p_page_one"], 4),
-            likely_position=outcome["likely_position"],
-            our_position=ours["position"] if ours else None,
-            our_url=ours["url"] if ours else None,
-            our_strength=round(our_strength, 1),
-            intent_fit=round(sum(top_fits) / len(top_fits), 3) if top_fits else None,
-            serp_verdict=serp_verdict,
-            climb=climb_rows,
-        )
-        return metrics, {r["domain"] for r in organic}
 
 
 keyword_cluster_service = KeywordClusterService()

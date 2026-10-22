@@ -13,7 +13,6 @@ from src.seo.keyword_clusters.schemas import (
     ClustersDeleteRequest,
     CompetitorClustersRequest,
     KeywordsClusterRequest,
-    MetricsComputed,
     SearchConsoleClustersRequest,
     SeedClustersRequest,
 )
@@ -90,20 +89,6 @@ async def create_keyword_clusters_from_competitors(
         site = await site_service.get(db, ctx.user_id, ctx.site_id)
         return await keyword_cluster_service.from_competitors(
             db, Caller(user_id=ctx.user_id, site_id=ctx.site_id), ctx.user_id, site, body
-        )
-
-
-@tool(writes=True, desk=DESK)
-async def compute_metrics_for_cluster(cluster_ids: list[str]) -> MetricsComputed:
-    """Score how winnable the given keyword clusters' main keywords are for this website
-    (0-100, from the authority and intent fit of the results above it) and save it on each
-    cluster. At most 50 ids. A cluster whose results page is poisoned gets no score. Spends
-    vendor credit."""
-    ctx = require_site()
-    async with unit_of_work() as db:
-        site = await site_service.get(db, ctx.user_id, ctx.site_id)
-        return await keyword_cluster_service.compute_metrics(
-            db, Caller(user_id=ctx.user_id, site_id=ctx.site_id), site, cluster_ids
         )
 
 
