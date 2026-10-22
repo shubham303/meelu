@@ -79,6 +79,7 @@ export interface LiveRun {
   screened: { screened: number; total: number; kept: number } | null;
   enriched: { status: string; people: number; fromVendor: number; fromStore: number; error?: string } | null;
   judged: { judged: number; total: number; kept: number } | null;
+  problems: string[];
   error: string | null;
 }
 
@@ -91,6 +92,7 @@ export const EMPTY_LIVE: LiveRun = {
   screened: null,
   enriched: null,
   judged: null,
+  problems: [],
   error: null,
 };
 
@@ -103,6 +105,7 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
       step: "collect",
       briefs: prev.briefs,
       searches: prev.searches,
+      problems: prev.problems,
       round: { round: n(d.round), maxRounds: n(d.maxRounds), kept: n(d.kept), target: n(d.target) },
     };
   }
@@ -142,6 +145,10 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
         error: d.error ? String(d.error) : undefined,
       },
     };
+  }
+  if (event === "problem") {
+    const message = String(d.message ?? "");
+    return message && !prev.problems.includes(message) ? { ...prev, problems: [...prev.problems, message] } : prev;
   }
   if (event === "judged") {
     return { ...prev, judged: { judged: n(d.judged), total: n(d.total), kept: n(d.kept) } };

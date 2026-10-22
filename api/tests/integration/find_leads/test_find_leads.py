@@ -55,6 +55,29 @@ def vendors(monkeypatch):
     return state
 
 
+@pytest.fixture
+def decider(monkeypatch):
+    from src.providers.json_data_extractor.service import json_data_extractor
+
+    state = {"drop": set(), "fail": False, "calls": []}
+
+    async def decide(caller, subject, data, questions):
+        state["calls"].append((subject, data, questions))
+        if state["fail"]:
+            raise RuntimeError("model down")
+        answers = {
+            key: {
+                "choice": "no" if any(h in q["instructions"] for h in state["drop"]) else "yes",
+                "confidence": 1.0,
+            }
+            for key, q in questions.items()
+        }
+        return {"answers": answers}
+
+    monkeypatch.setattr(json_data_extractor, "decide", decide)
+    return state
+
+
 RUN_TOKEN = uuid.uuid4().hex[:8]
 
 
@@ -303,7 +326,13 @@ async def test_linkedin_and_web_candidates(client, email, vendors):
     assert run_row["foundCount"] == 3
 
 
-async def test_screen_enrich_judge_and_statuses(client, email, vendors):
+async def screen(client, run_id):
+    r = await client.post(f"{BASE}/runs/{run_id}/screen")
+    assert r.status_code == 200, r.text
+    return (await wait_for(client, run_id, "screen"))["sourceStats"]["screen"]
+
+
+async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider):
     await prepare(client, email)
     await add_brief(client, "Shopify owners", ["posts"], ["otter dropped", "shop seo"])
     vendors["posts"]["reddit"] = [
@@ -315,17 +344,16 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors):
     await collect(client, run["id"], "posts", "reddit")
     by_handle = {lead["handle"]: lead for lead in await leads(client, "candidate")}
 
-    r = await client.post(
-        f"{BASE}/leads/screened",
-        json={
-            "leads": [
-                {"id": by_handle["candlesbydana"]["id"], "keep": True},
-                {"id": by_handle["maybe_mia"]["id"], "keep": True},
-                {"id": by_handle["agency_bob"]["id"], "keep": False},
-            ]
-        },
-    )
-    assert r.json()["data"] == {"kept": 2, "removed": 1}
+    decider["drop"] = {"agency_bob"}
+    stats = await screen(client, run["id"])
+    assert (stats["status"], stats["total"], stats["kept"], stats["removed"]) == ("done", 3, 2, 1)
+    subject, data, questions = decider["calls"][0]
+    assert data == {"brief": "Shopify owners"}
+    assert len(questions) == 3
+    assert {lead["handle"] for lead in await leads(client, "shortlisted")} == {
+        "candlesbydana",
+        "maybe_mia",
+    }
     assert sql("select kind from lead_seen where identity_key = 'reddit:agency_bob'") == [
         ("judged",)
     ]
@@ -431,7 +459,7 @@ async def test_purge_forgets_old_rejects_and_drops_old_discards(client, email):
         "('ls_old', %s, %s, 'reddit:old_reject', 'judged', now() - interval '31 days')",
         (user_id, site_id),
     )
-    sql("update lead_run set started_at = now() - interval '3 hours' where id = %s", (run["id"],))
+    sql("update lead_run set updated_at = now() - interval '3 hours' where id = %s", (run["id"],))
 
     async with unit_of_work() as db:
         removed = await find_leads_service.purge(db)
@@ -483,3 +511,44 @@ async def test_runs_take_a_target_and_later_rounds_search_anew(client, email, ve
     assert r.json()["data"]["round"] == 2
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"round": 11})
     assert r.status_code == 400
+
+
+async def test_screen_batches_by_hundred_and_reports_failures(client, email, decider):
+    await prepare(client, email)
+    await add_brief(client, "Shopify owners")
+    run = await start_run(client)
+    site_id = client.headers["x-meelu-site"]
+    user_id = sql('select id from "user" where email = %s', (email,))[0][0]
+    for i in range(150):
+        sql(
+            "insert into lead (id, user_id, site_id, run_id, identity_key, source, platform, name) "
+            "values (%s, %s, %s, %s, %s, 'linkedin', 'linkedin', %s)",
+            (f"ld_bulk{i}", user_id, site_id, run["id"], f"linkedin:bulk{i}", f"Owner {i}"),
+        )
+    decider["fail"] = True
+    stats = await screen(client, run["id"])
+    assert stats["status"] == "error"
+    assert stats["error"].startswith("2 of 2 batches failed")
+    assert sorted(len(q) for _, _, q in decider["calls"]) == [50, 100]
+    left = sql("select count(*) from lead where site_id = %s and status = 'candidate'", (site_id,))
+    assert left == [(150,)]
+
+
+async def test_starting_a_run_closes_one_the_app_stopped_driving(client, email):
+    await prepare(client, email)
+    await add_brief(client, "Shopify owners")
+    stuck = await start_run(client)
+    r = await client.post(f"{BASE}/runs")
+    assert r.status_code == 409
+    r = await client.patch(f"{BASE}/runs/{stuck['id']}", json={})
+    assert r.status_code == 200
+    sql(
+        "update lead_run set updated_at = now() - interval '3 minutes' where id = %s",
+        (stuck["id"],),
+    )
+    fresh = await start_run(client)
+    assert fresh["id"] != stuck["id"]
+    old = (await client.get(f"{BASE}/runs/{stuck['id']}")).json()["data"]
+    assert old["status"] == "error"
+    assert old["finishedAt"] is not None
+    assert "stopped working on this run" in old["error"]

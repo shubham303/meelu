@@ -20,7 +20,6 @@ from src.find_leads.schemas import (
     RunCreateRequest,
     RunResponse,
     RunUpdateRequest,
-    ScreenRequest,
     SummaryResponse,
     VerdictResponse,
 )
@@ -125,6 +124,15 @@ async def start_collect(
     )
 
 
+@router.post("/find-leads/runs/{run_id}/screen")
+async def start_screen(
+    run_id: str,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> RunResponse:
+    return await find_leads_service.start_screen(db, ctx.user_id, ctx.site_id, run_id)
+
+
 @router.post("/find-leads/runs/{run_id}/enrich")
 async def start_enrich(
     run_id: str,
@@ -141,15 +149,6 @@ async def add_candidates(
     ctx: AuthContext = Depends(require_site),
 ) -> InsertedResponse:
     return await find_leads_service.add_candidates(db, ctx.user_id, ctx.site_id, body)
-
-
-@router.post("/find-leads/leads/screened")
-async def screen_leads(
-    body: ScreenRequest,
-    db: AsyncSession = Depends(get_db),
-    ctx: AuthContext = Depends(require_site),
-) -> VerdictResponse:
-    return await find_leads_service.screen(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.post("/find-leads/leads/judged")
@@ -187,7 +186,7 @@ async def get_summary(
     db: AsyncSession = Depends(get_db),
     ctx: AuthContext = Depends(require_site),
 ) -> SummaryResponse:
-    return await find_leads_service.summary(db, ctx.site_id)
+    return await find_leads_service.summary(db, ctx.user_id, ctx.site_id)
 
 
 @router.get("/find-leads/leads/{lead_id}")

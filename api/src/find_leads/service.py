@@ -19,7 +19,6 @@ from src.find_leads.enrich import enrich_shortlist
 from src.find_leads.identity import web_key
 from src.find_leads.jobs import SILENT_ERROR, JobResult, is_silent, run_job, running_stats
 from src.find_leads.models.brief import LeadBrief
-from src.find_leads.models.lead import Lead
 from src.find_leads.models.run import LeadRun
 from src.find_leads.repositories.briefs import lead_briefs
 from src.find_leads.repositories.leads import leads
@@ -53,16 +52,16 @@ from src.find_leads.schemas import (
     RunCreateRequest,
     RunResponse,
     RunUpdateRequest,
-    ScreenRequest,
     SummaryResponse,
     UpsertResponse,
     VerdictResponse,
 )
+from src.find_leads.screening import drop_leads, screen_candidates
 from src.providers.people_search.service import people_search
 from src.providers.social_search.service import social_search
 
-STALE_RUN_HOURS = 2
-STALE_RUN_ERROR = "The run stopped reporting and was closed."
+QUIET_RUN_SECONDS = 120
+QUIET_RUN_ERROR = "The app stopped working on this run before it finished, so it was closed."
 SEEN_DAYS = 30
 DISCARDED_DAYS = 30
 BUSY = (
@@ -70,6 +69,7 @@ BUSY = (
     "Wait for it to finish or stop it first."
 )
 ENRICH_KEY = "enrich"
+SCREEN_KEY = "screen"
 TEXT_CHARS = 1000
 
 
@@ -246,12 +246,7 @@ class FindLeadsService:
     async def create_run(
         self, db: AsyncSession, user_id: str, site_id: str, body: RunCreateRequest
     ) -> RunResponse:
-        await lead_runs.fail_running_before(
-            db,
-            datetime.now(UTC) - timedelta(hours=STALE_RUN_HOURS),
-            STALE_RUN_ERROR,
-            user_id=user_id,
-        )
+        await self._close_quiet_runs(db, user_id)
         if await lead_runs.running_for_user(db, user_id) is not None:
             raise HTTPException(409, BUSY)
         balance = await credit_service.balance(db, user_id)
@@ -266,6 +261,14 @@ class FindLeadsService:
                 return await lead_runs.create(db, user_id, site_id, body.target_count)
         except IntegrityError:
             raise HTTPException(409, BUSY) from None
+
+    async def _close_quiet_runs(self, db: AsyncSession, user_id: str) -> None:
+        await lead_runs.fail_quiet_since(
+            db,
+            datetime.now(UTC) - timedelta(seconds=QUIET_RUN_SECONDS),
+            QUIET_RUN_ERROR,
+            user_id=user_id,
+        )
 
     async def _running_run(self, db: AsyncSession, site_id: str, run_id: str) -> LeadRun:
         row = await lead_runs.get(db, site_id, run_id)
@@ -329,6 +332,17 @@ class FindLeadsService:
                 lambda: collect_linkedin_people(user_id, site_id, run_id, round_number),
             )
         raise HTTPException(400, "source must be posts or linkedin; the app sends web leads.")
+
+    async def start_screen(
+        self, db: AsyncSession, user_id: str, site_id: str, run_id: str
+    ) -> RunResponse:
+        return await self._start_job(
+            db,
+            site_id,
+            run_id,
+            SCREEN_KEY,
+            lambda: screen_candidates(user_id, site_id, run_id),
+        )
 
     async def start_enrich(
         self, db: AsyncSession, user_id: str, site_id: str, run_id: str
@@ -421,28 +435,6 @@ class FindLeadsService:
         )
         return InsertedResponse(inserted=inserted, skipped=skipped)
 
-    async def _drop(self, db: AsyncSession, user_id: str, site_id: str, rows: list[Lead]) -> int:
-        await lead_seen.remember(db, user_id, site_id, [r.identity_key for r in rows], SEEN_JUDGED)
-        return await leads.delete_many(db, site_id, [r.id for r in rows])
-
-    async def screen(
-        self, db: AsyncSession, user_id: str, site_id: str, body: ScreenRequest
-    ) -> VerdictResponse:
-        rows = await leads.get_many(db, site_id, [v.id for v in body.leads])
-        kept, dropped = 0, []
-        for verdict in body.leads:
-            row = rows.get(verdict.id)
-            if row is None:
-                raise HTTPException(404, f"No lead {verdict.id} for this website.")
-            if row.status != "candidate":
-                continue
-            if verdict.keep:
-                await leads.update(db, row, {"status": "shortlisted"})
-                kept += 1
-            else:
-                dropped.append(row)
-        return VerdictResponse(kept=kept, removed=await self._drop(db, user_id, site_id, dropped))
-
     async def judge(
         self, db: AsyncSession, user_id: str, site_id: str, body: JudgeRequest
     ) -> VerdictResponse:
@@ -470,7 +462,7 @@ class FindLeadsService:
                 },
             )
             kept += 1
-        return VerdictResponse(kept=kept, removed=await self._drop(db, user_id, site_id, dropped))
+        return VerdictResponse(kept=kept, removed=await drop_leads(db, user_id, site_id, dropped))
 
     async def list_leads(
         self, db: AsyncSession, site_id: str, filters: LeadFilters, paging: PaginationParams
@@ -518,7 +510,8 @@ class FindLeadsService:
         await leads.delete_many(db, site_id, [row.id])
         return lead_id
 
-    async def summary(self, db: AsyncSession, site_id: str) -> SummaryResponse:
+    async def summary(self, db: AsyncSession, user_id: str, site_id: str) -> SummaryResponse:
+        await self._close_quiet_runs(db, user_id)
         statuses = await leads.status_counts(db, site_id)
         return SummaryResponse(
             new=statuses.get("new", 0),
@@ -542,8 +535,8 @@ class FindLeadsService:
             "seen": await lead_seen.delete_kind_before(
                 db, SEEN_JUDGED, now - timedelta(days=SEEN_DAYS)
             ),
-            "runs": await lead_runs.fail_running_before(
-                db, now - timedelta(hours=STALE_RUN_HOURS), STALE_RUN_ERROR
+            "runs": await lead_runs.fail_quiet_since(
+                db, now - timedelta(seconds=QUIET_RUN_SECONDS), QUIET_RUN_ERROR
             ),
         }
 
