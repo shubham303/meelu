@@ -14,7 +14,11 @@ from src.content.endpoints import router as content_router
 from src.core import scheduler
 from src.core.csrf import CsrfMiddleware
 from src.core.envelope import install_envelope
-from src.core.logging import RequestLoggingMiddleware, configure_logging
+from src.core.logging import (
+    RequestLoggingMiddleware,
+    configure_error_reporting,
+    configure_logging,
+)
 from src.crawl_jobs.endpoints import router as crawl_jobs_router
 from src.credits import cron as credits_cron
 from src.credits.endpoints import router as credits_router
@@ -57,6 +61,7 @@ from src.technical_seo.endpoints import router as technical_seo_router
 from src.user_prompts.endpoints import router as user_prompts_router
 
 configure_logging()
+configure_error_reporting()
 
 
 @contextlib.asynccontextmanager

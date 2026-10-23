@@ -1,9 +1,8 @@
 import logging
 import time
 
+import sentry_sdk
 import structlog
-from sqlalchemy import Engine, event
-from sqlalchemy.pool import QueuePool
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
@@ -28,26 +27,19 @@ def configure_logging() -> None:
     )
 
 
+def configure_error_reporting() -> None:
+    if not settings.sentry_dsn:
+        return
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        send_default_pii=False,
+        traces_sample_rate=0,
+    )
+
+
 def get_logger() -> structlog.stdlib.BoundLogger:
     return structlog.get_logger()
-
-
-def log_connection_checkouts(engine: Engine, pool_name: str) -> None:
-    log = get_logger()
-
-    @event.listens_for(engine, "checkout")
-    def on_checkout(dbapi_connection, connection_record, connection_proxy) -> None:
-        pool = engine.pool
-        if not isinstance(pool, QueuePool):
-            return
-        log.info(
-            "core.db.connection_acquired",
-            pool=pool_name,
-            checked_out=pool.checkedout(),
-            idle=pool.checkedin(),
-            overflow=max(pool.overflow(), 0),
-            pool_size=pool.size(),
-        )
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):

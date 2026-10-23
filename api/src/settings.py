@@ -81,6 +81,8 @@ class Settings(EnvSettings):
 
     log_level: str = "INFO"
     log_slow_request_ms: int = 1000
+    sentry_dsn: str = ""
+    sentry_environment: str = "local"
 
     agent_data_dir: Path = Path.home() / ".meelu" / "agent-data"
     agent_statement_timeout_ms: int = 30000
