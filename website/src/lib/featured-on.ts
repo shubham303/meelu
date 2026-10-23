@@ -16,4 +16,9 @@ export const featuredOn: FeaturedOn[] = [
     href: "https://toolhunter.ai/ai-tool/meelu?ref=badge",
     badge: { src: "https://toolhunter.ai/badge/meelu.svg?theme=light", width: 200, height: 50 },
   },
+  {
+    name: "AI Agents List",
+    href: "https://www.aiagentslist.io/agents/meelu",
+    badge: { src: "https://www.aiagentslist.io/badges/featured-light.svg", width: 190, height: 40 },
+  },
 ];
