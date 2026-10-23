@@ -111,48 +111,30 @@ After 30 days you approve the client again. The tools are `list_containers`,
 `list_hosts`, `get_container_logs`, `search_container_logs` and
 `get_container_stats`, and they cover every container on the VPS.
 
-## Bugsink SDK setup (not applied yet)
+## Bugsink SDK
 
-Bugsink speaks the Sentry protocol. Projects `api` and `agent` already exist in
-team `Meelu`. To send errors from the backend:
+Bugsink speaks the Sentry protocol, and the backend reports to it with
+`sentry-sdk[fastapi]`. `configure_error_reporting()` in `api/src/core/logging.py`
+starts the SDK in the api, the agent server and the embed worker. It does
+nothing when `SENTRY_DSN` is empty, so local runs send nothing.
 
-1. `cd api && uv add "sentry-sdk[fastapi]"`
-2. Add to `api/src/settings.py`:
+- The FastAPI integration reports every unhandled exception and every 5xx with
+  the request path, method and headers. `send_default_pii=False` keeps cookies,
+  auth headers and request bodies out.
+- Scheduler jobs log failures through stdlib logging, and the SDK reports those
+  error records too.
+- The embed worker reports each failed pass with `sentry_sdk.capture_exception`.
+- A failure the code catches and logs with `log.error(...)` does not reach
+  Bugsink unless it also calls `sentry_sdk.capture_exception(exc)`. MCP tool
+  errors on the agent server are returned to the model, not raised, so they do
+  not reach Bugsink either.
 
-   ```python
-   sentry_dsn: str = ""
-   sentry_environment: str = "local"
-   ```
-
-3. Initialise once in `src/app.py` and once in `src/agent/app.py`, before the
-   FastAPI app is created:
-
-   ```python
-   import sentry_sdk
-
-   if settings.sentry_dsn:
-       sentry_sdk.init(
-           dsn=settings.sentry_dsn,
-           environment=settings.sentry_environment,
-           send_default_pii=False,
-           traces_sample_rate=0,
-       )
-   ```
-
-   The FastAPI integration turns on by itself. It reports every unhandled
-   exception with the request path, method and headers. `send_default_pii=False`
-   keeps cookies, auth headers and request bodies out.
-4. Pass `SENTRY_DSN` and `SENTRY_ENVIRONMENT` through `deploy/compose.yml` for the
-   api, agent and embed-worker services.
-5. In Coolify, set `SENTRY_DSN` per app: the api and embed worker use
-   `MONITORING_BUGSINK_DSN_API` and the agent server uses
-   `MONITORING_BUGSINK_DSN_AGENT`. Set `SENTRY_ENVIRONMENT` to `production` or
-   `test`. Bugsink keeps the environment on each event, so prod and test share a
-   project.
-
-Bugsink only receives exceptions. A failure the code catches and logs with
-`log.error(...)` does not reach Bugsink unless it also calls
-`sentry_sdk.capture_exception(exc)`.
+`deploy/compose.yml` passes `SENTRY_DSN` and `SENTRY_ENVIRONMENT` to the api and
+embed worker, and `SENTRY_DSN_AGENT` as `SENTRY_DSN` to the agent server. Both
+Coolify apps set them: `SENTRY_DSN` is `MONITORING_BUGSINK_DSN_API`,
+`SENTRY_DSN_AGENT` is `MONITORING_BUGSINK_DSN_AGENT`, and `SENTRY_ENVIRONMENT`
+is `production` or `test`. Prod and test share a project and Bugsink keeps the
+environment on each event.
 
 ## Not covered
 
