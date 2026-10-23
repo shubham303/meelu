@@ -271,6 +271,7 @@ const listeningPlatforms = [
   "Stack Exchange",
   "Dev.to",
   "GitHub Issues",
+  "Forums and Q&A across the web",
 ];
 
 const dataSources = [

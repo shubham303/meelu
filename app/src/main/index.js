@@ -16,6 +16,7 @@ import {
   startSignalsSearch,
   stopSignalsSearch,
 } from "./social-signals/pipeline.js";
+import { WEB_OPTION } from "./social-signals/web.js";
 import { activeFindLeads, startFindLeads, stopFindLeads } from "./find-leads/pipeline.js";
 import { startPageReviewSchedule } from "./page-review/index.js";
 import { requestRenderStop, runRender } from "./render/index.js";
@@ -512,7 +513,7 @@ function registerAgentIpc() {
   ipcMain.handle("social-signals:platforms", async (ev) => {
     if (!allowedSender(ev)) return { error: "forbidden" };
     const providers = await providersFor();
-    return { platforms: await providers.listening.availablePlatforms() };
+    return { platforms: [...(await providers.listening.availablePlatforms()), WEB_OPTION] };
   });
 
   ipcMain.handle("find-leads:search", async (ev, payload) => {

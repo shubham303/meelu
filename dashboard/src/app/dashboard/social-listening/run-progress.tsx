@@ -40,7 +40,9 @@ export function RunProgress({ live, platformLabel }: { live: LiveRun; platformLa
                   ? `${platformLabel(id)} failed`
                   : s.status === "fetching"
                     ? `${platformLabel(id)} …`
-                    : `${platformLabel(id)} ${s.fromVendor ?? 0} fetched · ${s.fromDatabase ?? 0} shared`,
+                    : id === "web"
+                      ? `${platformLabel(id)} ${s.fromVendor ?? 0} found`
+                      : `${platformLabel(id)} ${s.fromVendor ?? 0} fetched · ${s.fromDatabase ?? 0} shared`,
               )
               .join(" · ")
           : "Waiting",

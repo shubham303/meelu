@@ -38,7 +38,7 @@ You can leave the Social Listening screen while a run is going. When you come ba
 
 ## How far back a run looks
 
-The first run looks back 7 days, so it can take a few minutes. Each later run looks for posts since your last run, and never more than 7 days back.
+The first run looks back 7 days, so it can take a few minutes. Each later run looks for posts since your last run, and never more than 7 days back. Web search is the exception: it looks for conversations from the last 30 days on every run.
 
 A post Meelu has already shown you never comes back in a later run, even if you skipped it.
 
@@ -49,7 +49,7 @@ While a run is going, a card shows four steps. The current step is highlighted, 
 | Step | What happens |
 | --- | --- |
 | **Search terms** | Meelu reads your lines and turns them into search phrases. It shows how many phrases came from how many lines. |
-| **Keyword search** | Meelu searches each platform that is on. For each platform it shows how many posts were fetched and how many Meelu already knew about. If a platform fails, it says so. |
+| **Keyword search** | Meelu searches each platform that is on. For each platform it shows how many posts were fetched and how many Meelu already knew about. For web search it shows how many conversations it found. If a platform fails, it says so. |
 | **Close in meaning** | Meelu keeps only the posts that are close in meaning to one of your lines. It shows how many went in and how many were kept. |
 | **Checking fit** | Meelu reads each remaining post and checks it really fits what you wrote. It shows how many it has checked and how many it kept. |
 
@@ -82,6 +82,7 @@ Above the post list, a line sums up your last run, for example **Last run 3 h ag
 A run uses credits in two ways. See [Credits](/docs/concepts/credits).
 
 - **Per result, on some platforms.** Reddit, X (Twitter), LinkedIn, Bluesky and Facebook charge credits for each post they return. Hacker News, Stack Exchange, Dev.to and GitHub Issues do not.
+- **Per search, for web search.** Each line is one AI call that runs a few web searches. It is charged like other AI work in Meelu, so a run's result does not show a separate cost for it.
 - **For the reading steps.** Turning your lines into search terms and checking each post's fit use AI, like other AI work in Meelu. See [Models](/docs/concepts/ai-models).
 
 To keep costs down, turn off platforms you do not need, and turn off lines that keep finding nothing useful.

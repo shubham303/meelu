@@ -23,7 +23,7 @@ function batchPrompt(posts) {
   return posts
     .map((p, i) => {
       const bits = [
-        `[${i}] ${p.platform}${p.context?.subreddit ? ` r/${p.context.subreddit}` : ""} by @${p.authorHandle ?? "unknown"}`,
+        `[${i}] ${p.platform}${p.context?.subreddit ? ` r/${p.context.subreddit}` : ""} by ${p.authorHandle ? `@${p.authorHandle}` : (p.authorName ?? "unknown")}`,
         p.title ? `Title: ${p.title}` : "",
         `Text: ${(p.text ?? "").slice(0, SNIPPET_CHARS)}`,
       ];
