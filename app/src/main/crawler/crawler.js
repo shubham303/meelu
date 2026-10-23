@@ -5,7 +5,7 @@ import { articleFormat, extract, shallowReason } from "./extract.js";
 import { IMAGE_PROBE_BUDGET, weighImages } from "./images.js";
 import { probeHostVariants } from "./host-variants.js";
 import { probeCrawlerAccess } from "./probe.js";
-import { normalise, otherHostForm, sameHost } from "./url.js";
+import { normalise, onOrigin, otherHostForm, sameHost } from "./url.js";
 
 const MAX_PAGES = 10_000;
 
@@ -273,17 +273,18 @@ export async function crawlSite(domain, known, opts = {}) {
     );
   }
 
-  const worklist = [...new Set(sitemap.urls.filter((url) => sameHost(url, origin)).map(normalise))];
   const variantListed = sitemap.urls.filter((url) => otherHostForm(url, origin)).length;
-  const offSite = sitemap.urls.length - worklist.length - variantListed;
+  const onSite = sitemap.urls.map((url) => onOrigin(url, origin)).filter((url) => sameHost(url, origin));
+  const worklist = [...new Set(onSite.map(normalise))];
+  const offSite = sitemap.urls.length - onSite.length;
   if (offSite > 0) {
     notes.push(`${offSite} sitemap URL(s) point outside ${origin} and were left alone.`);
   }
   if (variantListed > 0) {
     notes.push(
-      `${variantListed} sitemap URL(s) use the other host form and were left alone — ${origin} is ` +
-        `the address this site answers on, and a host that does not redirect to it is a separate ` +
-        `website rather than another way of spelling this one.`,
+      `${variantListed} sitemap URL(s) use the other host form, so the crawl read them on ${origin}, ` +
+        `the address on the website record. Listing one host form in the sitemap and serving the ` +
+        `site on the other without a redirect splits it in two for search engines.`,
     );
   }
   if (worklist.length === 0) {
@@ -317,7 +318,7 @@ export async function crawlSite(domain, known, opts = {}) {
   };
 
   const enqueueLink = (raw) => {
-    const url = normalise(raw);
+    const url = normalise(onOrigin(raw, origin));
     if (seen.has(url) || !sameHost(url, origin)) return;
     if (BINARY.test(url) || repeatsSegments(url)) return;
     if (!mayFetch(url)) {
