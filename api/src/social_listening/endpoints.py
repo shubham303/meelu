@@ -24,6 +24,7 @@ from src.social_listening.schemas import (
     RunUpdateRequest,
     SummaryResponse,
     UpsertResponse,
+    WebPostsRequest,
 )
 from src.social_listening.service import social_listening_service
 
@@ -137,6 +138,16 @@ async def start_collect(
     return await social_listening_service.start_collect(
         db, ctx.user_id, ctx.site_id, run_id, body.platform
     )
+
+
+@router.post("/social-listening/runs/{run_id}/web-posts")
+async def save_web_posts(
+    run_id: str,
+    body: WebPostsRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> RunResponse:
+    return await social_listening_service.save_web_posts(db, ctx.user_id, ctx.site_id, run_id, body)
 
 
 @router.post("/social-listening/posts/gate")

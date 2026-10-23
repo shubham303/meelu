@@ -160,6 +160,9 @@ async def test_config_defaults_and_validation(client, email):
     r = await client.put("/api/v1/social-listening/config", json={"platforms": ["youtube"]})
     assert r.status_code == 400
 
+    r = await client.put("/api/v1/social-listening/config", json={"platforms": ["web", "reddit"]})
+    assert r.json()["data"]["platforms"] == ["web", "reddit"]
+
 
 async def test_lines_cap_and_two_keywords(client, email):
     await prepare(client, email)
@@ -240,6 +243,9 @@ async def test_estimate_counts_only_keywords_the_vendor_would_be_asked_for(
     assert hackernews["keywords"] == 4
     assert hackernews["vendorKeywords"] == 3
     assert hackernews["maxCostMicros"] == 3 * 25 * 100
+    web = next(p for p in r.json()["data"]["platforms"] if p["platform"] == "web")
+    assert web["keywords"] == 2
+    assert web["maxCostMicros"] == 2 * 80_000
 
 
 async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
@@ -505,3 +511,72 @@ async def test_collect_beats_while_running(client, email, monkeypatch):
     release.set()
     finished = await collect(client, run["id"])
     assert finished["platformStats"]["hackernews"]["status"] == "done"
+
+
+def web_post(url, text, days_ago=1):
+    return {
+        "url": url,
+        "title": f"Thread {url}",
+        "text": text,
+        "authorName": "Ana",
+        "postedAt": (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
+    }
+
+
+async def test_web_posts_become_candidates_once(client, email):
+    await prepare(client, email)
+    await add_line(client, "people with slow sites", ["web zebra", "web yak"])
+    run = await start_run(client)
+    url = f"/api/v1/social-listening/runs/{run['id']}/web-posts"
+
+    r = await client.post(
+        url,
+        json={
+            "posts": [
+                web_post("https://forum.example.org/t/slow-site-help/12", "my site is slow"),
+                web_post("https://forum.example.org/t/slow-site-help/12/", "same thread again"),
+                web_post("https://forum.example.org/t/old/3", "old thread", days_ago=45),
+                web_post("https://q.example.net/questions/9", "speed tips?"),
+            ],
+            "searchedLines": 1,
+        },
+    )
+    assert r.status_code == 200, r.text
+    run = r.json()["data"]
+    assert run["platformStats"]["web"] == {
+        "status": "done",
+        "lines": 1,
+        "failedLines": 0,
+        "fromVendor": 2,
+        "fromDatabase": 0,
+        "candidates": 2,
+    }
+    assert run["fetchedCount"] == 2
+    found = await posts(client, "candidate")
+    assert {p["platform"] for p in found} == {"web"}
+    assert sorted(p["url"] for p in found) == [
+        "https://forum.example.org/t/slow-site-help/12",
+        "https://q.example.net/questions/9",
+    ]
+
+    r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
+    run = await start_run(client)
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run['id']}/web-posts",
+        json={
+            "posts": [web_post("https://q.example.net/questions/9", "speed tips?")],
+            "searchedLines": 1,
+            "failedLines": 1,
+            "error": "search timed out",
+        },
+    )
+    stats = r.json()["data"]["platformStats"]["web"]
+    assert stats["candidates"] == 0
+    assert stats["status"] == "error"
+    assert stats["error"] == "search timed out"
+
+    r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run['id']}/web-posts", json={"posts": []}
+    )
+    assert r.status_code == 409

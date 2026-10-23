@@ -68,8 +68,8 @@ export function RunResult({
           <ul className="flex flex-wrap gap-x-4 gap-y-0.5 text-[12.5px] tabular-nums text-sub">
             {yields.map(([id, s]) => (
               <li key={id}>
-                {platformLabel(id)}: {(s.fromVendor ?? 0) + (s.fromDatabase ?? 0)} found · {s.kept ?? 0} kept ·{" "}
-                {dollars(s.costMicros ?? 0)}
+                {platformLabel(id)}: {(s.fromVendor ?? 0) + (s.fromDatabase ?? 0)} found · {s.kept ?? 0} kept
+                {s.costMicros !== undefined && ` · ${dollars(s.costMicros)}`}
               </li>
             ))}
           </ul>

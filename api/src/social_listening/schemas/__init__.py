@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
@@ -14,6 +15,10 @@ MAX_LINES_PER_SITE = 30
 PER_KEYWORD = 25
 LOOKBACK_DAYS = 7
 MINIMUM_BALANCE_USD = 5
+WEB_PLATFORM = "web"
+WEB_LOOKBACK_DAYS = 30
+WEB_COST_PER_LINE_MICROS = 80_000
+MAX_WEB_POSTS = 500
 
 
 class ConfigUpdateRequest(RequestModel):
@@ -50,6 +55,22 @@ class RunUpdateRequest(RequestModel):
 
 class CollectRequest(RequestModel):
     platform: str
+
+
+class WebPost(RequestModel):
+    url: str
+    title: str | None = None
+    text: str | None = None
+    author_handle: str | None = None
+    author_name: str | None = None
+    posted_at: datetime
+
+
+class WebPostsRequest(RequestModel):
+    posts: list[WebPost]
+    searched_lines: int = 0
+    failed_lines: int = 0
+    error: str | None = None
 
 
 class PostVerdict(RequestModel):
