@@ -952,7 +952,7 @@ function StrikingDistance() {
       </table>
       <p className="mt-3 text-xs text-faint">
         A page sitting just outside the top ten with two internal links needs something entirely
-        different from one sitting there with forty — the Structure view has the link insertions.
+        different from one sitting there with forty — the Internal links screen has the link insertions.
       </p>
     </Card>
   );

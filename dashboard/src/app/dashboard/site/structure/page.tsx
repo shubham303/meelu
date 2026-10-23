@@ -46,11 +46,11 @@ export default function SiteStructurePage() {
         <ArrowLeft size={12} /> Site
       </Link>
       <PageHeader
-        title="Structure"
+        title="Internal links"
         description="How pages are reached from the home page. A page Google cannot reach through a link earns nothing."
         actions={
           <SiteAskButton
-            title="Find links — Structure"
+            title="Find links — Internal links"
             hint="Pick a link strategy or write your own. The agent runs it through the link pipeline and the results land in the suggestions."
             suggestions={chips.structure()}
             promptSurface="structure"
@@ -100,7 +100,7 @@ export default function SiteStructurePage() {
               <YourPrompts
                 surface="structure"
                 endpoint="/api/agent/ask-site"
-                titlePrefix="Structure"
+                titlePrefix="Internal links"
                 suggestions={chips.structure()}
               />
               <LinkSuggestions summary={linkSummary} refreshSummary={refreshLinkSummary} />
@@ -112,7 +112,7 @@ export default function SiteStructurePage() {
               <YourPrompts
                 surface="structure"
                 endpoint="/api/agent/ask-site"
-                titlePrefix="Structure"
+                titlePrefix="Internal links"
                 suggestions={chips.structure()}
               />
               <PillarSuggestions summary={pillarSummary} refreshSummary={refreshPillarSummary} />

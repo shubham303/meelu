@@ -145,11 +145,11 @@ Rules:
   points at the `site_chunks` passage the link belongs in, when known;
   `suggestion` is the text a person acts on. `search_score`, `confidence`
   (the screening model's) and `score` (the importance rank sets; the
-  Structure screen sorts by it) are all higher-is-better; NULL means not
+  Internal links screen sorts by it) are all higher-is-better; NULL means not
   measured yet.
 - `state` is the row's life: 'draft' (saved, not yet screened),
   'screening_approved' or 'screening_rejected' (the cheap screen's call),
-  'review_approved' (review kept it; shown on the Structure screen),
+  'review_approved' (review kept it; shown on the Internal links screen),
   'review_rejected' (review dropped it; never shown), 'user_rejected'
   (turned down by the user). Each step reads only the rows the previous
   step approved. Unique per (from_page_id, from_chunk_id, to_page_id,
