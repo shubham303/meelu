@@ -58,3 +58,33 @@ test("the JSON object is read out of the text blocks", () => {
   assert.deepEqual(jsonOf(payload), { results: [] });
   assert.throws(() => jsonOf({ content: [] }), /no JSON object/);
 });
+
+test("web posts need a real url, a title or text and a date from the last 30 days, and skip hosts searched on their own", async () => {
+  const { skippedHosts, webPosts } = await import("../src/main/social-signals/web.js");
+  const now = Date.parse("2026-10-20T00:00:00Z");
+  const skipped = skippedHosts(["reddit", "hackernews", "web"]);
+  assert.deepEqual(skipped, ["reddit.com", "redd.it", "news.ycombinator.com"]);
+  const posts = webPosts(
+    {
+      posts: [
+        { url: "forum.example.org/t/slow/1", title: "Site got slow", text: " help ", author: "ana", published: "2026-10-12" },
+        { url: "https://old.reddit.com/r/seo/comments/abc", title: "Reddit", published: "2026-10-12" },
+        { url: "https://q.example.net/9", title: "Old", published: "2026-08-01" },
+        { url: "https://q.example.net/10", title: "Undated" },
+        { url: "https://q.example.net/11", published: "2026-10-18" },
+        { url: "javascript:alert(1)", title: "Bad", published: "2026-10-18" },
+      ],
+    },
+    skipped,
+    now,
+  );
+  assert.deepEqual(posts, [
+    {
+      url: "https://forum.example.org/t/slow/1",
+      title: "Site got slow",
+      text: "help",
+      authorName: "ana",
+      postedAt: "2026-10-12T00:00:00.000Z",
+    },
+  ]);
+});

@@ -11,9 +11,11 @@ import {
   patchQuery,
   patchRun,
   saveVerdicts,
+  saveWebPosts,
   siteContextOf,
   startCollect,
 } from "./store.js";
+import { searchWebLines, WEB_PLATFORM } from "./web.js";
 
 const KEYWORDS_PER_LINE = 2;
 const JUDGE_CONCURRENCY = 5;
@@ -135,33 +137,63 @@ function platformEvent(platform, stats) {
   };
 }
 
-async function collectStage(input, runId, ctx) {
+async function vendorStage(platforms, runId, ctx) {
   const { state, send, siteId, cookieHeader } = ctx;
-  send("stage", { stage: "searching" });
-  for (const platform of input.platforms) {
+  for (const platform of platforms) {
     await until(state, startCollect(siteId, runId, platform, cookieHeader));
     send("platform", { platform, status: "fetching" });
   }
   const reported = new Set();
-  let run = null;
-  while (true) {
-    run = await until(state, getRun(siteId, runId, cookieHeader));
+  while (reported.size < platforms.length) {
+    const run = await until(state, getRun(siteId, runId, cookieHeader));
     const stats = run?.platformStats ?? {};
-    for (const platform of input.platforms) {
+    for (const platform of platforms) {
       const own = stats[platform];
       if (!own || own.status === "running" || reported.has(platform)) continue;
       reported.add(platform);
       send("platform", platformEvent(platform, own));
     }
-    if (reported.size === input.platforms.length) break;
-    await until(state, sleep(POLL_MS));
+    if (reported.size < platforms.length) await until(state, sleep(POLL_MS));
   }
+}
+
+async function webStage(lines, siteContext, platforms, runId, ctx) {
+  const { state, send, llm, siteId, cookieHeader } = ctx;
+  send("platform", { platform: WEB_PLATFORM, status: "fetching" });
+  try {
+    const found = await until(
+      state,
+      searchWebLines({ lines, siteContext, platforms, guard: () => guard(state) }, llm),
+    );
+    const run = await until(state, saveWebPosts(siteId, runId, found, cookieHeader));
+    send("platform", platformEvent(WEB_PLATFORM, run?.platformStats?.[WEB_PLATFORM] ?? {}));
+    return null;
+  } catch (err) {
+    if (err instanceof Stopped) throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    send("platform", { platform: WEB_PLATFORM, status: "error", error: message });
+    return { status: "error", error: message };
+  }
+}
+
+async function collectStage(input, lines, siteContext, runId, ctx) {
+  const { state, send, siteId, cookieHeader } = ctx;
+  send("stage", { stage: "searching" });
+  const vendor = input.platforms.filter((p) => p !== WEB_PLATFORM);
+  const [, webFailure] = await Promise.all([
+    vendorStage(vendor, runId, ctx),
+    input.platforms.includes(WEB_PLATFORM)
+      ? webStage(lines, siteContext, vendor, runId, ctx)
+      : null,
+  ]);
+  const run = await until(state, getRun(siteId, runId, cookieHeader));
   const candidates = input.platforms.reduce(
     (n, p) => n + (run?.platformStats?.[p]?.candidates ?? 0),
     0,
   );
   send("saved", { fetched: run?.fetchedCount ?? 0, inserted: candidates });
-  return { fetched: run?.fetchedCount ?? 0, inserted: candidates, platforms: run?.platformStats };
+  const platforms = { ...run?.platformStats, ...(webFailure ? { [WEB_PLATFORM]: webFailure } : {}) };
+  return { fetched: run?.fetchedCount ?? 0, inserted: candidates, platforms };
 }
 
 async function gateStage(ctx) {
@@ -299,7 +331,7 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
     }, ALIVE_MS);
 
     const lines = await searchTerms(enabledLines, siteContext, ctx);
-    const collected = await collectStage(input, runId, ctx);
+    const collected = await collectStage(input, lines, siteContext, runId, ctx);
     counts.matchedCount = await gateStage(ctx);
     const judgedOut = await judgeStage(lines, siteContext, ctx);
     counts.keptCount = judgedOut.kept;
