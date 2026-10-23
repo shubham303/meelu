@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { dollars } from "./lib";
+import { SKIP_HOURS, dollars, skippedLine, skippedOf } from "./lib";
 
 export interface RunOutcome {
   stopped: boolean;
@@ -12,7 +12,14 @@ export interface RunOutcome {
   problems: string[];
   platforms: Record<
     string,
-    { error?: string | null; fromVendor?: number; fromDatabase?: number; costMicros?: number; kept?: number }
+    {
+      error?: string | null;
+      fromVendor?: number;
+      fromDatabase?: number;
+      costMicros?: number;
+      kept?: number;
+      skippedQueries?: unknown;
+    }
   >;
 }
 
@@ -34,6 +41,10 @@ export function RunResult({
   const yields = outcome.stopped ? [] : Object.entries(outcome.platforms).filter(([, s]) => !s.error);
   const searched = listOf(Object.keys(outcome.platforms).map(platformLabel));
   const good = !outcome.stopped && outcome.kept > 0;
+  const skipped = Object.entries(outcome.platforms)
+    .map(([id, s]) => [id, skippedOf(s.skippedQueries)] as [string, ReturnType<typeof skippedOf>])
+    .filter(([, items]) => items.length > 0);
+  const skippedCount = skipped.reduce((n, [, items]) => n + items.length, 0);
 
   let title: string;
   let hint: string | null = null;
@@ -73,6 +84,13 @@ export function RunResult({
               </li>
             ))}
           </ul>
+        )}
+        {skippedCount > 0 && (
+          <p className="text-[13px] text-sub">
+            Skipped {skippedCount} {skippedCount === 1 ? "search" : "searches"} that already ran in the last{" "}
+            {SKIP_HOURS} hours: {skippedLine(skipped, platformLabel)}. They run again once {SKIP_HOURS} hours have
+            passed.
+          </p>
         )}
         {failed.map(([id, s]) => (
           <p key={id} className="text-[13px] text-bad">

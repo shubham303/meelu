@@ -7,7 +7,7 @@ export const SOURCE_OPTIONS: Array<{ id: LeadSource; label: string; hint: string
   {
     id: "posts",
     label: "Post authors",
-    hint: "People who recently posted about it on Reddit, X, LinkedIn, Bluesky, Facebook, HN, GitHub or Dev.to",
+    hint: "People who recently posted about it on Reddit, X, LinkedIn, Bluesky, HN, GitHub or Dev.to",
   },
   {
     id: "linkedin",
@@ -60,7 +60,35 @@ export interface SourceProgress {
   candidates: number;
   fromVendor?: number;
   fromStore?: number;
+  fromCache?: number;
   error?: string;
+}
+
+export interface SkippedSearch {
+  source: string;
+  query: string;
+  searchedAt: string;
+}
+
+export const SKIP_HOURS = 12;
+
+export function withSkipped(prev: SkippedSearch[], source: string, raw: unknown): SkippedSearch[] {
+  if (!Array.isArray(raw) || raw.length === 0) return prev;
+  const out = [...prev];
+  for (const item of raw as Array<{ query?: unknown; searchedAt?: unknown }>) {
+    const query = String(item?.query ?? "");
+    if (!query || out.some((s) => s.source === source && s.query === query)) continue;
+    out.push({ source, query, searchedAt: String(item?.searchedAt ?? "") });
+  }
+  return out;
+}
+
+export function skippedLine(skipped: SkippedSearch[], limit = 6): string {
+  const shown = skipped
+    .slice(0, limit)
+    .map((s) => `“${s.query}” on ${sourceLabel(s.source)}${s.searchedAt ? ` (${ago(s.searchedAt)})` : ""}`);
+  const more = skipped.length > limit ? ` and ${skipped.length - limit} more` : "";
+  return `${shown.join(" · ")}${more}`;
 }
 
 export interface RoundProgress {
@@ -79,6 +107,7 @@ export interface LiveRun {
   screened: { screened: number; total: number; kept: number } | null;
   enriched: { status: string; people: number; fromVendor: number; fromStore: number; error?: string } | null;
   judged: { judged: number; total: number; kept: number } | null;
+  skipped: SkippedSearch[];
   problems: string[];
   error: string | null;
 }
@@ -92,6 +121,7 @@ export const EMPTY_LIVE: LiveRun = {
   screened: null,
   enriched: null,
   judged: null,
+  skipped: [],
   problems: [],
   error: null,
 };
@@ -105,6 +135,7 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
       step: "collect",
       briefs: prev.briefs,
       searches: prev.searches,
+      skipped: prev.skipped,
       problems: prev.problems,
       round: { round: n(d.round), maxRounds: n(d.maxRounds), kept: n(d.kept), target: n(d.target) },
     };
@@ -119,6 +150,7 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
     if (!key) return prev;
     return {
       ...prev,
+      skipped: withSkipped(prev.skipped, key, d.skippedQueries),
       sources: {
         ...prev.sources,
         [key]: {
@@ -126,6 +158,7 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
           candidates: n(d.candidates),
           fromVendor: d.fromVendor === undefined ? undefined : n(d.fromVendor),
           fromStore: d.fromStore === undefined ? undefined : n(d.fromStore),
+          fromCache: d.fromCache === undefined ? undefined : n(d.fromCache),
           error: d.error ? String(d.error) : undefined,
         },
       },

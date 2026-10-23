@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.ids import uid
 from src.core.pagination import PaginatedApiResponse, PaginationParams, PaginationService
-from src.social_listening.models.post import SocialListeningPost
 from src.providers.social_search.models.social_post import SocialPost
+from src.social_listening.models.post import SocialListeningPost
 from src.social_listening.schemas import PostFilters, PostResponse
 
 POST_FIELDS = (
@@ -119,6 +119,18 @@ class SocialListeningPostRepository:
             )
         )
         return {row.id: row for row in result.scalars().all()}
+
+    async def get_many_with_posts(
+        self, db: AsyncSession, site_id: str, ids: list[str]
+    ) -> list[tuple[SocialListeningPost, SocialPost]]:
+        if not ids:
+            return []
+        result = await db.execute(
+            self._joined().where(
+                SocialListeningPost.site_id == site_id, SocialListeningPost.id.in_(ids)
+            )
+        )
+        return [(own, post) for own, post in result.all()]
 
     async def insert_candidates(
         self, db: AsyncSession, user_id: str, site_id: str, run_id: str, post_ids: list[str]

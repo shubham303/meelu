@@ -3,12 +3,15 @@ import { createProviders } from "../providers/index.js";
 import { JUDGE_BATCH, judgeBatch } from "./judge.js";
 import { morePlans, needsPlan, planBriefs } from "./plan.js";
 import {
+  checkLeads,
   createRun,
   fetchSetup,
   getRun,
   listLeads,
+  listSearches,
   patchBrief,
   patchRun,
+  recordWebSearch,
   saveCandidates,
   saveJudged,
   siteContextOf,
@@ -16,13 +19,15 @@ import {
   startEnrich,
   startScreen,
 } from "./store.js";
-import { searchWeb } from "./web.js";
+import { queryKey, searchWeb } from "./web.js";
 
 const LLM_CONCURRENCY = 5;
 const WEB_CONCURRENCY = 2;
 const ATTEMPTS = 2;
 const POLL_MS = 3000;
 const ALIVE_MS = 30_000;
+const CHECK_BATCH = 100;
+const LEFT_OUT_PLATFORMS = new Set(["facebook"]);
 export const MAX_ROUNDS = 10;
 export const DEFAULT_TARGET = 20;
 export const MAX_TARGET = 100;
@@ -47,12 +52,24 @@ function chunk(list, size) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function newRunState(siteId) {
+  const controller = new AbortController();
   let halt = () => {};
   const halted = new Promise((_, reject) => {
-    halt = () => reject(new Stopped());
+    halt = () => {
+      controller.abort();
+      reject(new Stopped());
+    };
   });
   halted.catch(() => {});
-  return { siteId, stopped: false, halted, halt, startedAt: Date.now(), progress: [] };
+  return {
+    siteId,
+    stopped: false,
+    halted,
+    halt,
+    signal: controller.signal,
+    startedAt: Date.now(),
+    progress: [],
+  };
 }
 
 export function targetOf(value) {
@@ -174,6 +191,7 @@ function sourceEvent(key, stats) {
     candidates: stats.candidates ?? 0,
     ...(stats.fromVendor !== undefined ? { fromVendor: stats.fromVendor } : {}),
     ...(stats.fromStore !== undefined ? { fromStore: stats.fromStore } : {}),
+    ...(stats.skippedQueries?.length ? { skippedQueries: stats.skippedQueries } : {}),
     ...(stats.error ? { error: stats.error } : {}),
   };
 }
@@ -185,14 +203,24 @@ async function webSource(briefs, siteContext, runId, ctx) {
   send("source", { key: "web", status: "running" });
   let candidates = 0;
   let failed = 0;
+  let fromCache = 0;
   let lastError = null;
+  const skippedQueries = [];
+  const searches = await until(state, listSearches(siteId, "web", cookieHeader));
+  const earlier = new Map(searches.map((row) => [queryKey(row.query), row]));
+  const remember = (query, results) =>
+    until(state, recordWebSearch(siteId, query, results, cookieHeader)).catch((err) => {
+      if (err instanceof Stopped) throw err;
+    });
   await pool(webBriefs, WEB_CONCURRENCY, async (brief) => {
     try {
       const found = await until(
         state,
-        searchWeb({ brief, siteContext, guard: () => guard(state) }, llm),
+        searchWeb({ brief, siteContext, guard: () => guard(state), earlier, remember }, llm),
       );
-      const saved = await until(state, saveCandidates(siteId, runId, found, cookieHeader));
+      skippedQueries.push(...found.skipped);
+      fromCache += found.fromCache;
+      const saved = await until(state, saveCandidates(siteId, runId, found.candidates, cookieHeader));
       candidates += saved?.inserted ?? 0;
     } catch (err) {
       if (err instanceof Stopped) throw err;
@@ -204,11 +232,13 @@ async function webSource(briefs, siteContext, runId, ctx) {
     key: "web",
     status: failed === webBriefs.length ? "error" : "done",
     candidates,
+    ...(fromCache ? { fromCache } : {}),
+    ...(skippedQueries.length ? { skippedQueries } : {}),
     ...(lastError ? { error: lastError } : {}),
   });
 }
 
-async function apiSources(briefs, platforms, runId, round, ctx) {
+async function apiSources(briefs, platforms, runId, ctx) {
   const { state, send, siteId, cookieHeader } = ctx;
   const searches = briefs
     .filter((b) => hasSource(b, "posts"))
@@ -219,7 +249,7 @@ async function apiSources(briefs, platforms, runId, round, ctx) {
       try {
         await until(
           state,
-          startCollect(siteId, runId, { source: "posts", platform, round, searches }, cookieHeader),
+          startCollect(siteId, runId, { source: "posts", platform, searches }, cookieHeader),
         );
         keys.push(`posts:${platform}`);
         send("source", { key: `posts:${platform}`, status: "running" });
@@ -236,7 +266,7 @@ async function apiSources(briefs, platforms, runId, round, ctx) {
   }
   if (briefs.some((b) => hasSource(b, "linkedin") && b.plan?.linkedin?.query)) {
     try {
-      await until(state, startCollect(siteId, runId, { source: "linkedin", round }, cookieHeader));
+      await until(state, startCollect(siteId, runId, { source: "linkedin" }, cookieHeader));
       keys.push("linkedin");
       send("source", { key: "linkedin", status: "running" });
     } catch (err) {
@@ -263,10 +293,10 @@ async function apiSources(briefs, platforms, runId, round, ctx) {
   }
 }
 
-async function collectStage(briefs, platforms, siteContext, runId, round, ctx) {
+async function collectStage(briefs, platforms, siteContext, runId, ctx) {
   ctx.send("stage", { stage: "collect" });
   await Promise.all([
-    apiSources(briefs, platforms, runId, round, ctx),
+    apiSources(briefs, platforms, runId, ctx),
     webSource(briefs, siteContext, runId, ctx),
   ]);
   const run = await until(ctx.state, getRun(ctx.siteId, runId, ctx.cookieHeader));
@@ -324,14 +354,36 @@ async function enrichStage(runId, ctx) {
   });
 }
 
+async function checkShortlist(shortlist, ctx) {
+  const { state, siteId, cookieHeader } = ctx;
+  const fits = new Set();
+  let removed = 0;
+  for (const part of chunk(shortlist, CHECK_BATCH)) {
+    const result = await withRetry(ctx, () =>
+      checkLeads(
+        siteId,
+        part.map((lead) => lead.id),
+        cookieHeader,
+      ),
+    );
+    guard(state);
+    if (!result) continue;
+    for (const id of result.fits ?? []) fits.add(id);
+    removed += result.removed ?? 0;
+  }
+  return { fitting: shortlist.filter((lead) => fits.has(lead.id)), removed };
+}
+
 async function judgeStage(briefs, siteContext, ctx) {
   const { state, send, llm, siteId, cookieHeader } = ctx;
   send("stage", { stage: "judge" });
   const shortlist = await until(state, listLeads(siteId, "shortlisted", cookieHeader));
   send("judged", { judged: 0, total: shortlist.length, kept: 0 });
-  let judged = 0;
+  const { fitting, removed } = await checkShortlist(shortlist, ctx);
+  let judged = removed;
   let kept = 0;
-  await pool(batchesByBrief(shortlist, briefs, JUDGE_BATCH, siteContext), LLM_CONCURRENCY, async (batch) => {
+  send("judged", { judged, total: shortlist.length, kept });
+  await pool(batchesByBrief(fitting, briefs, JUDGE_BATCH, siteContext), LLM_CONCURRENCY, async (batch) => {
     guard(state);
     const verdicts = await withRetry(ctx, () => judgeBatch(batch.leads, batch.judgeCtx, llm));
     if (!verdicts) return;
@@ -347,7 +399,7 @@ async function availablePlatforms(cookieHeader) {
   try {
     const providers = createProviders({ cookieHeader });
     const platforms = await providers.listening.availablePlatforms();
-    return platforms.filter((p) => p?.available).map((p) => p.id);
+    return platforms.filter((p) => p?.available && !LEFT_OUT_PLATFORMS.has(p.id)).map((p) => p.id);
   } catch {
     return [];
   }
@@ -362,31 +414,73 @@ function remember(used, briefs) {
   }
 }
 
-async function nextRoundBriefs(briefs, used, siteContext, ctx) {
+export function savedRound(brief, round) {
+  const saved = brief.plan?.rounds?.[round - 2];
+  if (!saved || ((saved.keywords ?? []).length === 0 && (saved.web ?? []).length === 0)) return null;
+  return { keywords: saved.keywords ?? [], web: saved.web ?? [] };
+}
+
+export function everyUsed(brief, used) {
+  const own = used.get(brief.id) ?? { keywords: new Set(), web: new Set() };
+  const keywords = new Set(own.keywords);
+  const web = new Set(own.web);
+  for (const r of [brief.plan ?? {}, ...(brief.plan?.rounds ?? [])]) {
+    for (const k of r.keywords ?? []) keywords.add(k);
+    for (const w of r.web ?? []) web.add(w);
+  }
+  return { keywords: [...keywords], web: [...web] };
+}
+
+async function saveRound(brief, round, plan, ctx) {
+  const rounds = [...(brief.plan?.rounds ?? [])];
+  if (rounds.length !== round - 2) return brief;
+  rounds.push({ keywords: plan.keywords, web: plan.web });
+  const nextPlan = { ...brief.plan, rounds };
+  const saved = await until(
+    ctx.state,
+    patchBrief(ctx.siteId, brief.id, { plan: nextPlan }, ctx.cookieHeader),
+  ).catch((err) => {
+    if (err instanceof Stopped) throw err;
+    return null;
+  });
+  return { ...brief, plan: saved?.plan ?? nextPlan };
+}
+
+async function nextRoundBriefs(briefs, round, used, siteContext, ctx) {
   const { state, send, llm } = ctx;
   send("stage", { stage: "plan" });
-  const plans = await until(
-    state,
-    morePlans(
-      {
-        briefs: briefs.map((b) => ({
-          id: b.id,
-          text: b.text,
-          sources: b.sources ?? [],
-          usedKeywords: [...(used.get(b.id)?.keywords ?? [])],
-          usedWeb: [...(used.get(b.id)?.web ?? [])],
-        })),
-        siteContext,
-      },
-      llm,
-    ),
-  );
-  const out = briefs.map((b) => {
-    const plan = plans.get(b.id);
-    const keywords = plan?.keywords ?? [];
-    const web = plan?.web ?? [];
-    const sources = (b.sources ?? []).filter((s) => s !== "web" || web.length > 0);
-    return { ...b, sources, plan: { ...b.plan, keywords, web } };
+  const missing = briefs.filter((b) => !savedRound(b, round));
+  const plans = missing.length
+    ? await until(
+        state,
+        morePlans(
+          {
+            briefs: missing.map((b) => {
+              const all = everyUsed(b, used);
+              return {
+                id: b.id,
+                text: b.text,
+                sources: b.sources ?? [],
+                usedKeywords: all.keywords,
+                usedWeb: all.web,
+              };
+            }),
+            siteContext,
+          },
+          llm,
+        ),
+      )
+    : new Map();
+  const updated = [];
+  for (const b of briefs) {
+    const fresh = plans.get(b.id);
+    const usable = fresh && (fresh.keywords.length > 0 || (fresh.web ?? []).length > 0);
+    updated.push(usable ? await saveRound(b, round, { keywords: fresh.keywords, web: fresh.web ?? [] }, ctx) : b);
+  }
+  const out = updated.map((b) => {
+    const plan = savedRound(b, round) ?? { keywords: [], web: [] };
+    const sources = (b.sources ?? []).filter((s) => s !== "web" || plan.web.length > 0);
+    return { ...b, sources, plan: { ...b.plan, keywords: plan.keywords, web: plan.web } };
   });
   send("plan", {
     briefs: out.length,
@@ -399,7 +493,7 @@ async function nextRoundBriefs(briefs, used, siteContext, ctx) {
       0,
     ),
   });
-  return out;
+  return { briefs: updated, roundBriefs: out };
 }
 
 async function drive(jobId, siteId, target, state, emit, { cookieHeader, release }) {
@@ -411,7 +505,7 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
     release();
     send(event, data);
   };
-  const llm = { cookieHeader, siteId, purpose: "find_leads" };
+  const llm = { cookieHeader, siteId, purpose: "find_leads", signal: state.signal };
   const problems = [];
   const problem = (message) => {
     if (problems.includes(message)) return;
@@ -444,18 +538,22 @@ async function drive(jobId, siteId, target, state, emit, { cookieHeader, release
       patchRun(siteId, runId, {}, cookieHeader).catch(() => {});
     }, ALIVE_MS);
 
-    const planned = await planStage(enabled, siteContext, ctx);
+    let planned = await planStage(enabled, siteContext, ctx);
     const used = new Map();
     let found = 0;
     let round = 0;
     let roundBriefs = planned;
     while (round < MAX_ROUNDS && counts.keptCount < target) {
       round += 1;
-      if (round > 1) roundBriefs = await nextRoundBriefs(planned, used, siteContext, ctx);
+      if (round > 1) {
+        const next = await nextRoundBriefs(planned, round, used, siteContext, ctx);
+        planned = next.briefs;
+        roundBriefs = next.roundBriefs;
+      }
       remember(used, roundBriefs);
       send("round", { round, maxRounds: MAX_ROUNDS, kept: counts.keptCount, target });
       await until(state, patchRun(siteId, runId, { round, ...counts }, cookieHeader));
-      found = await collectStage(roundBriefs, platforms, siteContext, runId, round, ctx);
+      found = await collectStage(roundBriefs, platforms, siteContext, runId, ctx);
       counts.shortlistedCount += await screenStage(runId, ctx);
       await enrichStage(runId, ctx);
       counts.keptCount += await judgeStage(planned, siteContext, ctx);

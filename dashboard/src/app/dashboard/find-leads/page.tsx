@@ -273,6 +273,7 @@ export default function FindLeadsPage() {
           kept: m.event === "done" ? n(d.kept) : (prev.judged?.kept ?? 0),
           failed,
           problems: prev.problems,
+          skipped: prev.skipped,
         });
       }
       jobRef.current = null;

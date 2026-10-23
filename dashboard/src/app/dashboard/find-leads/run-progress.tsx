@@ -3,7 +3,7 @@
 import { Check } from "lucide-react";
 import { Card, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import { STEPS, sourceTotals, type LiveRun, type RunStep } from "./lib";
+import { SKIP_HOURS, STEPS, skippedLine, sourceTotals, type LiveRun, type RunStep } from "./lib";
 
 const HEADLINE: Record<RunStep, string> = {
   plan: "Turning your briefs into searches",
@@ -110,6 +110,12 @@ export function RunProgress({ live }: { live: LiveRun }) {
           );
         })}
       </div>
+      {live.skipped.length > 0 && (
+        <p className="text-[13px] text-sub">
+          Skipped {live.skipped.length} {live.skipped.length === 1 ? "search" : "searches"} already run in the last{" "}
+          {SKIP_HOURS} hours: {skippedLine(live.skipped)}
+        </p>
+      )}
       {live.problems.map((message) => (
         <p key={message} className="text-[13px] text-bad">
           Some people were not checked: {message}

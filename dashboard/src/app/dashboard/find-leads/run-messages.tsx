@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SKIP_HOURS, skippedLine, type SkippedSearch } from "./lib";
 
 export interface RunOutcome {
   stopped: boolean;
@@ -12,6 +13,7 @@ export interface RunOutcome {
   kept: number;
   failed: string[];
   problems: string[];
+  skipped: SkippedSearch[];
 }
 
 function Notice({
@@ -151,6 +153,12 @@ export function RunResult({
     <div className="space-y-2.5">
       {main}
       {failures}
+      {outcome.skipped.length > 0 && (
+        <Notice
+          title={`Skipped ${outcome.skipped.length} ${outcome.skipped.length === 1 ? "search" : "searches"} that already ran in the last ${SKIP_HOURS} hours.`}
+          hint={`${skippedLine(outcome.skipped)}. They run again once ${SKIP_HOURS} hours have passed; later rounds use new keywords.`}
+        />
+      )}
       {outcome.problems.length > 0 && (
         <Notice
           tone="bad"

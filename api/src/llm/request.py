@@ -15,6 +15,7 @@ FORWARDED_KEYS = frozenset(
         "top_p",
         "tools",
         "tool_choice",
+        "max_tool_calls",
         "thinking",
         "context_management",
         "output_config",

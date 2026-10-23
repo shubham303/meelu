@@ -29,13 +29,46 @@ export const OUTCOME: Partial<Record<SocialListeningReviewStatus, { label: strin
 
 export type RunStep = "terms" | "searching" | "meaning" | "judging";
 
+export interface SkippedSearch {
+  query: string;
+  searchedAt: string;
+}
+
+export const SKIP_HOURS = 12;
+
+export function skippedOf(raw: unknown): SkippedSearch[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Array<{ query?: unknown; searchedAt?: unknown }>)
+    .map((item) => ({ query: String(item?.query ?? ""), searchedAt: String(item?.searchedAt ?? "") }))
+    .filter((item) => item.query);
+}
+
+export function skippedLine(
+  byPlatform: Array<[string, SkippedSearch[]]>,
+  platformLabel: (id: string) => string,
+  limit = 6,
+): string {
+  const all = byPlatform.flatMap(([id, items]) => items.map((item) => ({ id, ...item })));
+  const shown = all
+    .slice(0, limit)
+    .map((s) => `“${s.query}” on ${platformLabel(s.id)}${s.searchedAt ? ` (${hoursAgo(s.searchedAt)} ago)` : ""}`);
+  const more = all.length > limit ? ` and ${all.length - limit} more` : "";
+  return `${shown.join(" · ")}${more}`;
+}
+
 export interface LiveRun {
   step: RunStep | null;
   lines: number;
   phrases: number;
   platforms: Record<
     string,
-    { status: "fetching" | "done" | "error"; fromVendor?: number; fromDatabase?: number; error?: string }
+    {
+      status: "fetching" | "done" | "error";
+      fromVendor?: number;
+      fromDatabase?: number;
+      skippedQueries?: SkippedSearch[];
+      error?: string;
+    }
   >;
   fetched: number;
   inserted: number;
@@ -76,6 +109,7 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
           status: d.status as "fetching" | "done" | "error",
           fromVendor: d.fromVendor as number | undefined,
           fromDatabase: d.fromDatabase as number | undefined,
+          skippedQueries: skippedOf(d.skippedQueries),
           error: d.error as string | undefined,
         },
       },

@@ -20,7 +20,7 @@ Read the site record and the business profile: what the site sells, who buys it,
 
 ## How to work
 - Propose two to four briefs, ranked. A site holds at most 10. Each brief is one plain sentence naming who the person is AND what shows they need this site: "owners of small Shopify stores who say their Google traffic dropped", "freelance web designers who hand sites to clients without any SEO reporting". A job title alone is too broad.
-- Pick the sources for each: posts (people who recently posted about the problem on Reddit, X, LinkedIn, Bluesky, Facebook, Hacker News, GitHub or Dev.to), linkedin (profiles matching a role) and web (websites and directories, with an email only when the page prints one). Posts suit a problem people complain about; linkedin suits a clear role; web suits small businesses with their own site.
+- Pick the sources for each: posts (people who recently posted about the problem on Reddit, X, LinkedIn, Bluesky, Hacker News, GitHub or Dev.to), linkedin (profiles matching a role) and web (websites and directories, with an email only when the page prints one). Posts suit a problem people complain about; linkedin suits a clear role; web suits small businesses with their own site.
 - The run turns each brief into searches itself; never write keyword lists.
 - Save once, with find_leads_save_briefs (source "suggested").
 

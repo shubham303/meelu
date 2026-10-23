@@ -6,6 +6,8 @@ from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.social_listening.schemas import (
+    CheckRequest,
+    CheckResponse,
     CollectRequest,
     ConfigResponse,
     ConfigUpdateRequest,
@@ -22,6 +24,7 @@ from src.social_listening.schemas import (
     QueryUpsertItem,
     RunResponse,
     RunUpdateRequest,
+    SearchResponse,
     SummaryResponse,
     UpsertResponse,
     WebPostsRequest,
@@ -156,6 +159,24 @@ async def gate_posts(
     ctx: AuthContext = Depends(require_site),
 ) -> GateResponse:
     return await social_listening_service.gate_posts(db, ctx.site_id)
+
+
+@router.post("/social-listening/posts/check")
+async def check_posts(
+    body: CheckRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> CheckResponse:
+    return await social_listening_service.check_posts(db, ctx.user_id, ctx.site_id, body)
+
+
+@router.get("/social-listening/searches")
+async def list_searches(
+    platform: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> list[SearchResponse]:
+    return await social_listening_service.list_searches(db, ctx.site_id, platform)
 
 
 @router.post("/social-listening/posts/judged")

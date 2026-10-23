@@ -13,12 +13,14 @@ from src.providers.social_search.platforms import PLATFORMS
 from src.providers.social_search.repository import social_posts
 from src.providers.social_search.service import social_search
 from src.providers.social_search.store import vendor_keywords
+from src.social_listening.checking import classify_posts
 from src.social_listening.collect import (
     SILENT_ERROR,
     collect_platform,
     is_silent,
     keyword_windows,
     normalize_keyword,
+    recently_searched,
     running_stats,
     site_keywords,
 )
@@ -40,10 +42,13 @@ from src.social_listening.schemas import (
     PER_KEYWORD,
     POST_STATUSES,
     RUN_STATUSES,
+    SKIP_HOURS,
     USER_STATUSES,
     WEB_COST_PER_LINE_MICROS,
     WEB_LOOKBACK_DAYS,
     WEB_PLATFORM,
+    CheckRequest,
+    CheckResponse,
     ConfigResponse,
     ConfigUpdateRequest,
     EstimateResponse,
@@ -59,6 +64,7 @@ from src.social_listening.schemas import (
     QueryUpsertItem,
     RunResponse,
     RunUpdateRequest,
+    SearchResponse,
     SummaryResponse,
     UpsertResponse,
     WebPostsRequest,
@@ -272,12 +278,33 @@ class SocialListeningService:
         candidates = await social_listening_posts.insert_candidates(
             db, user_id, site_id, run_id, post_ids
         )
-        stats = web_stats(len(rows), candidates, body.searched_lines, body.failed_lines, body.error)
+        stats = web_stats(
+            len(rows),
+            candidates,
+            body.searched_lines,
+            body.failed_lines,
+            body.error,
+            body.skipped_queries,
+        )
         await social_listening_runs.merge_platform_stats(
             db, run_id, WEB_PLATFORM, stats, fetched=len(rows)
         )
+        searched = list(
+            dict.fromkeys(q for q in (normalize_keyword(q) for q in body.searched_queries) if q)
+        )
+        await social_listening_cursors.advance(db, user_id, site_id, WEB_PLATFORM, searched, now)
         await db.refresh(row)
         return RunResponse.model_validate(row)
+
+    async def list_searches(
+        self, db: AsyncSession, site_id: str, platform: str
+    ) -> list[SearchResponse]:
+        cutoff = datetime.now(UTC) - timedelta(hours=SKIP_HOURS)
+        recent = await social_listening_cursors.since(db, site_id, platform, cutoff)
+        return [
+            SearchResponse(platform=platform, query=query, searched_at=at)
+            for query, at in recent.items()
+        ]
 
     async def patch_run(
         self, db: AsyncSession, site_id: str, run_id: str, body: RunUpdateRequest
@@ -330,7 +357,8 @@ class SocialListeningService:
             cursors = await social_listening_cursors.by_keyword(
                 db, site_id, platform["id"], keywords
             )
-            windows = keyword_windows(keywords, cursors, now)
+            skipped = {s["query"] for s in recently_searched(cursors, now)}
+            windows = keyword_windows([k for k in keywords if k not in skipped], cursors, now)
             searched = len(await vendor_keywords(db, platform["id"], windows)) + pending
             out.append(
                 PlatformEstimate(
@@ -342,12 +370,17 @@ class SocialListeningService:
                     ),
                 )
             )
+        web_cursors = await social_listening_cursors.by_keyword(
+            db, site_id, WEB_PLATFORM, [normalize_keyword(line.text) for line in lines]
+        )
+        web_skipped = {s["query"] for s in recently_searched(web_cursors, now)}
+        web_lines = [line for line in lines if normalize_keyword(line.text) not in web_skipped]
         out.append(
             PlatformEstimate(
                 platform=WEB_PLATFORM,
                 keywords=len(lines),
-                vendor_keywords=len(lines),
-                max_cost_micros=len(lines) * WEB_COST_PER_LINE_MICROS,
+                vendor_keywords=len(web_lines),
+                max_cost_micros=len(web_lines) * WEB_COST_PER_LINE_MICROS,
             )
         )
         return EstimateResponse(platforms=out)
@@ -367,6 +400,30 @@ class SocialListeningService:
         matched = await social_listening_posts.match_candidates(db, site_id, MIN_SIMILARITY)
         removed += await social_listening_posts.delete_embedded_candidates(db, site_id)
         return GateResponse(pending=pending, matched=matched, removed=removed)
+
+    async def check_posts(
+        self, db: AsyncSession, user_id: str, site_id: str, body: CheckRequest
+    ) -> CheckResponse:
+        rows = [
+            row
+            for row in await social_listening_posts.get_many_with_posts(db, site_id, body.ids)
+            if row[0].status == "matched"
+        ]
+        lines = {q.id: q.text for q in await social_listening_queries.list(db, site_id)}
+        await db.commit()
+        verdicts, errors, planned = await classify_posts(user_id, site_id, rows, lines)
+        if planned and len(errors) == planned:
+            raise HTTPException(502, f"The fit check failed: {errors[0]}")
+        fresh = await social_listening_posts.get_many(db, site_id, [own.id for own, _ in verdicts])
+        still_matched = [
+            (own, keep)
+            for own, keep in verdicts
+            if own.id in fresh and fresh[own.id].status == "matched"
+        ]
+        removed = await social_listening_posts.delete_many(
+            db, site_id, [own.id for own, keep in still_matched if not keep]
+        )
+        return CheckResponse(fits=[own.id for own, keep in still_matched if keep], removed=removed)
 
     async def judge_posts(
         self, db: AsyncSession, site_id: str, body: PostsJudgeRequest

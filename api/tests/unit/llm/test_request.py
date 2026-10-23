@@ -6,6 +6,11 @@ def test_forwarded_keeps_known_fields_and_pins_the_model():
     assert forwarded(body, "x/model", 5) == {"max_tokens": 5, "messages": [], "model": "x/model"}
 
 
+def test_forwarded_keeps_the_server_tool_budget():
+    body = {"max_tokens": 5, "messages": [], "tools": [{"type": "x"}], "max_tool_calls": 3}
+    assert forwarded(body, "x/model", 5)["max_tool_calls"] == 3
+
+
 def test_forwarded_caps_max_tokens_and_a_thinking_budget_above_it():
     body = {
         "max_tokens": 100_000,

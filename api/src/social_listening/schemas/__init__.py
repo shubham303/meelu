@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Any
 
+from pydantic import Field
+
 from src.core.schemas import EntityModel, JsDateTime, RequestModel
 
 PIPELINE_STATUSES = ("candidate", "matched")
@@ -17,7 +19,8 @@ LOOKBACK_DAYS = 7
 MINIMUM_BALANCE_USD = 5
 WEB_PLATFORM = "web"
 WEB_LOOKBACK_DAYS = 30
-WEB_COST_PER_LINE_MICROS = 80_000
+WEB_COST_PER_LINE_MICROS = 30_000
+SKIP_HOURS = 12
 MAX_WEB_POSTS = 500
 
 
@@ -70,7 +73,26 @@ class WebPostsRequest(RequestModel):
     posts: list[WebPost]
     searched_lines: int = 0
     failed_lines: int = 0
+    searched_queries: list[str] = Field(default_factory=list, max_length=MAX_LINES_PER_SITE)
+    skipped_queries: list[dict[str, str]] = Field(
+        default_factory=list, max_length=MAX_LINES_PER_SITE
+    )
     error: str | None = None
+
+
+class CheckRequest(RequestModel):
+    ids: list[str] = Field(max_length=200)
+
+
+class CheckResponse(EntityModel):
+    fits: list[str]
+    removed: int
+
+
+class SearchResponse(EntityModel):
+    platform: str
+    query: str
+    searched_at: JsDateTime
 
 
 class PostVerdict(RequestModel):
