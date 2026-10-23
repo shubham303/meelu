@@ -2,9 +2,11 @@ import asyncio
 import signal
 import sys
 
+import sentry_sdk
+
 import src.core.tables  # noqa: F401
 from src.core.database import engine
-from src.core.logging import configure_logging, get_logger
+from src.core.logging import configure_error_reporting, configure_logging, get_logger
 from src.site_pages.llm_extraction.classify import site_page_classifier
 
 from .embedding import Embedder
@@ -57,6 +59,7 @@ async def loop(name: str, passes, interval: float, once: bool) -> None:
                 await asyncio.sleep(interval)
         except Exception as e:
             log.error("embed_worker.loop.pass_failed", loop=name, error=str(e))
+            sentry_sdk.capture_exception(e)
             if once:
                 return
             await asyncio.sleep(interval)
@@ -79,6 +82,7 @@ async def run(settings: WorkerSettings) -> None:
 
 def main():
     configure_logging()
+    configure_error_reporting()
     settings = WorkerSettings()
 
     if not settings.database_url:

@@ -30,6 +30,7 @@ dependencies = [
     "apscheduler>=3.11.3",
     "pycountry>=26.2.16",
     "pyjwt[crypto]>=2.14",
+    "sentry-sdk[fastapi]>=2.73.0",
 ]
 
 [project.optional-dependencies]

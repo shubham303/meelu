@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.core.logging import log_connection_checkouts
 from src.settings import settings
 
 engine = create_async_engine(
@@ -11,7 +10,6 @@ engine = create_async_engine(
     pool_size=settings.database_pool_max,
     pool_pre_ping=True,
 )
-log_connection_checkouts(engine.sync_engine, "api")
 
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
 

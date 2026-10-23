@@ -12,10 +12,11 @@ from src.agent.server import mcp
 from src.agent_plans.service import agent_plan_service
 from src.core import scheduler
 from src.core.database import unit_of_work
-from src.core.logging import configure_logging
+from src.core.logging import configure_error_reporting, configure_logging
 from src.settings import settings
 
 configure_logging()
+configure_error_reporting()
 
 mcp_app = mcp.streamable_http_app()
 
