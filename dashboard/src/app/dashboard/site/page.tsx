@@ -183,7 +183,7 @@ function Sections({ pages }: { pages: number }) {
       <SectionCard
         href="/dashboard/site/structure"
         icon={Network}
-        title="Structure"
+        title="Internal links"
         blurb="How pages are reached from the home page — orphans, unreachable pages, and pages buried too deep."
       >
         {discovery && discovery.live > 0 && (
