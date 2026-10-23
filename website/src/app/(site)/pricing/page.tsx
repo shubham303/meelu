@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { site } from "@/lib/site";
+import { softwareApplicationJson } from "@/lib/software-schema";
 
 const title = "Meelu pricing: pay per website, plus what you use";
 const description =
-  "Meelu has one plan. 1 credit is 1 US dollar. Each of your first five websites costs 0.4 credits a day, and every website after that 0.2. External data and AI services are charged per use. No subscription.";
+  "One plan, no subscription. 1 credit is 1 US dollar, a website costs 0.4 credits a day (0.2 after five), and data and AI services are charged per use.";
 
 export const metadata: Metadata = {
   title,
@@ -73,6 +74,7 @@ const faqs = [
 export default function PricingPage() {
   return (
     <div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: softwareApplicationJson }} />
       <section className="relative overflow-hidden border-b border-edge">
         <div aria-hidden className="grain absolute inset-0" />
         <div

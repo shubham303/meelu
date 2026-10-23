@@ -17,7 +17,7 @@ const url = `${site.url}/tools/keyword-clustering-tool`;
 
 const title = "Free Keyword Clustering Tool: Group Keywords by Search Intent";
 const description =
-  "A free AI SEO tool for keyword clustering. Enter a few seed keywords and get page-level clusters split by search intent, checked against Google's top 10, with real per-phrase search volume. No sign-up.";
+  "Free keyword clustering tool: enter seed keywords and get clusters split by search intent, checked against Google's top 10, with real search volume.";
 
 export const metadata: Metadata = {
   title,
