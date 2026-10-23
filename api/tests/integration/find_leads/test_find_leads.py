@@ -61,20 +61,20 @@ def decider(monkeypatch):
 
     state = {"drop": set(), "fail": False, "calls": []}
 
-    async def decide(caller, subject, data, questions):
+    async def classify(caller, subject, data, questions):
         state["calls"].append((subject, data, questions))
         if state["fail"]:
             raise RuntimeError("model down")
         answers = {
             key: {
-                "choice": "no" if any(h in q["instructions"] for h in state["drop"]) else "yes",
-                "confidence": 1.0,
+                "type": "noul",
+                "noul": 0.1 if any(h in q["instructions"] for h in state["drop"]) else 0.9,
             }
             for key, q in questions.items()
         }
         return {"answers": answers}
 
-    monkeypatch.setattr(json_data_extractor, "decide", decide)
+    monkeypatch.setattr(json_data_extractor, "classify", classify)
     return state
 
 
@@ -262,7 +262,9 @@ async def test_post_authors_become_candidates_once(client, email, vendors):
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"status": "done"})
     run = await start_run(client)
     finished = await collect(client, run["id"], "posts", "reddit")
-    assert finished["sourceStats"]["posts:reddit"]["candidates"] == 0
+    stats = finished["sourceStats"]["posts:reddit"]
+    assert stats["candidates"] == 0
+    assert sorted(s["query"] for s in stats["skippedQueries"]) == ["shop seo", "walrus dropped"]
     assert len([c for c in vendors["calls"] if c[0] == "posts"]) == 1
     assert len(await leads(client, "candidate")) == 2
 
@@ -424,6 +426,7 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider)
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"status": "done"})
     vendors["posts"]["reddit"].append(vendor_post("e1", "new_nick", "otter dropped again"))
     sql("delete from social_search_cursor")
+    sql("update lead_search set searched_at = now() - interval '13 hours'")
     run = await start_run(client)
     finished = await collect(client, run["id"], "posts", "reddit")
     handles = {lead["handle"] for lead in await leads(client, "candidate")}
@@ -491,7 +494,7 @@ async def test_runs_take_a_target_and_later_rounds_search_anew(client, email, ve
     vendors["people_by_page"] = {1: [person(1), person(2)], 2: [person(2), person(3)]}
     finished = await collect(client, run["id"], "linkedin")
     assert finished["sourceStats"]["linkedin"]["candidates"] == 2
-    finished = await collect(client, run["id"], "linkedin", round=2)
+    finished = await collect(client, run["id"], "linkedin")
     assert finished["sourceStats"]["linkedin"]["candidates"] == 3
     assert [c[-1] for c in vendors["calls"] if c[0] == "linkedin"] == [1, 2]
 
@@ -501,7 +504,6 @@ async def test_runs_take_a_target_and_later_rounds_search_anew(client, email, ve
         run["id"],
         "posts",
         "reddit",
-        round=2,
         searches=[{"briefId": brief["id"], "keywords": ["kestrel agency", "agency growth"]}],
     )
     assert ("posts", "reddit", ["agency growth", "kestrel agency"]) in vendors["calls"]
@@ -528,8 +530,8 @@ async def test_screen_batches_by_hundred_and_reports_failures(client, email, dec
     decider["fail"] = True
     stats = await screen(client, run["id"])
     assert stats["status"] == "error"
-    assert stats["error"].startswith("2 of 2 batches failed")
-    assert sorted(len(q) for _, _, q in decider["calls"]) == [50, 100]
+    assert stats["error"].startswith("8 of 8 batches failed")
+    assert sorted(len(q) for _, _, q in decider["calls"]) == [10] + [20] * 7
     left = sql("select count(*) from lead where site_id = %s and status = 'candidate'", (site_id,))
     assert left == [(150,)]
 
@@ -552,3 +554,59 @@ async def test_starting_a_run_closes_one_the_app_stopped_driving(client, email):
     assert old["status"] == "error"
     assert old["finishedAt"] is not None
     assert "stopped working on this run" in old["error"]
+
+
+async def test_check_drops_misfits_and_web_searches_are_remembered(client, email, vendors, decider):
+    await prepare(client, email)
+    await add_brief(client, "Shopify owners", ["posts"], ["otter sank", "shop seo"])
+    vendors["posts"]["reddit"] = [
+        vendor_post("m1", "candlesbydana", "My shop otter sank by half"),
+        vendor_post("m2", "agency_bob", "We fix otter sank issues, DM us"),
+    ]
+    run = await start_run(client)
+    await collect(client, run["id"], "posts", "reddit")
+    await screen(client, run["id"])
+    shortlisted = await leads(client, "shortlisted")
+    assert len(shortlisted) == 2
+
+    decider["drop"] = {"agency_bob"}
+    r = await client.post(f"{BASE}/leads/check", json={"ids": [x["id"] for x in shortlisted]})
+    assert r.status_code == 200, r.text
+    out = r.json()["data"]
+    dana = next(x for x in shortlisted if x["handle"] == "candlesbydana")
+    assert (out["fits"], out["removed"]) == ([dana["id"]], 1)
+    assert decider["calls"][-1][0]["task"] == "find_leads_check"
+    assert [x["handle"] for x in await leads(client, "shortlisted")] == ["candlesbydana"]
+
+    decider["fail"] = True
+    r = await client.post(f"{BASE}/leads/check", json={"ids": [dana["id"]]})
+    assert r.status_code == 502
+
+    angle = "Shopify owners on   community forums"
+    results = [{"name": "Dana", "website": "https://dana.example", "url": "https://dana.example"}]
+    r = await client.put(f"{BASE}/searches/web", json={"query": angle, "results": results})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["query"] == "Shopify owners on community forums"
+    r = await client.get(f"{BASE}/searches?platform=web")
+    rows = r.json()["data"]
+    assert [(row["query"], row["results"]) for row in rows] == [
+        ("Shopify owners on community forums", results)
+    ]
+    r = await client.get(f"{BASE}/searches?platform=reddit")
+    assert sorted(row["query"] for row in r.json()["data"]) == ["otter sank", "shop seo"]
+
+
+async def test_round_keywords_are_saved_on_the_brief(client, email):
+    await prepare(client, email)
+    brief = await add_brief(client, "Agencies", ["posts"], ["heron agency", "agency seo"])
+    plan = {
+        "keywords": ["heron agency", "agency seo"],
+        "rounds": [{"keywords": ["Heron  Agencies", "agency rankings"], "web": []}],
+    }
+    r = await client.patch(f"{BASE}/briefs/{brief['id']}", json={"plan": plan})
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["plan"]["rounds"] == [
+        {"keywords": ["heron agencies", "agency rankings"], "web": []}
+    ]
+    r = await client.patch(f"{BASE}/briefs/{brief['id']}", json={"text": "Small agencies"})
+    assert r.json()["data"]["plan"] == {}

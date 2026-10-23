@@ -117,3 +117,16 @@ export async function listMatchedPosts(siteId, cookieHeader) {
   }
   return out;
 }
+
+export function checkPosts(siteId, ids, cookieHeader) {
+  if (ids.length === 0) return Promise.resolve({ fits: [], removed: 0 });
+  return api("/social-listening/posts/check", { method: "POST", body: { ids }, siteId, cookieHeader });
+}
+
+export async function listSearches(siteId, platform, cookieHeader) {
+  const rows = await api(`/social-listening/searches?platform=${encodeURIComponent(platform)}`, {
+    siteId,
+    cookieHeader,
+  });
+  return Array.isArray(rows) ? rows : [];
+}

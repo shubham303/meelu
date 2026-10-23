@@ -7,7 +7,7 @@ export const SOURCE_OPTIONS: Array<{ id: LeadSource; label: string; hint: string
   {
     id: "posts",
     label: "Post authors",
-    hint: "People who recently posted about it on Reddit, X, LinkedIn, Bluesky, Facebook, HN, GitHub or Dev.to",
+    hint: "People who recently posted about it on Reddit, X, LinkedIn, Bluesky, HN, GitHub or Dev.to",
   },
   {
     id: "linkedin",

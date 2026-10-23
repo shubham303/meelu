@@ -82,7 +82,7 @@ Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 {"briefs":[{"id":"...","keywords":["...","..."],"web":["...","...","..."]}]}
 
 - One entry per brief, with the brief's id exactly as given.
-- keywords: only when the brief's sources include posts, exactly ${KEYWORDS_PER_BRIEF} new short phrases, two or three words each, that such a person would write in a social post. Never repeat or lightly reword a used one: pick other words, other problems, other ways people describe it.
+- keywords: only when the brief's sources include posts, exactly ${KEYWORDS_PER_BRIEF} new short phrases, two or three words each, that such a person would write in a social post. Stay on the same problem and the same kind of person as the used ones, and vary them slightly: other words for it, a nearby symptom, another way people describe it. Never repeat a used phrase.
 - web: only when the brief's sources include web, exactly ${WEB_ANGLES} new search angles that reach people the used angles would not: other directories, marketplaces, communities, niches, regions or kinds of business. Never repeat a used angle.
 
 Never invent people or places the brief does not support.`;

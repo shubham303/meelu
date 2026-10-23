@@ -3,11 +3,13 @@ import { BATCH_SIZE, judgeBatch } from "./classify.js";
 import { expandLines } from "./expand.js";
 import { deadIds } from "./filters.js";
 import {
+  checkPosts,
   createRun,
   fetchListeningSetup,
   gatePosts,
   getRun,
   listMatchedPosts,
+  listSearches,
   patchQuery,
   patchRun,
   saveVerdicts,
@@ -15,7 +17,7 @@ import {
   siteContextOf,
   startCollect,
 } from "./store.js";
-import { searchWebLines, WEB_PLATFORM } from "./web.js";
+import { recentLines, searchWebLines, WEB_PLATFORM } from "./web.js";
 
 const KEYWORDS_PER_LINE = 2;
 const JUDGE_CONCURRENCY = 5;
@@ -23,6 +25,7 @@ const JUDGE_ATTEMPTS = 2;
 const POLL_MS = 3000;
 const ALIVE_MS = 30_000;
 const GATE_TIMEOUT_MS = 60 * 60 * 1000;
+const CHECK_BATCH = 100;
 
 const PROGRESS_EVENTS = new Set(["stage", "terms", "platform", "saved", "gate", "judged", "problem"]);
 
@@ -44,12 +47,24 @@ function chunk(list, size) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function newRunState(siteId) {
+  const controller = new AbortController();
   let halt = () => {};
   const halted = new Promise((_, reject) => {
-    halt = () => reject(new Stopped());
+    halt = () => {
+      controller.abort();
+      reject(new Stopped());
+    };
   });
   halted.catch(() => {});
-  return { siteId, stopped: false, halted, halt, startedAt: Date.now(), progress: [] };
+  return {
+    siteId,
+    stopped: false,
+    halted,
+    halt,
+    signal: controller.signal,
+    startedAt: Date.now(),
+    progress: [],
+  };
 }
 
 export function startSignalsSearch(payload, emit, { cookieHeader = "" }) {
@@ -133,6 +148,7 @@ function platformEvent(platform, stats) {
     fromDatabase: stats.fromDatabase ?? 0,
     candidates: stats.candidates ?? 0,
     failedKeywords: stats.failedKeywords ?? [],
+    skippedQueries: stats.skippedQueries ?? [],
     error: stats.error ?? null,
   };
 }
@@ -161,11 +177,18 @@ async function webStage(lines, siteContext, platforms, runId, ctx) {
   const { state, send, llm, siteId, cookieHeader } = ctx;
   send("platform", { platform: WEB_PLATFORM, status: "fetching" });
   try {
-    const found = await until(
+    const searches = await until(state, listSearches(siteId, WEB_PLATFORM, cookieHeader));
+    const { fresh, skippedQueries } = recentLines(lines, searches);
+    const found = fresh.length
+      ? await until(
+          state,
+          searchWebLines({ lines: fresh, siteContext, platforms, guard: () => guard(state) }, llm),
+        )
+      : { posts: [], searchedLines: 0, failedLines: 0, searchedQueries: [], error: null };
+    const run = await until(
       state,
-      searchWebLines({ lines, siteContext, platforms, guard: () => guard(state) }, llm),
+      saveWebPosts(siteId, runId, { ...found, skippedQueries }, cookieHeader),
     );
-    const run = await until(state, saveWebPosts(siteId, runId, found, cookieHeader));
     send("platform", platformEvent(WEB_PLATFORM, run?.platformStats?.[WEB_PLATFORM] ?? {}));
     return null;
   } catch (err) {
@@ -230,13 +253,47 @@ async function judgeWithRetry(posts, judgeCtx, ctx) {
   return null;
 }
 
+async function checkMatched(posts, ctx) {
+  const { state, siteId, cookieHeader } = ctx;
+  const fits = new Set();
+  let removed = 0;
+  for (const part of chunk(posts, CHECK_BATCH)) {
+    let result = null;
+    let lastError = null;
+    for (let attempt = 0; attempt < JUDGE_ATTEMPTS && !result; attempt += 1) {
+      try {
+        result = await until(
+          state,
+          checkPosts(
+            siteId,
+            part.map((p) => p.id),
+            cookieHeader,
+          ),
+        );
+      } catch (err) {
+        if (err instanceof Stopped) throw err;
+        lastError = err;
+      }
+    }
+    if (!result) {
+      ctx.problem(lastError instanceof Error ? lastError.message : String(lastError));
+      continue;
+    }
+    for (const id of result.fits ?? []) fits.add(id);
+    removed += result.removed ?? 0;
+  }
+  return { fitting: posts.filter((p) => fits.has(p.id)), removed };
+}
+
 async function judgeStage(lines, siteContext, ctx) {
   const { state, send, siteId, cookieHeader } = ctx;
-  const posts = await until(state, listMatchedPosts(siteId, cookieHeader));
+  const matched = await until(state, listMatchedPosts(siteId, cookieHeader));
   send("stage", { stage: "judging" });
-  send("judged", { judged: 0, total: posts.length, kept: 0 });
+  send("judged", { judged: 0, total: matched.length, kept: 0 });
   const keptByPlatform = {};
-  if (posts.length === 0) return { kept: 0, keptByPlatform };
+  if (matched.length === 0) return { kept: 0, keptByPlatform };
+  const { fitting: posts, removed } = await checkMatched(matched, ctx);
+  send("judged", { judged: removed, total: matched.length, kept: 0 });
 
   const linesById = new Map(lines.map((l) => [l.id, l]));
   const byLine = new Map();
@@ -250,7 +307,7 @@ async function judgeStage(lines, siteContext, ctx) {
     for (const b of chunk(own, BATCH_SIZE)) batches.push({ judgeCtx: { line, siteContext }, posts: b });
   }
 
-  let judged = 0;
+  let judged = removed;
   let kept = 0;
   let cursor = 0;
   const worker = async () => {
@@ -261,10 +318,9 @@ async function judgeStage(lines, siteContext, ctx) {
       const results = await judgeWithRetry(batch.posts, batch.judgeCtx, ctx);
       if (!results) continue;
       const answered = results.filter((r) => r.verdict);
-      const fitting = answered.filter((r) => r.verdict.fits).map((r) => r.post);
-      const dead = await until(state, deadIds(fitting));
+      const dead = await until(state, deadIds(answered.map((r) => r.post)));
       const verdicts = answered.map(({ post, verdict }) => {
-        const keep = verdict.fits && !dead.has(post.id);
+        const keep = !dead.has(post.id);
         return {
           id: post.id,
           keep,
@@ -278,7 +334,7 @@ async function judgeStage(lines, siteContext, ctx) {
       }
       judged += answered.length;
       kept += saved?.kept ?? 0;
-      send("judged", { judged, total: posts.length, kept });
+      send("judged", { judged, total: matched.length, kept });
     }
   };
   await Promise.all(Array.from({ length: Math.min(JUDGE_CONCURRENCY, batches.length) }, worker));
@@ -294,7 +350,12 @@ async function drive(jobId, input, state, emit, { cookieHeader, release }) {
     release();
     send(event, data);
   };
-  const llm = { cookieHeader, siteId: input.siteId, purpose: "social_listening" };
+  const llm = {
+    cookieHeader,
+    siteId: input.siteId,
+    purpose: "social_listening",
+    signal: state.signal,
+  };
   const problems = [];
   const problem = (message) => {
     if (problems.includes(message)) return;

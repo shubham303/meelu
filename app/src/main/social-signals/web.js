@@ -1,11 +1,11 @@
-import { jsonCall } from "./llm.js";
+import { jsonCall, webSearch } from "./llm.js";
 
 export const WEB_PLATFORM = "web";
 export const WEB_OPTION = { id: WEB_PLATFORM, label: "Web search", access: "web", available: true };
-export const SEARCH_MODEL = "anthropic/claude-haiku-5.5";
 export const MAX_AGE_DAYS = 30;
 const MAX_POSTS = 15;
-const MAX_SEARCHES = 5;
+const MAX_SEARCHES = 3;
+const RESULTS_PER_SEARCH = 8;
 const LINE_CONCURRENCY = 3;
 const SEARCH_TIMEOUT_MS = 300_000;
 const MAX_TEXT_CHARS = 2000;
@@ -42,11 +42,6 @@ Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 - author: their name or handle when shown, else empty.
 - published: the date the conversation started, from the page or the search result. Use only conversations from the last ${MAX_AGE_DAYS} days; leave out older or undated ones.
 - Never invent a post, a quote or a URL.`;
-}
-
-function searchModel({ gateway, model }) {
-  if (gateway.ownKey || String(model ?? "").startsWith("anthropic/")) return model;
-  return SEARCH_MODEL;
 }
 
 function cleanUrl(value) {
@@ -110,14 +105,35 @@ async function searchLine(line, siteContext, skipped, target) {
   const today = new Date().toISOString().slice(0, 10);
   try {
     const parsed = await jsonCall(system(siteContext, today, skipped), `The line:\n${line.text}`, target, {
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: MAX_SEARCHES }],
-      model: searchModel,
+      ...webSearch({ searches: MAX_SEARCHES, results: RESULTS_PER_SEARCH }),
       timeoutMs: SEARCH_TIMEOUT_MS,
     });
     return { posts: webPosts(parsed, skipped), error: null };
   } catch (err) {
     return { posts: [], error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+export const SKIP_HOURS = 12;
+
+export function lineKey(text) {
+  return String(text ?? "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
+
+export function recentLines(lines, searches, now = Date.now()) {
+  const at = new Map(searches.map((row) => [lineKey(row.query), row.searchedAt]));
+  const fresh = [];
+  const skippedQueries = [];
+  for (const line of lines) {
+    const when = at.get(lineKey(line.text));
+    const time = Date.parse(when ?? "");
+    if (!Number.isNaN(time) && now - time < SKIP_HOURS * 60 * 60 * 1000) {
+      skippedQueries.push({ query: line.text, searchedAt: when });
+    } else {
+      fresh.push(line);
+    }
+  }
+  return { fresh, skippedQueries };
 }
 
 export async function searchWebLines({ lines, siteContext, platforms, guard }, target) {
@@ -131,6 +147,7 @@ export async function searchWebLines({ lines, siteContext, platforms, guard }, t
     posts: outcomes.flatMap((o) => o.posts),
     searchedLines: outcomes.length,
     failedLines: failed.length,
+    searchedQueries: lines.filter((_, i) => !outcomes[i].error).map((line) => line.text),
     error: failed[0]?.error ?? null,
   };
 }

@@ -61,8 +61,8 @@ test("judge verdicts map evidence numbers to the lead's own items", () => {
   const out = judgeVerdicts(
     {
       results: [
-        { i: 0, worth: true, why: " Asked twice ", angle: "Offer the list", evidence: [1, 0, 1, 7, "x"] },
-        { i: 1, worth: false, why: "Agency" },
+        { i: 0, why: " Asked twice ", angle: "Offer the list", evidence: [1, 0, 1, 7, "x"] },
+        { i: 5, why: "Out of range" },
       ],
     },
     [lead, { id: "l1" }],
@@ -78,7 +78,6 @@ test("judge verdicts map evidence numbers to the lead's own items", () => {
         { url: "https://r.com/p1", quote: "traffic halved", at: "2026-10-10T00:00:00Z" },
       ],
     },
-    { id: "l1", keep: false },
   ]);
 });
 
@@ -165,4 +164,47 @@ test("later rounds keep only searches that were not used before", async () => {
   assert.equal(targetOf("0"), 20);
   assert.equal(targetOf(35.7), 35);
   assert.equal(targetOf(500), 100);
+});
+
+test("a saved round is reused and every earlier keyword counts as used", async () => {
+  const { savedRound, everyUsed } = await import("../src/main/find-leads/pipeline.js");
+  const brief = {
+    id: "b1",
+    plan: {
+      keywords: ["traffic dropped", "lost rankings"],
+      web: ["agencies on Clutch"],
+      rounds: [{ keywords: ["traffic fell", "rankings gone"], web: [] }, { keywords: [], web: [] }],
+    },
+  };
+  assert.deepEqual(savedRound(brief, 2), { keywords: ["traffic fell", "rankings gone"], web: [] });
+  assert.equal(savedRound(brief, 3), null);
+  assert.equal(savedRound(brief, 4), null);
+  const used = new Map([["b1", { keywords: new Set(["seo help"]), web: new Set() }]]);
+  assert.deepEqual(everyUsed(brief, used).keywords.sort(), [
+    "lost rankings",
+    "rankings gone",
+    "seo help",
+    "traffic dropped",
+    "traffic fell",
+  ]);
+});
+
+test("a web angle is served from cache for 6 hours, skipped until 12, then searched again", async () => {
+  const { angleDecision, cachedResults, webResults } = await import("../src/main/find-leads/web.js");
+  const now = Date.parse("2026-10-23T12:00:00Z");
+  const at = (hours) => new Date(now - hours * 3600_000).toISOString();
+  assert.equal(angleDecision(undefined, now), "search");
+  assert.equal(angleDecision({ searchedAt: at(2), results: [] }, now), "cache");
+  assert.equal(angleDecision({ searchedAt: at(8), results: [] }, now), "skip");
+  assert.equal(angleDecision({ searchedAt: at(13), results: [] }, now), "search");
+  const found = webResults(
+    {
+      results: [
+        { name: "A", website: "a.com", url: "https://a.com/blog/1", kind: "post", published: "2026-10-20" },
+        { name: "B", website: "b.com", url: "https://b.com" },
+      ],
+    },
+    now,
+  );
+  assert.deepEqual(webResults({ results: cachedResults(found) }, now), found);
 });
