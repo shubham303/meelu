@@ -81,6 +81,15 @@ export function startCollect(siteId, runId, platform, cookieHeader) {
   });
 }
 
+export function saveWebPosts(siteId, runId, found, cookieHeader) {
+  return api(`/social-listening/runs/${runId}/web-posts`, {
+    method: "POST",
+    body: found,
+    siteId,
+    cookieHeader,
+  });
+}
+
 export function gatePosts(siteId, cookieHeader) {
   return api("/social-listening/posts/gate", { method: "POST", body: {}, siteId, cookieHeader });
 }

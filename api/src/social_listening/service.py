@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits.service import credit_service
 from src.providers.social_search.platforms import PLATFORMS
+from src.providers.social_search.repository import social_posts
 from src.providers.social_search.service import social_search
 from src.providers.social_search.store import vendor_keywords
 from src.social_listening.collect import (
@@ -33,12 +34,16 @@ from src.social_listening.schemas import (
     DONE_STATUSES,
     KEYWORDS_PER_LINE,
     MAX_LINES_PER_SITE,
+    MAX_WEB_POSTS,
     MIN_SIMILARITY,
     MINIMUM_BALANCE_USD,
     PER_KEYWORD,
     POST_STATUSES,
     RUN_STATUSES,
     USER_STATUSES,
+    WEB_COST_PER_LINE_MICROS,
+    WEB_LOOKBACK_DAYS,
+    WEB_PLATFORM,
     ConfigResponse,
     ConfigUpdateRequest,
     EstimateResponse,
@@ -56,13 +61,16 @@ from src.social_listening.schemas import (
     RunUpdateRequest,
     SummaryResponse,
     UpsertResponse,
+    WebPostsRequest,
 )
+from src.social_listening.web import web_post_rows, web_stats
 
 EMBED_MAX_ATTEMPTS = 3
 CURSOR_RETENTION_DAYS = 30
 QUIET_RUN_SECONDS = 120
 QUIET_RUN_ERROR = "The app stopped working on this run before it finished, so it was closed."
 PLATFORM_IDS = tuple(p["id"] for p in PLATFORMS)
+SOURCE_IDS = (*PLATFORM_IDS, WEB_PLATFORM)
 
 
 class SocialListeningService:
@@ -78,7 +86,7 @@ class SocialListeningService:
         return ConfigResponse(
             id=row.id,
             site_id=row.site_id,
-            platforms=[p for p in row.platforms if p in PLATFORM_IDS],
+            platforms=[p for p in row.platforms if p in SOURCE_IDS],
             created_at=row.created_at,
             updated_at=row.updated_at,
         )
@@ -100,7 +108,7 @@ class SocialListeningService:
         values = body.changes()
         platforms = values.get("platforms")
         if platforms is not None:
-            unknown = [p for p in platforms if p not in PLATFORM_IDS]
+            unknown = [p for p in platforms if p not in SOURCE_IDS]
             if unknown:
                 raise HTTPException(400, f"Unknown platform: {', '.join(unknown)}.")
             values["platforms"] = list(dict.fromkeys(platforms))
@@ -247,6 +255,30 @@ class SocialListeningService:
         await db.refresh(row)
         return RunResponse.model_validate(row)
 
+    async def save_web_posts(
+        self, db: AsyncSession, user_id: str, site_id: str, run_id: str, body: WebPostsRequest
+    ) -> RunResponse:
+        row = await social_listening_runs.get(db, site_id, run_id)
+        if row is None:
+            raise HTTPException(404, "Not found")
+        if row.status != "running":
+            raise HTTPException(409, "This run is no longer going.")
+        now = datetime.now(UTC)
+        rows = web_post_rows(
+            body.posts[:MAX_WEB_POSTS], now - timedelta(days=WEB_LOOKBACK_DAYS), now
+        )
+        await social_posts.insert_new(db, rows)
+        post_ids = await social_posts.ids_by_keys(db, [r["post_key"] for r in rows])
+        candidates = await social_listening_posts.insert_candidates(
+            db, user_id, site_id, run_id, post_ids
+        )
+        stats = web_stats(len(rows), candidates, body.searched_lines, body.failed_lines, body.error)
+        await social_listening_runs.merge_platform_stats(
+            db, run_id, WEB_PLATFORM, stats, fetched=len(rows)
+        )
+        await db.refresh(row)
+        return RunResponse.model_validate(row)
+
     async def patch_run(
         self, db: AsyncSession, site_id: str, run_id: str, body: RunUpdateRequest
     ) -> RunResponse:
@@ -310,6 +342,14 @@ class SocialListeningService:
                     ),
                 )
             )
+        out.append(
+            PlatformEstimate(
+                platform=WEB_PLATFORM,
+                keywords=len(lines),
+                vendor_keywords=len(lines),
+                max_cost_micros=len(lines) * WEB_COST_PER_LINE_MICROS,
+            )
+        )
         return EstimateResponse(platforms=out)
 
     async def gate_posts(self, db: AsyncSession, site_id: str) -> GateResponse:
