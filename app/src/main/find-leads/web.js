@@ -1,13 +1,16 @@
 import { crawlFetch, withOutboundSlot } from "../net.js";
-import { jsonCall } from "../social-signals/llm.js";
+import { jsonCall, webSearch } from "../social-signals/llm.js";
 
-export const SEARCH_MODEL = "anthropic/claude-haiku-5.5";
 const MAX_RESULTS = 15;
-const MAX_SEARCHES = 5;
+const MAX_SEARCHES = 3;
+const RESULTS_PER_SEARCH = 8;
 const ANGLE_CONCURRENCY = 3;
 const EMAIL_CONCURRENCY = 6;
 export const MAX_AGE_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+export const CACHE_HOURS = 6;
+export const SKIP_HOURS = 12;
 const SEARCH_TIMEOUT_MS = 300_000;
 const PAGE_TIMEOUT_MS = 15_000;
 const MAX_PAGE_CHARS = 400_000;
@@ -36,11 +39,6 @@ Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
 - published: for a "post", the date it was published as YYYY-MM-DD, from the page or the search result. Use only posts from the last ${MAX_AGE_DAYS} days; leave out older or undated ones. Empty for a "site".
 - why: one plain sentence on what you saw that matches the brief.
 - Never invent an email address, a person or a URL.`;
-}
-
-function searchModel({ gateway, model }) {
-  if (gateway.ownKey || String(model ?? "").startsWith("anthropic/")) return model;
-  return SEARCH_MODEL;
 }
 
 function cleanUrl(value) {
@@ -205,8 +203,7 @@ async function searchAngle(brief, angle, siteContext, target) {
   const prompt = `The brief:\n${brief.text}\n\nSearch angle:\n${angle}`;
   try {
     const parsed = await jsonCall(system(siteContext, today), prompt, target, {
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: MAX_SEARCHES }],
-      model: searchModel,
+      ...webSearch({ searches: MAX_SEARCHES, results: RESULTS_PER_SEARCH }),
       timeoutMs: SEARCH_TIMEOUT_MS,
     });
     return { results: webResults(parsed), error: null };
@@ -215,17 +212,49 @@ async function searchAngle(brief, angle, siteContext, target) {
   }
 }
 
-export async function searchWeb({ brief, siteContext, guard }, target) {
+export function queryKey(value) {
+  return String(value ?? "").split(/\s+/).filter(Boolean).join(" ");
+}
+
+export function cachedResults(results) {
+  return results.map((r) => ({ ...r, kind: r.published ? "post" : "site" }));
+}
+
+export function angleDecision(earlier, now = Date.now()) {
+  const at = Date.parse(earlier?.searchedAt ?? "");
+  if (Number.isNaN(at)) return "search";
+  if (now - at < CACHE_HOURS * HOUR_MS && Array.isArray(earlier.results)) return "cache";
+  if (now - at < SKIP_HOURS * HOUR_MS) return "skip";
+  return "search";
+}
+
+export async function searchWeb({ brief, siteContext, guard, earlier, remember }, target) {
   const angles = searchAngles(brief);
-  const outcomes = await inPool(angles, ANGLE_CONCURRENCY, (angle) => {
+  const skipped = [];
+  let fromCache = 0;
+  const outcomes = await inPool(angles, ANGLE_CONCURRENCY, async (angle) => {
     guard();
-    return searchAngle(brief, angle, siteContext, target);
+    const key = queryKey(angle);
+    const before = earlier.get(key);
+    const decision = angleDecision(before);
+    if (decision === "cache") {
+      fromCache += 1;
+      return { results: webResults({ results: before.results }), error: null };
+    }
+    if (decision === "skip") {
+      skipped.push({ query: key, searchedAt: before.searchedAt });
+      return { results: [], error: null };
+    }
+    const outcome = await searchAngle(brief, angle, siteContext, target);
+    if (!outcome.error) await remember(key, cachedResults(outcome.results));
+    return outcome;
   });
   const failed = outcomes.filter((o) => o.error);
-  if (failed.length === outcomes.length) throw failed[0].error;
+  if (failed.length > 0 && failed.length === outcomes.length) throw failed[0].error;
   const results = distinctResults(outcomes.map((o) => o.results));
-  return inPool(results, EMAIL_CONCURRENCY, async (result) => {
+  const candidates = await inPool(results, EMAIL_CONCURRENCY, async (result) => {
     guard();
     return candidateOf(brief, result, await publicEmail(result, guard));
   });
+  return { candidates, skipped, fromCache };
 }

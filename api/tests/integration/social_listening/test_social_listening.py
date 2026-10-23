@@ -245,7 +245,22 @@ async def test_estimate_counts_only_keywords_the_vendor_would_be_asked_for(
     assert hackernews["maxCostMicros"] == 3 * 25 * 100
     web = next(p for p in r.json()["data"]["platforms"] if p["platform"] == "web")
     assert web["keywords"] == 2
-    assert web["maxCostMicros"] == 2 * 80_000
+    assert web["maxCostMicros"] == 2 * 30_000
+
+    site_id = client.headers["x-meelu-site"]
+    user_id = sql("select user_id from site where id = %s", (site_id,))[0][0]
+    sql(
+        "insert into social_listening_cursor (id, user_id, site_id, platform, keyword, "
+        "last_fetched_at, created_at, updated_at) values "
+        "('slk_web1', %s, %s, 'web', 'new line', now(), now(), now()), "
+        "('slk_hn1', %s, %s, 'hackernews', 'slow wordpress', now(), now(), now())",
+        (user_id, site_id, user_id, site_id),
+    )
+    r = await client.get("/api/v1/social-listening/estimate")
+    platforms = {p["platform"]: p for p in r.json()["data"]["platforms"]}
+    assert platforms["hackernews"]["vendorKeywords"] == 2
+    assert platforms["web"]["vendorKeywords"] == 1
+    assert platforms["web"]["maxCostMicros"] == 30_000
 
 
 async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
@@ -312,12 +327,18 @@ async def test_collect_combines_vendor_and_shared_posts(client, email, vendor):
         "failedKeywords": [],
     }
     run = await start_run(client)
-    await collect(client, run["id"])
+    finished = await collect(client, run["id"])
     assert len(await posts(client, "candidate")) == 3
     assert vendor["calls"][1]["keywords"] == ["page cache"]
+    skipped = finished["platformStats"]["hackernews"]["skippedQueries"]
+    assert sorted(s["query"] for s in skipped) == ["site speed", "slow wordpress"]
 
     sql(
-        "update social_search_cursor set last_fetched_at = now() - interval '7 hours' "
+        "update social_search_cursor set last_fetched_at = now() - interval '13 hours' "
+        "where platform = 'hackernews'"
+    )
+    sql(
+        "update social_listening_cursor set last_fetched_at = now() - interval '13 hours' "
         "where platform = 'hackernews'"
     )
     r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
@@ -539,6 +560,7 @@ async def test_web_posts_become_candidates_once(client, email):
                 web_post("https://q.example.net/questions/9", "speed tips?"),
             ],
             "searchedLines": 1,
+            "searchedQueries": ["People with  slow sites"],
         },
     )
     assert r.status_code == 200, r.text
@@ -550,6 +572,7 @@ async def test_web_posts_become_candidates_once(client, email):
         "fromVendor": 2,
         "fromDatabase": 0,
         "candidates": 2,
+        "skippedQueries": [],
     }
     assert run["fetchedCount"] == 2
     found = await posts(client, "candidate")
@@ -575,8 +598,61 @@ async def test_web_posts_become_candidates_once(client, email):
     assert stats["status"] == "error"
     assert stats["error"] == "search timed out"
 
+    r = await client.get("/api/v1/social-listening/searches?platform=web")
+    assert [row["query"] for row in r.json()["data"]] == ["people with slow sites"]
+    skipped = [{"query": "people with slow sites", "searchedAt": "2026-10-23T05:00:00+00:00"}]
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run['id']}/web-posts",
+        json={"posts": [], "searchedLines": 0, "skippedQueries": skipped},
+    )
+    stats = r.json()["data"]["platformStats"]["web"]
+    assert (stats["status"], stats["skippedQueries"]) == ("done", skipped)
+
     r = await client.patch(f"/api/v1/social-listening/runs/{run['id']}", json={"status": "done"})
     r = await client.post(
         f"/api/v1/social-listening/runs/{run['id']}/web-posts", json={"posts": []}
     )
     assert r.status_code == 409
+
+
+async def test_check_keeps_only_posts_that_fit(client, email, vendor, monkeypatch):
+    from src.providers.json_data_extractor.service import json_data_extractor
+
+    calls = []
+
+    async def classify(caller, subject, data, questions):
+        calls.append((subject, data, questions))
+        return {
+            "answers": {
+                key: {"type": "noul", "noul": 0.2 if "hiring" in q["instructions"] else 0.8}
+                for key, q in questions.items()
+            }
+        }
+
+    monkeypatch.setattr(json_data_extractor, "classify", classify)
+    await prepare(client, email)
+    line = await add_line(client, "people with slow sites", ["check zebra", "check yak"])
+    vendor["replies"]["hackernews"] = {
+        "posts": [
+            vendor_post("30", "my site is slow"),
+            vendor_post("31", "we are hiring"),
+        ],
+        "failedKeywords": [],
+    }
+    run = await start_run(client)
+    await collect(client, run["id"])
+    site_id = client.headers["x-meelu-site"]
+    sql(
+        "update social_listening_post set status = 'matched', query_id = %s where site_id = %s",
+        (line["id"], site_id),
+    )
+    matched = {p["url"].rsplit("=", 1)[1]: p for p in await posts(client, "matched")}
+
+    r = await client.post(
+        "/api/v1/social-listening/posts/check",
+        json={"ids": [matched["30"]["id"], matched["31"]["id"]]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"] == {"fits": [matched["30"]["id"]], "removed": 1}
+    assert calls[0][1] == {"marketer_wrote": "people with slow sites"}
+    assert [p["id"] for p in await posts(client, "matched")] == [matched["30"]["id"]]

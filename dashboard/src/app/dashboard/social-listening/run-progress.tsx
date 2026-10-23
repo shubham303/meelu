@@ -3,7 +3,7 @@
 import { Check } from "lucide-react";
 import { Card, Spinner } from "@/components/ui";
 import { cn } from "@/lib/utils";
-import type { LiveRun, RunStep } from "./lib";
+import { SKIP_HOURS, skippedLine, type LiveRun, type RunStep } from "./lib";
 
 const ORDER: RunStep[] = ["terms", "searching", "meaning", "judging"];
 
@@ -20,6 +20,10 @@ export function RunProgress({ live, platformLabel }: { live: LiveRun; platformLa
   const judged = live.judged;
   const pct = judged && judged.total > 0 ? Math.min(100, Math.round((judged.judged / judged.total) * 100)) : null;
   const platforms = Object.entries(live.platforms);
+  const skipped = platforms
+    .map(([id, s]) => [id, s.skippedQueries ?? []] as [string, NonNullable<typeof s.skippedQueries>])
+    .filter(([, items]) => items.length > 0);
+  const skippedCount = skipped.reduce((n, [, items]) => n + items.length, 0);
 
   const steps: Array<{ id: RunStep; title: string; detail: string }> = [
     {
@@ -102,6 +106,12 @@ export function RunProgress({ live, platformLabel }: { live: LiveRun; platformLa
           );
         })}
       </div>
+      {skippedCount > 0 && (
+        <p className="text-[13px] text-sub">
+          Skipped {skippedCount} {skippedCount === 1 ? "search" : "searches"} already run in the last {SKIP_HOURS} hours:{" "}
+          {skippedLine(skipped, platformLabel)}
+        </p>
+      )}
       {live.problems.map((message) => (
         <p key={message} className="text-[13px] text-bad">
           Some posts were not checked: {message}

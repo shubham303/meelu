@@ -11,7 +11,7 @@ from src.social_listening.repositories.cursors import social_listening_cursors
 from src.social_listening.repositories.posts import social_listening_posts
 from src.social_listening.repositories.queries import social_listening_queries
 from src.social_listening.repositories.runs import social_listening_runs
-from src.social_listening.schemas import LOOKBACK_DAYS, PER_KEYWORD
+from src.social_listening.schemas import LOOKBACK_DAYS, PER_KEYWORD, SKIP_HOURS
 
 log = get_logger()
 
@@ -47,6 +47,15 @@ def site_keywords(lines) -> list[str]:
             if clean:
                 seen[clean] = None
     return list(seen)
+
+
+def recently_searched(cursors: dict[str, datetime], now: datetime) -> list[dict[str, str]]:
+    cutoff = now - timedelta(hours=SKIP_HOURS)
+    return [
+        {"query": keyword, "searchedAt": at.isoformat()}
+        for keyword, at in cursors.items()
+        if at >= cutoff
+    ]
 
 
 def keyword_windows(
@@ -104,6 +113,10 @@ async def _collect(
         started_at = run.started_at
         keywords = site_keywords(await social_listening_queries.list_enabled(db, site_id))
         cursors = await social_listening_cursors.by_keyword(db, site_id, platform, keywords)
+    now = datetime.now(UTC)
+    skipped = recently_searched(cursors, now)
+    skipped_keywords = {s["query"] for s in skipped}
+    keywords = [k for k in keywords if k not in skipped_keywords]
     if not keywords:
         return {
             "status": "done",
@@ -113,9 +126,10 @@ async def _collect(
             "candidates": 0,
             "costMicros": 0,
             "failedKeywords": [],
+            "skippedQueries": skipped,
         }, []
 
-    windows = keyword_windows(keywords, cursors, datetime.now(UTC))
+    windows = keyword_windows(keywords, cursors, now)
     spend = SpendMeter()
     collected = await collect_posts(
         Caller(user_id=user_id, site_id=site_id, spend=spend), platform, windows, PER_KEYWORD
@@ -141,6 +155,7 @@ async def _collect(
         "candidates": candidates,
         "costMicros": spend.micros,
         "failedKeywords": failed,
+        "skippedQueries": skipped,
     }
     if collected.error:
         stats["error"] = collected.error

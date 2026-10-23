@@ -4,19 +4,18 @@ export const BATCH_SIZE = 10;
 const SNIPPET_CHARS = 600;
 
 function system({ line, siteContext }) {
-  return `You check social posts for a marketer who will decide which ones to reply to.
+  return `You help a marketer decide how to reply to social posts.
 They described the conversations they want, in their own words:
 "${line}"
 ${siteContext ? `\nTheir site, only for writing the angle:\n${siteContext}\n` : ""}
-For every numbered post, ask one question: does this post match what the marketer wrote? Judge only by what they wrote and add no rule of your own.
+Every numbered post below already passed a check that it matches what the marketer wrote.
 
 Reply with ONLY a JSON object, no prose and no code fences, of this exact shape:
-{"results":[{"i":0,"fits":true,"why":"...","angle":"..."}]}
+{"results":[{"i":0,"why":"...","angle":"..."}]}
 
 - i: the post's number; one result per post, every post covered.
-- fits: true when the post matches what the marketer wrote, false otherwise.
-- why: one plain sentence telling the marketer how the post matches what they wrote, or for a post that does not, why not.
-- angle: only when fits is true, two sentences on how a reply from this site would belong in that thread: what to answer first, and what not to pitch. Never write the reply itself. Empty string otherwise.`;
+- why: one plain sentence telling the marketer how the post matches what they wrote.
+- angle: two sentences on how a reply from this site would belong in that thread: what to answer first, and what not to pitch. Never write the reply itself.`;
 }
 
 function batchPrompt(posts) {
@@ -40,11 +39,10 @@ export function verdictsFor(parsed, posts) {
   const byIndex = new Map();
   for (const r of Array.isArray(parsed?.results) ? parsed.results : []) {
     const i = Number(r?.i);
-    if (!Number.isInteger(i) || i < 0 || i >= posts.length || typeof r.fits !== "boolean") continue;
+    if (!Number.isInteger(i) || i < 0 || i >= posts.length) continue;
     byIndex.set(i, {
-      fits: r.fits,
       why: String(r.why ?? "").trim() || null,
-      angle: r.fits ? String(r.angle ?? "").trim() || null : null,
+      angle: String(r.angle ?? "").trim() || null,
     });
   }
   return posts.map((p, i) => ({ post: p, verdict: byIndex.get(i) ?? null }));

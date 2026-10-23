@@ -4,6 +4,7 @@ from typing import Any
 from src.providers.errors import ProviderRequestError
 from src.providers.http import vendor_request
 from src.providers.json_data_extractor.adapter import (
+    CLASSIFY,
     DECIDE,
     EXTRACT,
     JsonDataExtractorAdapter,
@@ -99,7 +100,7 @@ def read_json(provider_id: str, body: Any) -> Any:
 class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
     id = "openrouter-deepseek"
     name = "OpenRouter · DeepSeek"
-    capabilities = frozenset({DECIDE, EXTRACT})
+    capabilities = frozenset({DECIDE, CLASSIFY, EXTRACT})
 
     def configured(self) -> bool:
         return bool(settings.openrouter_api_key)
@@ -155,6 +156,17 @@ class OpenRouterDeepSeekAdapter(JsonDataExtractorAdapter):
             {"model": body.get("model"), "answers": answers},
             micros_of(body.get("usage") or {}),
         )
+
+    async def classify(self, state: Any, questions: dict[str, Question]) -> VendorResponse:
+        as_choices = {key: {**question, "type": "choice"} for key, question in questions.items()}
+        response = await self.decide(state, as_choices)
+        answers = {
+            key: {"type": "noul", "noul": 1.0 if answer["choice"] == "true" else 0.0}
+            if questions[key]["type"] == "noul"
+            else answer
+            for key, answer in response.data["answers"].items()
+        }
+        return VendorResponse({**response.data, "answers": answers}, response.cost_micros)
 
     async def extract(self, instructions: str, data: Any, schema: dict[str, Any]) -> VendorResponse:
         body = await self.complete(

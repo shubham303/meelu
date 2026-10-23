@@ -104,3 +104,25 @@ export async function listLeads(siteId, status, cookieHeader) {
   }
   return out;
 }
+
+export function checkLeads(siteId, ids, cookieHeader) {
+  if (ids.length === 0) return Promise.resolve({ fits: [], removed: 0 });
+  return api("/find-leads/leads/check", { method: "POST", body: { ids }, siteId, cookieHeader });
+}
+
+export async function listSearches(siteId, platform, cookieHeader) {
+  const rows = await api(`/find-leads/searches?platform=${encodeURIComponent(platform)}`, {
+    siteId,
+    cookieHeader,
+  });
+  return Array.isArray(rows) ? rows : [];
+}
+
+export function recordWebSearch(siteId, query, results, cookieHeader) {
+  return api("/find-leads/searches/web", {
+    method: "PUT",
+    body: { query, results },
+    siteId,
+    cookieHeader,
+  });
+}

@@ -52,6 +52,7 @@ class Settings(EnvSettings):
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api"
     openrouter_model: str = "deepseek/deepseek-v4.1-flash"
+    openrouter_decision_model: str = "typesafe/jev-1.14"
 
     llm_default_model: str = "anthropic/claude-haiku-5.5"
     llm_featured_models: list[str] = [

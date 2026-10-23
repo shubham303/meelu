@@ -10,6 +10,8 @@ from src.find_leads.schemas import (
     BriefPatchRequest,
     BriefResponse,
     CandidatesRequest,
+    CheckRequest,
+    CheckResponse,
     CollectRequest,
     DeleteResponse,
     InsertedResponse,
@@ -20,8 +22,10 @@ from src.find_leads.schemas import (
     RunCreateRequest,
     RunResponse,
     RunUpdateRequest,
+    SearchResponse,
     SummaryResponse,
     VerdictResponse,
+    WebSearchRecord,
 )
 from src.find_leads.service import find_leads_service
 
@@ -120,7 +124,7 @@ async def start_collect(
     ctx: AuthContext = Depends(require_site),
 ) -> RunResponse:
     return await find_leads_service.start_collect(
-        db, ctx.user_id, ctx.site_id, run_id, body.source, body.platform, body.round, body.searches
+        db, ctx.user_id, ctx.site_id, run_id, body.source, body.platform, body.searches
     )
 
 
@@ -158,6 +162,33 @@ async def judge_leads(
     ctx: AuthContext = Depends(require_site),
 ) -> VerdictResponse:
     return await find_leads_service.judge(db, ctx.user_id, ctx.site_id, body)
+
+
+@router.post("/find-leads/leads/check")
+async def check_leads(
+    body: CheckRequest,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> CheckResponse:
+    return await find_leads_service.check(db, ctx.user_id, ctx.site_id, body)
+
+
+@router.get("/find-leads/searches")
+async def list_searches(
+    platform: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> list[SearchResponse]:
+    return await find_leads_service.list_searches(db, ctx.site_id, platform)
+
+
+@router.put("/find-leads/searches/web")
+async def record_web_search(
+    body: WebSearchRecord,
+    db: AsyncSession = Depends(get_db),
+    ctx: AuthContext = Depends(require_site),
+) -> SearchResponse:
+    return await find_leads_service.record_web_search(db, ctx.user_id, ctx.site_id, body)
 
 
 @router.get("/find-leads/leads")

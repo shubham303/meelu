@@ -24,16 +24,43 @@ test("verdicts leave unanswered posts without a verdict", () => {
   const out = verdictsFor(
     {
       results: [
-        { i: 0, fits: true, why: "Asks for help", angle: "Answer first" },
-        { i: 1, fits: false, why: "Job ad", angle: "ignored" },
-        { i: 2, why: "no fits field" },
+        { i: 0, why: "Asks for help", angle: "Answer first" },
+        { i: 1, why: " ", angle: "" },
+        { i: 7, why: "out of range" },
       ],
     },
     posts,
   );
-  assert.deepEqual(out[0].verdict, { fits: true, why: "Asks for help", angle: "Answer first" });
-  assert.deepEqual(out[1].verdict, { fits: false, why: "Job ad", angle: null });
+  assert.deepEqual(out[0].verdict, { why: "Asks for help", angle: "Answer first" });
+  assert.deepEqual(out[1].verdict, { why: null, angle: null });
   assert.equal(out[2].verdict, null);
+});
+
+test("lines searched on the web in the last 12 hours are skipped", async () => {
+  const { recentLines } = await import("../src/main/social-signals/web.js");
+  const now = Date.parse("2026-10-23T12:00:00Z");
+  const lines = [{ text: "Cancel  Ahrefs" }, { text: "seo is too slow" }];
+  const out = recentLines(
+    lines,
+    [
+      { query: "cancel ahrefs", searchedAt: "2026-10-23T05:00:00Z" },
+      { query: "seo is too slow", searchedAt: "2026-10-22T20:00:00Z" },
+    ],
+    now,
+  );
+  assert.deepEqual(out.fresh, [{ text: "seo is too slow" }]);
+  assert.deepEqual(out.skippedQueries, [{ query: "Cancel  Ahrefs", searchedAt: "2026-10-23T05:00:00Z" }]);
+});
+
+test("streamed answers are read from their text deltas", async () => {
+  const { sseEvents, jsonOfText } = await import("../src/main/social-signals/llm.js");
+  const frames =
+    'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"{\\"a\\":"}}\n\n' +
+    'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"1}"}}\n\nevent: ping\ndata: {"ty';
+  const { events, rest } = sseEvents(frames);
+  assert.equal(events.length, 2);
+  assert.equal(rest, 'event: ping\ndata: {"ty');
+  assert.deepEqual(jsonOfText(events.map((e) => e.delta.text).join("")), { a: 1 });
 });
 
 test("gateway calls send a bearer token and the meelu headers", () => {

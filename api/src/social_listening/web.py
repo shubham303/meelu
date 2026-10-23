@@ -32,14 +32,23 @@ def web_post_rows(posts: list[WebPost], oldest: datetime, now: datetime) -> list
     return list(rows.values())
 
 
-def web_stats(found: int, candidates: int, searched: int, failed: int, error: str | None) -> dict:
+def web_stats(
+    found: int,
+    candidates: int,
+    searched: int,
+    failed: int,
+    error: str | None,
+    skipped: list[dict[str, str]],
+) -> dict:
+    nothing_ran = searched == 0 and not skipped
     stats: dict[str, Any] = {
-        "status": "error" if searched == 0 or failed >= searched else "done",
+        "status": "error" if nothing_ran or (searched and failed >= searched) else "done",
         "lines": searched,
         "failedLines": failed,
         "fromVendor": found,
         "fromDatabase": 0,
         "candidates": candidates,
+        "skippedQueries": skipped,
     }
     if error:
         stats["error"] = error
