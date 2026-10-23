@@ -81,8 +81,8 @@ const highlights = [
   },
   {
     icon: TriangleAlert,
-    title: "Says what it gets wrong",
-    body: "Plain, formal and academic writing, and English written by non-native speakers, get wrongly flagged. Edited AI text slips through. That is on the page, not in a footnote.",
+    title: "Tells you when to read twice",
+    body: "Formal and academic prose, and English written by non-native speakers, are where every detector misfires most. This one says so next to the result, so you know which scores to check by reading.",
   },
 ];
 
@@ -164,9 +164,12 @@ export default function AiContentDetectorPage() {
             Something about this draft reads like ChatGPT wrote it. Paste it in and find
             out which paragraphs look machine-made, with the suspect passages quoted back
             so you can judge them yourself. Paste a web address instead and it reads the
-            page for you. No account, and pasted text never leaves your browser. No
-            detector can prove anything, so treat a high score as a reason to look closer
-            — never as evidence.
+            page for you. No account, and pasted text never leaves your browser.
+          </p>
+          <p className="mt-3 text-sm text-sub text-pretty">
+            Best for editors, content managers and SEO teams checking drafts and
+            commissioned articles privately, for free, with the evidence behind every
+            score.
           </p>
 
           <div className="mt-8">
@@ -229,11 +232,43 @@ export default function AiContentDetectorPage() {
             Compared with GPTZero, ZeroGPT, Originality and the rest
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-sub">
-            Honest version: the paid tools do more than this one. Here is the split, so
-            you can pick the right thing rather than the thing that ranked.
+            Use this one to check a draft privately and see exactly which passages look
+            machine-made. Use a paid tool when you need a plagiarism database or bulk
+            scanning. Here is the split.
           </p>
 
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <div className="rounded-2xl border border-edge bg-panel p-5">
+              <h3 className="text-base font-medium text-ink">
+                What this does that they do not
+              </h3>
+              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sub">
+                <li>
+                  <strong className="font-medium text-ink">Never sees your text.</strong>{" "}
+                  GPTZero, ZeroGPT, Sapling, Smodin, Writer and Quillbot all need you to
+                  upload the thing you are suspicious about. This checks it in your own
+                  browser instead.
+                </li>
+                <li>
+                  <strong className="font-medium text-ink">Free with no registration.</strong>{" "}
+                  No account, no email wall at 300 words, no credits. There is no server
+                  bill to recoup.
+                </li>
+                <li>
+                  <strong className="font-medium text-ink">Shows its working.</strong> A
+                  paragraph-by-paragraph breakdown you can open to read the text behind
+                  each score, the flagged passages quoted in full, and every surface
+                  signal traced to the sentences that triggered it — so you can see
+                  whether it reacted to who wrote the text or just to a formal paragraph.
+                </li>
+                <li>
+                  <strong className="font-medium text-ink">Says how sure it is.</strong>{" "}
+                  Every result carries a confidence level and names the kinds of writing
+                  where detectors misfire, instead of a single accuracy claim in a
+                  marketing headline.
+                </li>
+              </ul>
+            </div>
             <div className="rounded-2xl border border-edge bg-panel p-5">
               <h3 className="text-base font-medium text-ink">
                 What they do that this does not
@@ -263,56 +298,30 @@ export default function AiContentDetectorPage() {
               </ul>
             </div>
 
-            <div className="rounded-2xl border border-edge bg-panel p-5">
-              <h3 className="text-base font-medium text-ink">
-                What this does that they do not
-              </h3>
-              <ul className="mt-3 space-y-2 text-sm leading-relaxed text-sub">
-                <li>
-                  <strong className="font-medium text-ink">Never sees your text.</strong>{" "}
-                  GPTZero, ZeroGPT, Sapling, Smodin, Writer and Quillbot all need you to
-                  upload the thing you are suspicious about. This checks it in your own
-                  browser instead.
-                </li>
-                <li>
-                  <strong className="font-medium text-ink">Free with no registration.</strong>{" "}
-                  No account, no email wall at 300 words, no credits. There is no server
-                  bill to recoup.
-                </li>
-                <li>
-                  <strong className="font-medium text-ink">Shows its working.</strong> A
-                  paragraph-by-paragraph breakdown you can open to read the text behind
-                  each score, the flagged passages quoted in full, and every surface
-                  signal traced to the sentences that triggered it — so you can see
-                  whether it reacted to who wrote the text or just to a formal paragraph.
-                </li>
-                <li>
-                  <strong className="font-medium text-ink">Admits what it gets wrong.</strong>{" "}
-                  The cases where it misfires are on this page, next to the result, rather
-                  than an accuracy claim in a marketing headline.
-                </li>
-              </ul>
-            </div>
           </div>
 
           <p className="mt-6 text-sm leading-relaxed text-sub">
-            If you need a plagiarism database or bulk scanning, buy one of them. If you
-            want to check a draft without handing it to a third party, this is the
-            better-shaped tool.
+            To check a draft without handing it to a third party, this is the
+            better-shaped tool. For a plagiarism database or bulk scanning, use one of
+            them.
           </p>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-3xl px-6 py-16">
         <h2 className="font-display text-2xl tracking-tight text-ink sm:text-3xl">
-          What it does not do
+          When to use something else
         </h2>
+        <p className="mt-3 text-sm leading-relaxed text-sub">
+          It is built for checking one draft at a time and showing its evidence. A few
+          jobs need a different tool or a second look.
+        </p>
         <ul className="mt-6 space-y-3 text-sm leading-relaxed text-ink/90">
           <li className="rounded-xl border border-edge bg-panel p-4">
-            <strong className="font-medium">It does not prove anything.</strong> No
-            detector can show that a person did or did not write something, and this one
-            gets it wrong often enough to matter. Treat a high score as a reason to look
-            closer, never as a finding.
+            <strong className="font-medium">Decisions about a person.</strong> No
+            detector, this one included, can show who wrote something. Use the flagged
+            passages to decide what to read closely, and base the decision on the writing
+            and its history.
           </li>
           <li className="rounded-xl border border-edge bg-panel p-4">
             <strong className="font-medium">It does not catch edited AI text.</strong>{" "}
