@@ -293,3 +293,23 @@ async def test_shared_social_posts_show_only_through_the_site(pair):
             )
     seen = await sql(a, f"select id from social_post where id like '%{run}' order by id")
     assert seen.rows == [[f"sp_mine_{run}"]]
+
+
+async def test_an_unknown_column_error_lists_the_real_columns(pair):
+    a, _ = pair
+    with pytest.raises(ValueError) as caught:
+        await sql(a, "select pages_inspected from site_pages")
+    message = str(caught.value)
+    assert 'column "pages_inspected" does not exist' in message
+    assert "site_pages: " in message
+    assert "content_hash" in message
+
+
+async def test_an_unknown_table_error_lists_the_tables(pair):
+    a, _ = pair
+    with pytest.raises(ValueError) as caught:
+        await sql(a, "select * from sites")
+    message = str(caught.value)
+    assert 'relation "sites" does not exist' in message
+    assert "Tables you can query:" in message
+    assert "site_pages" in message
