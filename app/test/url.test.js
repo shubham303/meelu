@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { otherHostForm, sameHost, sameSite } from "../src/main/crawler/url.js";
+import { onOrigin, otherHostForm, sameHost, sameSite } from "../src/main/crawler/url.js";
 
 const BARE = "https://example.com/";
 const WWW = "https://www.example.com/";
@@ -41,4 +41,14 @@ test("sameSite stays www-insensitive so citations are not inflated by a host twi
 test("a malformed URL is never treated as the same host", () => {
   assert.equal(sameHost("not a url", BARE), false);
   assert.equal(otherHostForm("not a url", BARE), false);
+});
+
+test("onOrigin moves the www twin of a URL onto the crawled host", () => {
+  assert.equal(onOrigin("https://example.com/about?x=1", "https://www.example.com"), "https://www.example.com/about?x=1");
+  assert.equal(onOrigin("http://www.example.com/a", "https://example.com"), "https://example.com/a");
+});
+
+test("onOrigin leaves the crawled host and unrelated hosts alone", () => {
+  assert.equal(onOrigin("https://example.com/a", "https://example.com"), "https://example.com/a");
+  assert.equal(onOrigin("https://other.example.net/a", "https://example.com"), "https://other.example.net/a");
 });
