@@ -216,12 +216,13 @@ const integrationGroups: {
   },
   {
     title: "Email",
-    body: "Drafts in your mailbox and draft campaigns. Nothing is sent.",
+    body: "Drafts in your mailbox and draft campaigns. Through Resend, only email you approved is sent.",
     items: [
       { name: "Gmail", color: "#EA4335" },
       { name: "Outlook", color: "#0078D4" },
       { name: "Mailchimp", color: "#B8860B" },
       { name: "Kit", color: "#FB6970" },
+      { name: "Resend", color: "#000000" },
     ],
   },
   {
@@ -521,7 +522,8 @@ export default function Home() {
           </h2>
           <p className="mt-4 max-w-2xl text-sub text-pretty">
             Connect your mailbox, CMS, CRM and docs from the Connections screen. Meelu saves drafts, records and new
-            pages there for you to review. It never sends an email or publishes a page.
+            pages there for you to review. It never publishes a page, and it sends email only through your own
+            Resend account, once you approve it.
           </p>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {integrationGroups.map((g) => (
