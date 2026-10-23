@@ -1,6 +1,7 @@
 import functools
 import hashlib
 import hmac
+import re
 from contextlib import contextmanager
 from typing import Any
 
@@ -10,7 +11,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
 from src.agent.context import AgentContext
-from src.core.logging import log_connection_checkouts
 from src.settings import settings
 
 engine = create_engine(
@@ -20,7 +20,6 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=1800,
 )
-log_connection_checkouts(engine, "agent_sql")
 
 
 def quote_ident(name: str) -> str:
@@ -155,3 +154,30 @@ def ensure_workspace_room(conn: Connection, schema: str) -> None:
             f"{settings.agent_max_workspace_bytes // 1024**2} MB quota. Drop tables you no "
             "longer need before running more SQL."
         )
+
+
+def _schema_tables(conn: Connection, schema: str) -> dict[str, list[str]]:
+    rows = conn.exec_driver_sql(
+        "SELECT table_name, column_name FROM information_schema.columns "
+        "WHERE table_schema IN (%s, 'public') ORDER BY table_name, ordinal_position",
+        (schema,),
+    ).fetchall()
+    tables: dict[str, list[str]] = {}
+    for table, column in rows:
+        tables.setdefault(table, []).append(column)
+    return tables
+
+
+def schema_hint(conn: Connection, schema: str, query: str, missing_table: bool) -> str:
+    tables = _schema_tables(conn, schema)
+    if missing_table:
+        return "Tables you can query: " + ", ".join(sorted(tables)) + "."
+    words = set(re.findall(r"[a-z_][a-z0-9_]*", query.lower()))
+    named = [name for name in sorted(tables) if name in words]
+    if not named:
+        return ""
+    return (
+        "Columns of the tables this query names: "
+        + "; ".join(f"{name}: {', '.join(tables[name])}" for name in named)
+        + "."
+    )
