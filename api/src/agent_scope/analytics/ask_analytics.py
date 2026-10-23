@@ -4,7 +4,9 @@ from src.reports.models.report import Report
 from src.reports.tools import save_report, update_report
 from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.seo.site_search.models.site_search_daily import SiteSearchDaily
+from src.seo.site_search.models.site_search_page_daily import SiteSearchPageDaily
 from src.seo.site_search.models.site_search_sync import SiteSearchSync
+from src.seo.site_search.models.site_search_totals_daily import SiteSearchTotalsDaily
 from src.seo.site_traffic.models.site_traffic_channels_daily import SiteTrafficChannelsDaily
 from src.seo.site_traffic.models.site_traffic_events_daily import SiteTrafficEventsDaily
 from src.seo.site_traffic.models.site_traffic_geo_daily import SiteTrafficGeoDaily
@@ -26,6 +28,8 @@ TABLES = desk_tables(
     SitePage,
     SitePageIndexStatus,
     SiteSearchDaily,
+    SiteSearchPageDaily,
+    SiteSearchTotalsDaily,
     SiteSearchSync,
     SiteTrafficTotalsDaily,
     SiteTrafficPagesDaily,

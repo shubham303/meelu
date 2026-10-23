@@ -25,7 +25,8 @@ from src.providers.registry import Caller
 from src.providers.seo_data.service import seo_data
 from src.providers.seo_data.shape import own_domain
 from src.seo.market import location_code
-from src.seo.site_search.repositories.site_search_daily import site_search_dailies, strip_slash
+from src.seo.site_search.repositories.site_search_daily import strip_slash
+from src.seo.site_search.repositories.site_search_page_daily import site_search_pages
 from src.site_pages.repositories.pages import site_pages
 from src.site_pages.schemas.llm_extraction import PendingPageRecord
 from src.sites.repository import sites
@@ -201,7 +202,7 @@ class GeoChecker:
         position = None
         if best is not None:
             async with unit_of_work() as db:
-                positions = await site_search_dailies.page_positions(db, site_id, [best["url"]])
+                positions = await site_search_pages.page_positions(db, site_id, [best["url"]])
             hit = positions.get(strip_slash(best["url"]))
             position = round(hit[0], 1) if hit else None
 

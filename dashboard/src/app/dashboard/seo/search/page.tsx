@@ -32,6 +32,7 @@ interface Overview {
   operatingBlind: boolean;
   firstDay?: string;
   lastDay?: string;
+  freshFrom?: string;
   indexation?: Record<string, number>;
   neverChecked?: number;
   googlePrefers?: GooglePrefers[];
@@ -193,7 +194,7 @@ export default function SearchPerformancePage() {
         title="Search performance"
         description={
           overview?.hasData
-            ? `What Google actually sends — query × page × day, kept since ${overview.firstDay}. Data through ${overview.lastDay}.`
+            ? `What Google actually sends, kept since ${overview.firstDay}. Data through ${overview.lastDay}${overview.freshFrom ? ` (from ${overview.freshFrom} preliminary: Google still revises those days)` : ""}. Totals match Search Console; query lists leave out the searches Google hides for privacy.`
             : "What Google actually sends, measured. Connect Search Console and the desk keeps 16 months of it."
         }
         actions={
