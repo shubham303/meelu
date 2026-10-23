@@ -12,10 +12,35 @@ def day_ago(n: int) -> str:
     return (datetime.now(UTC).date() - timedelta(days=n)).isoformat()
 
 
+def rollups(rows: list[dict]) -> dict:
+    def grouped(key: str) -> list[dict]:
+        out: dict[str, dict] = {}
+        for r in rows:
+            g = out.setdefault(r[key], {key: r[key], "clicks": 0, "impressions": 0, "w": 0.0})
+            g["clicks"] += r["clicks"]
+            g["impressions"] += r["impressions"]
+            g["w"] += r["position"] * r["impressions"]
+        return [
+            {
+                key: g[key],
+                "clicks": g["clicks"],
+                "impressions": g["impressions"],
+                "position": g["w"] / g["impressions"] if g["impressions"] else 0,
+            }
+            for g in out.values()
+        ]
+
+    return {"totals": grouped("device"), "pages": grouped("page")}
+
+
+def with_rollups(payload: dict) -> dict:
+    return {"days": [{**d, **rollups(d["rows"])} for d in payload["days"]]}
+
+
 DAY_A = day_ago(4)
 DAY_B = day_ago(3)
 
-BATCH = {
+BATCH = with_rollups({
     "days": [
         {
             "day": DAY_A,
@@ -73,7 +98,7 @@ BATCH = {
             ],
         },
     ]
-}
+})
 
 PRICING = "https://example.com/pricing"
 BLOG = "https://example.com/blog/beans"
@@ -274,7 +299,7 @@ async def test_ingest_rows_is_idempotent(client, email):
     assert pages["total"] == 2
     assert pages["rows"][0]["clicks"] == 35
 
-    replaced = {
+    replaced = with_rollups({
         "days": [
             {
                 "day": DAY_B,
@@ -291,7 +316,7 @@ async def test_ingest_rows_is_idempotent(client, email):
                 ],
             }
         ]
-    }
+    })
     r = await client.post("/api/v1/site/search-data/rows", json=replaced)
     assert r.json()["data"] == {"days": 1, "rows": 1}
 
@@ -354,7 +379,7 @@ async def test_operating_blind_under_threshold(client, email):
     await signup(client, email)
     await make_site(client)
 
-    thin = {
+    thin = with_rollups({
         "days": [
             {
                 "day": DAY_B,
@@ -371,7 +396,7 @@ async def test_operating_blind_under_threshold(client, email):
                 ],
             }
         ]
-    }
+    })
     await client.post("/api/v1/site/search-data/rows", json=thin)
 
     body = (await client.get("/api/v1/site/search-data")).json()["data"]
@@ -570,6 +595,91 @@ async def test_claim_resumes_from_stored_data(client, email):
     assert plan["startDay"] == day_ago(2)
     assert plan["endDay"] == day_ago(3)
     assert plan["daysTotal"] == 0
+    assert plan["freshDays"] == [day_ago(2), day_ago(1)]
+
+
+async def test_claim_backfills_when_totals_are_missing(client, email):
+    await signup(client, email)
+    await make_site(client)
+    detail_only = {"days": [{"day": d["day"], "rows": d["rows"]} for d in BATCH["days"]]}
+    await client.post("/api/v1/site/search-data/rows", json=detail_only)
+
+    opened = (await client.post("/api/v1/site/search-data/sync-jobs", json={})).json()["data"]
+    plan = (
+        await client.post(f"/api/v1/site/search-data/sync-jobs/{opened['sync']['id']}/claim")
+    ).json()["data"]
+    assert plan.get("resumeFrom") is None
+    assert plan["daysTotal"] > 300
+
+
+async def test_totals_include_hidden_queries_and_fresh_days_are_replaced(client, email):
+    await signup(client, email)
+    await make_site(client)
+    fresh_day = day_ago(1)
+    payload = {
+        "days": [
+            {
+                **BATCH["days"][1],
+                "totals": [
+                    {"device": "DESKTOP", "clicks": 30, "impressions": 400, "position": 6},
+                    {"device": "MOBILE", "clicks": 10, "impressions": 100, "position": 9},
+                ],
+                "pages": [
+                    {"page": PRICING, "clicks": 33, "impressions": 420, "position": 5},
+                    {"page": BLOG, "clicks": 4, "impressions": 60, "position": 11},
+                ],
+            },
+            {
+                "day": fresh_day,
+                "final": False,
+                "rows": BATCH["days"][0]["rows"],
+                "totals": [{"device": "DESKTOP", "clicks": 5, "impressions": 50, "position": 7}],
+                "pages": [{"page": PRICING, "clicks": 5, "impressions": 50, "position": 7}],
+            },
+        ]
+    }
+    r = await client.post("/api/v1/site/search-data/rows", json=payload)
+    assert r.json()["data"] == {"days": 2, "rows": 2}
+
+    body = (await client.get("/api/v1/site/search-data")).json()["data"]
+    assert body["lastDay"] == fresh_day
+    assert body["freshFrom"] == fresh_day
+    assert body["current"]["clicks"] == 45
+    assert body["current"]["impressions"] == 550
+
+    pages = (await client.get("/api/v1/site/search-data/pages", params={"days": 28})).json()[
+        "data"
+    ]
+    assert pages["freshFrom"] == fresh_day
+    by_page = {row["page"]: row for row in pages["rows"]}
+    assert by_page[PRICING]["clicks"] == 38
+    assert by_page[PRICING]["topQuery"] == "espresso machine"
+
+    queries = (await client.get("/api/v1/site/search-data/queries")).json()["data"]
+    assert queries["lastDay"] == BATCH["days"][1]["day"]
+    assert sum(q["clicks"] for q in queries["rows"]) == 21
+
+    final = {
+        "days": [
+            {
+                "day": fresh_day,
+                "rows": [],
+                "totals": [{"device": "DESKTOP", "clicks": 8, "impressions": 70, "position": 7}],
+                "pages": [{"page": PRICING, "clicks": 8, "impressions": 70, "position": 7}],
+            }
+        ]
+    }
+    await client.post("/api/v1/site/search-data/rows", json=final)
+    body = (await client.get("/api/v1/site/search-data")).json()["data"]
+    assert body.get("freshFrom") is None
+    assert body["current"]["clicks"] == 48
+
+    series = (
+        await client.get("/api/v1/site/search-data/series", params={"days": 7, "pages": PRICING})
+    ).json()["data"]
+    points = {p["day"]: p for p in series["series"][0]["points"]}
+    assert points[fresh_day]["clicks"] == 8
+    assert series["current"]["clicks"] == 41
 
 
 async def test_stalled_sync_is_reaped(client, email):
@@ -621,7 +731,8 @@ async def test_each_device_keeps_its_own_row(client, email):
         ]
     ]
     r = await client.post(
-        "/api/v1/site/search-data/rows", json={"days": [{"day": DAY_A, "rows": rows}]}
+        "/api/v1/site/search-data/rows",
+        json=with_rollups({"days": [{"day": DAY_A, "rows": rows}]}),
     )
     assert r.status_code == 200, r.text
     assert r.json()["data"] == {"days": 1, "rows": 2}

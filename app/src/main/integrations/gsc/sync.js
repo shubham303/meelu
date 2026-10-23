@@ -6,6 +6,8 @@ import {
   listProperties,
   matchingProperties,
   searchAnalyticsDay,
+  searchPagesDay,
+  searchTotalsDay,
 } from "./client.js";
 
 const running = new Map();
@@ -259,9 +261,13 @@ async function drive(syncId, siteId, cookieHeader, broadcast) {
         stopped = true;
         break;
       }
-      const rows = await searchAnalyticsDay(property, day);
-      pending.push({ day, rows });
-      pendingRows += rows.length;
+      const [rows, totals, pages] = await Promise.all([
+        searchAnalyticsDay(property, day),
+        searchTotalsDay(property, day),
+        searchPagesDay(property, day),
+      ]);
+      pending.push({ day, final: true, rows, totals, pages });
+      pendingRows += rows.length + pages.length;
       daysDone += 1;
       if (pending.length >= POST_BATCH_DAYS || pendingRows >= POST_BATCH_ROWS) await flush();
       if (daysDone % HEARTBEAT_EVERY_DAYS === 0) {
@@ -274,6 +280,19 @@ async function drive(syncId, siteId, cookieHeader, broadcast) {
           day,
         });
       }
+    }
+    for (const day of stopped ? [] : (plan.freshDays ?? [])) {
+      if (running.get(syncId)?.stop) {
+        stopped = true;
+        break;
+      }
+      const [totals, pages] = await Promise.all([
+        searchTotalsDay(property, day, "all"),
+        searchPagesDay(property, day, "all"),
+      ]);
+      pending.push({ day, final: false, rows: [], totals, pages });
+      pendingRows += pages.length;
+      if (pending.length >= POST_BATCH_DAYS || pendingRows >= POST_BATCH_ROWS) await flush();
     }
     await flush();
 

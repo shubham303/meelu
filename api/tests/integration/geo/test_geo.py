@@ -188,6 +188,14 @@ async def gsc_position(client, path, position, impressions=100):
                             "position": position,
                         }
                     ],
+                    "pages": [
+                        {
+                            "page": f"https://{DOMAIN}{path}/",
+                            "clicks": 3,
+                            "impressions": impressions,
+                            "position": position,
+                        }
+                    ],
                 }
             ]
         },

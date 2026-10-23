@@ -25,14 +25,14 @@ and name the page that currently ranks for each query.""",
         "question": "How are clicks and impressions trending over recent weeks or months?",
         "plan": """\
 First check coverage — the sync lags Google by days:
-SELECT min(day), max(day) FROM site_search_daily WHERE site_id = :site;
+SELECT min(day), max(day) FROM site_search_totals_daily WHERE site_id = :site;
 
 Anchor every window to max(day). Weekly series for a trend chart:
 
 SELECT date_trunc('week', day)::date AS week,
        sum(clicks) AS clicks, sum(impressions) AS impressions,
        sum(clicks)::float / NULLIF(sum(impressions), 0) AS ctr
-FROM site_search_daily WHERE site_id = :site
+FROM site_search_totals_daily WHERE site_id = :site
 GROUP BY 1 ORDER BY 1;
 
 Drop the newest partial week from trend claims. For a headline number,
@@ -45,10 +45,10 @@ too thin to reason from instead of quoting percentage swings.""",
         "plan": """\
 Two equal windows anchored to the last stored day, compared per page:
 
-WITH win AS (SELECT max(day) AS last FROM site_search_daily WHERE site_id = :site),
-cur AS (SELECT page, sum(clicks) c FROM site_search_daily, win
+WITH win AS (SELECT max(day) AS last FROM site_search_page_daily WHERE site_id = :site),
+cur AS (SELECT page, sum(clicks) c FROM site_search_page_daily, win
         WHERE site_id = :site AND day > win.last - 28 GROUP BY page),
-prev AS (SELECT page, sum(clicks) c FROM site_search_daily, win
+prev AS (SELECT page, sum(clicks) c FROM site_search_page_daily, win
          WHERE site_id = :site AND day > win.last - 56 AND day <= win.last - 28
          GROUP BY page)
 SELECT COALESCE(cur.page, prev.page) AS page,
@@ -262,15 +262,15 @@ actually ends; anchor windows there, never at today.""",
         "question": "How does a page's analytics traffic compare with its search clicks?",
         "plan": """\
 The two sources key pages differently: site_traffic_pages_daily.page_path is
-a GA4 path ('/pricing'), site_search_daily.page is a full URL. Join on the
+a GA4 path ('/pricing'), site_search_page_daily.page is a full URL. Join on the
 path suffix:
 
 WITH ga AS (SELECT page_path, sum(views) views, sum(users) users
             FROM site_traffic_pages_daily WHERE site_id = :site
               AND day > current_date - 28 GROUP BY page_path),
-gsc AS (SELECT page, sum(clicks) clicks FROM site_search_daily
+gsc AS (SELECT page, sum(clicks) clicks FROM site_search_page_daily
         WHERE site_id = :site
-          AND day > (SELECT max(day) - 28 FROM site_search_daily
+          AND day > (SELECT max(day) - 28 FROM site_search_page_daily
                      WHERE site_id = :site)
         GROUP BY page)
 SELECT ga.page_path, ga.views, ga.users, COALESCE(gsc.clicks, 0) AS search_clicks
