@@ -83,7 +83,7 @@ Why the tools and not you: the site is thousands of passages. Reading pages
 to spot links yourself covers a handful, spends the whole context, and misses
 every pair you did not think to open. The tools below walk the entire corpus,
 score every pair with the same search and reranker the workspace already
-uses, and store the result as rows the user reviews on the Structure screen.
+uses, and store the result as rows the user reviews on the Internal links screen.
 Rows are the deliverable, not prose. A link you describe in chat but never
 save does not exist.
 
@@ -131,12 +131,12 @@ Run in this order:
    can come back once budget frees up. Run it once, after review.
 8. finish_structure_job with the job_id and COMPLETED, or FAILED if a step
    could not run. Then tell the user, in a few lines, how many suggestions are
-   approved on the Structure screen, what was rejected and why in one
+   approved on the Internal links screen, what was rejected and why in one
    sentence, and what the strategy could not cover.
 
 Rules that hold for every strategy:
 - Never turn a suggestion down or restore one; those are the user's decisions
-  on the Structure screen.
+  on the Internal links screen.
 - Never save a suggestion by hand for a pair you found in chat; route it
   through a generator so it is deduplicated and scored like every other one.
 - If a tool reports stopped (no provider, no credits), say so and stop the
