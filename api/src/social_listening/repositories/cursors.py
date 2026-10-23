@@ -25,6 +25,18 @@ class SocialListeningCursorRepository:
         )
         return dict(result.all())
 
+    async def since(
+        self, db: AsyncSession, site_id: str, platform: str, cutoff: datetime
+    ) -> dict[str, datetime]:
+        result = await db.execute(
+            select(SocialListeningCursor.keyword, SocialListeningCursor.last_fetched_at).where(
+                SocialListeningCursor.site_id == site_id,
+                SocialListeningCursor.platform == platform,
+                SocialListeningCursor.last_fetched_at >= cutoff,
+            )
+        )
+        return dict(result.all())
+
     async def advance(
         self,
         db: AsyncSession,

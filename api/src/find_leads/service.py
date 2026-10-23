@@ -23,6 +23,7 @@ from src.find_leads.models.run import LeadRun
 from src.find_leads.repositories.briefs import lead_briefs
 from src.find_leads.repositories.leads import leads
 from src.find_leads.repositories.runs import lead_runs
+from src.find_leads.repositories.searches import lead_searches
 from src.find_leads.repositories.seen import lead_seen
 from src.find_leads.schemas import (
     DEFAULT_SOURCES,
@@ -31,19 +32,24 @@ from src.find_leads.schemas import (
     LOOKBACK_DAYS,
     MAX_BRIEFS_PER_SITE,
     MAX_EVIDENCE,
+    MAX_ROUNDS,
     MINIMUM_BALANCE_USD,
     RUN_STATUSES,
+    SEARCH_RETENTION_DAYS,
     SEEN_DISCARDED,
     SEEN_JUDGED,
     SOURCES,
     USER_STATUSES,
     WEB_ANGLES_PER_BRIEF,
+    WEB_PLATFORM,
     BriefCreateRequest,
     BriefPatchRequest,
     BriefResponse,
     BriefSearch,
     BriefUpsertItem,
     CandidatesRequest,
+    CheckRequest,
+    CheckResponse,
     InsertedResponse,
     JudgeRequest,
     LeadFilters,
@@ -52,11 +58,13 @@ from src.find_leads.schemas import (
     RunCreateRequest,
     RunResponse,
     RunUpdateRequest,
+    SearchResponse,
     SummaryResponse,
     UpsertResponse,
     VerdictResponse,
+    WebSearchRecord,
 )
-from src.find_leads.screening import drop_leads, screen_candidates
+from src.find_leads.screening import classify_leads, drop_leads, screen_candidates
 from src.providers.people_search.service import people_search
 from src.providers.social_search.service import social_search
 
@@ -101,21 +109,32 @@ class FindLeadsService:
             raise HTTPException(400, "Pick at least one place to look.")
         return chosen
 
-    def _clean_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
-        keywords = list(
-            dict.fromkeys(
-                k for k in (normalize_keyword(k) for k in plan.get("keywords") or []) if k
-            )
-        )
+    def _clean_keywords(self, values: list[str] | None) -> list[str]:
+        keywords = list(dict.fromkeys(k for k in (normalize_keyword(k) for k in values or []) if k))
         if keywords and len(keywords) != KEYWORDS_PER_BRIEF:
             raise HTTPException(
                 400, f"A brief needs exactly {KEYWORDS_PER_BRIEF} different keywords."
             )
-        out: dict[str, Any] = {"keywords": keywords}
-        web = list(dict.fromkeys(" ".join(str(a).split()) for a in plan.get("web") or []))
-        web = [a for a in web if a][:WEB_ANGLES_PER_BRIEF]
+        return keywords
+
+    def _clean_angles(self, values: list[str] | None) -> list[str]:
+        web = list(dict.fromkeys(" ".join(str(a).split()) for a in values or []))
+        return [a for a in web if a][:WEB_ANGLES_PER_BRIEF]
+
+    def _clean_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {"keywords": self._clean_keywords(plan.get("keywords"))}
+        web = self._clean_angles(plan.get("web"))
         if web:
             out["web"] = web
+        rounds = [
+            {
+                "keywords": self._clean_keywords(r.get("keywords")),
+                "web": self._clean_angles(r.get("web")),
+            }
+            for r in (plan.get("rounds") or [])[: MAX_ROUNDS - 1]
+        ]
+        if rounds:
+            out["rounds"] = rounds
         linkedin = plan.get("linkedin")
         if linkedin:
             query = " ".join(str(linkedin.get("query") or "").split())
@@ -306,7 +325,6 @@ class FindLeadsService:
         run_id: str,
         source: str,
         platform: str | None,
-        round_number: int = 1,
         searches: list[BriefSearch] | None = None,
     ) -> RunResponse:
         await self._running_run(db, site_id, run_id)
@@ -329,7 +347,7 @@ class FindLeadsService:
                 site_id,
                 run_id,
                 "linkedin",
-                lambda: collect_linkedin_people(user_id, site_id, run_id, round_number),
+                lambda: collect_linkedin_people(user_id, site_id, run_id),
             )
         raise HTTPException(400, "source must be posts or linkedin; the app sends web leads.")
 
@@ -464,6 +482,53 @@ class FindLeadsService:
             kept += 1
         return VerdictResponse(kept=kept, removed=await drop_leads(db, user_id, site_id, dropped))
 
+    async def check(
+        self, db: AsyncSession, user_id: str, site_id: str, body: CheckRequest
+    ) -> CheckResponse:
+        rows = await leads.get_many(db, site_id, body.ids)
+        shortlisted = [rows[i] for i in body.ids if i in rows and rows[i].status == "shortlisted"]
+        briefs = {b.id: b.text for b in await lead_briefs.list(db, site_id)}
+        await db.commit()
+        verdicts, errors, planned = await classify_leads(
+            user_id, site_id, shortlisted, briefs, "find_leads_check", with_activity=True
+        )
+        if planned and len(errors) == planned:
+            raise HTTPException(502, f"The fit check failed: {errors[0]}")
+        fresh = await leads.get_many(db, site_id, [lead.id for lead, _ in verdicts])
+        open_verdicts = [
+            (fresh[lead.id], keep)
+            for lead, keep in verdicts
+            if lead.id in fresh and fresh[lead.id].status == "shortlisted"
+        ]
+        removed = await drop_leads(
+            db, user_id, site_id, [row for row, keep in open_verdicts if not keep]
+        )
+        return CheckResponse(fits=[row.id for row, keep in open_verdicts if keep], removed=removed)
+
+    async def list_searches(
+        self, db: AsyncSession, site_id: str, platform: str
+    ) -> list[SearchResponse]:
+        rows = await lead_searches.by_query(db, site_id, platform)
+        return [SearchResponse.model_validate(row) for row in rows.values()]
+
+    async def record_web_search(
+        self, db: AsyncSession, user_id: str, site_id: str, body: WebSearchRecord
+    ) -> SearchResponse:
+        query = " ".join(body.query.split())
+        if not query:
+            raise HTTPException(400, "query must not be empty.")
+        await lead_searches.record(
+            db,
+            user_id,
+            site_id,
+            WEB_PLATFORM,
+            [{"query": query, "results": body.results}],
+            datetime.now(UTC),
+        )
+        row = (await lead_searches.by_query(db, site_id, WEB_PLATFORM, [query]))[query]
+        await db.refresh(row)
+        return SearchResponse.model_validate(row)
+
     async def list_leads(
         self, db: AsyncSession, site_id: str, filters: LeadFilters, paging: PaginationParams
     ) -> PaginatedApiResponse[LeadResponse]:
@@ -537,6 +602,9 @@ class FindLeadsService:
             ),
             "runs": await lead_runs.fail_quiet_since(
                 db, now - timedelta(seconds=QUIET_RUN_SECONDS), QUIET_RUN_ERROR
+            ),
+            "searches": await lead_searches.delete_older_than(
+                db, now - timedelta(days=SEARCH_RETENTION_DAYS)
             ),
         }
 

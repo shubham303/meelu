@@ -28,6 +28,11 @@ ACTIVITY_ITEMS = 5
 MAX_EVIDENCE = 3
 MINIMUM_BALANCE_USD = 5
 DEFAULT_SOURCES = ["posts", "linkedin"]
+SKIP_HOURS = 12
+WEB_CACHE_HOURS = 6
+SEARCH_RETENTION_DAYS = 30
+MAX_LINKEDIN_PAGES = 10
+WEB_PLATFORM = "web"
 
 
 class LinkedinPlan(RequestModel):
@@ -36,10 +41,16 @@ class LinkedinPlan(RequestModel):
     locations: list[str] = []
 
 
+class RoundPlan(RequestModel):
+    keywords: list[str] = []
+    web: list[str] = []
+
+
 class BriefPlan(RequestModel):
     keywords: list[str] = []
     linkedin: LinkedinPlan | None = None
     web: list[str] = []
+    rounds: list[RoundPlan] = []
 
 
 class BriefCreateRequest(RequestModel):
@@ -88,7 +99,6 @@ class BriefSearch(RequestModel):
 class CollectRequest(RequestModel):
     source: str
     platform: str | None = None
-    round: int = Field(1, ge=1, le=MAX_ROUNDS)
     searches: list[BriefSearch] | None = None
 
 
@@ -125,6 +135,15 @@ class JudgeVerdict(RequestModel):
 
 class JudgeRequest(RequestModel):
     leads: list[JudgeVerdict]
+
+
+class CheckRequest(RequestModel):
+    ids: list[str] = Field(max_length=200)
+
+
+class WebSearchRecord(RequestModel):
+    query: str
+    results: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
 
 
 class LeadPatchRequest(RequestModel):
@@ -198,6 +217,19 @@ class LeadResponse(EntityModel):
     discarded_at: JsDateTime | None = None
     created_at: JsDateTime
     updated_at: JsDateTime
+
+
+class CheckResponse(EntityModel):
+    fits: list[str]
+    removed: int
+
+
+class SearchResponse(EntityModel):
+    platform: str
+    query: str
+    page: int
+    searched_at: JsDateTime
+    results: list[dict[str, Any]]
 
 
 class InsertedResponse(EntityModel):
