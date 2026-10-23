@@ -15,7 +15,9 @@ from src.seo.keyword_tracking.models.seo_volume_history import SeoVolumeHistory
 from src.seo.keyword_tracking.tools import track_keyword_volumes
 from src.seo.site_search.models.site_page_index_status import SitePageIndexStatus
 from src.seo.site_search.models.site_search_daily import SiteSearchDaily
+from src.seo.site_search.models.site_search_page_daily import SiteSearchPageDaily
 from src.seo.site_search.models.site_search_sync import SiteSearchSync
+from src.seo.site_search.models.site_search_totals_daily import SiteSearchTotalsDaily
 from src.seo.site_seo.models.site_backlink import SiteBacklink
 from src.seo.site_seo.models.site_competitor import SiteCompetitor
 from src.seo.site_seo.tools import (
@@ -42,6 +44,8 @@ TABLES = desk_tables(
     SeoKeywordCluster,
     SeoVolumeHistory,
     SiteSearchDaily,
+    SiteSearchPageDaily,
+    SiteSearchTotalsDaily,
     SiteSearchSync,
     SitePageIndexStatus,
     SiteTrafficTotalsDaily,

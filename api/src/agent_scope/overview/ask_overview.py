@@ -1,7 +1,9 @@
 from src.agent_scope.lib import AgentScope, SiteRef, desk_guides, desk_tables, fill
 from src.crawl_jobs.models.site_crawl_job import SiteCrawlJob
 from src.seo.site_search.models.site_search_daily import SiteSearchDaily
+from src.seo.site_search.models.site_search_page_daily import SiteSearchPageDaily
 from src.seo.site_search.models.site_search_sync import SiteSearchSync
+from src.seo.site_search.models.site_search_totals_daily import SiteSearchTotalsDaily
 from src.seo.site_traffic.models.site_traffic_totals_daily import SiteTrafficTotalsDaily
 from src.site_pages.models.site_page import SitePage
 from src.site_pages.models.site_page_llm_extraction import SitePageLlmExtraction
@@ -14,6 +16,8 @@ TABLES = desk_tables(
     SitePageLlmExtraction,
     SiteCrawlJob,
     SiteSearchDaily,
+    SiteSearchPageDaily,
+    SiteSearchTotalsDaily,
     SiteSearchSync,
     SiteTrafficTotalsDaily,
 )
