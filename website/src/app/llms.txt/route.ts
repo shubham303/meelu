@@ -34,7 +34,7 @@ Meelu is in development and built in the open. The desktop app is out for macOS 
 
 ## Integrations
 
-Per website, through Composio: Gmail, Outlook, Mailchimp and Kit (drafts only), Webflow and Contentful (draft pages), HubSpot, Attio and Pipedrive (contacts and notes the user approves), Notion and Google Docs (new pages), Reddit, LinkedIn and GitHub (posts only a reply the user approved, never a new post). Google Search Console and Google Analytics 4 connect from the app.
+Per website, through Composio: Gmail, Outlook, Mailchimp and Kit (drafts only), Resend (sends only email the user approved), Webflow and Contentful (draft pages), HubSpot, Attio and Pipedrive (contacts and notes the user approves), Notion and Google Docs (new pages), Reddit, LinkedIn and GitHub (posts only a reply the user approved, never a new post). Google Search Console and Google Analytics 4 connect from the app.
 
 ## Pricing
 
