@@ -40,8 +40,8 @@ class Desk:
 EMAIL = Desk(
     name="email",
     noun="mailbox",
-    blurb="The user's own mailbox (Gmail, Outlook) and newsletter tool (Mailchimp, Kit) — connect them, search and read mail, and save draft emails and draft newsletters for the user to send.",
-    rule="Writes only save drafts; the user reviews and sends every email and newsletter themselves.",
+    blurb="The user's own mailbox (Gmail, Outlook), newsletter tool (Mailchimp, Kit) and sending service (Resend) — connect them, search and read mail, save draft emails and draft newsletters, and send email through Resend once the user approves it.",
+    rule="Gmail, Outlook, Mailchimp and Kit writes only save drafts. Resend sends at once: send only email the user approved, exactly as approved; send several approved emails as one batch.",
     apps=(
         App(
             toolkit="gmail",
@@ -86,6 +86,13 @@ EMAIL = Desk(
             reads=("KIT_LIST_BROADCASTS", "KIT_GET_BROADCAST"),
             writes=("KIT_CREATE_BROADCAST",),
             fixed_arguments={"KIT_CREATE_BROADCAST": {"send_at": None, "public": False}},
+        ),
+        App(
+            toolkit="resend",
+            name="Resend",
+            auth="api_key",
+            reads=("RESEND_LIST_DOMAINS", "RESEND_LIST_EMAILS", "RESEND_RETRIEVE_EMAIL"),
+            writes=("RESEND_SEND_EMAIL", "RESEND_SEND_BATCH_EMAILS"),
         ),
     ),
 )
