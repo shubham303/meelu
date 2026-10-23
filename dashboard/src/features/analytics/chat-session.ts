@@ -177,7 +177,7 @@ export class ChatSession {
       return;
     }
 
-    const answerId = this.nextId();
+    let answerId = this.nextId();
     let answer = "";
     this.running = streamTurn({
       action: ACTION,
@@ -187,15 +187,21 @@ export class ChatSession {
       history,
       onText: (chunk) => {
         answer += chunk;
+        const text = answer.trimStart();
+        if (!text) return;
         this.set((s) => {
           const last = s.items[s.items.length - 1];
           if (last?.kind === "assistant" && last.id === answerId) {
-            return { items: [...s.items.slice(0, -1), { ...last, text: answer }] };
+            return { items: [...s.items.slice(0, -1), { ...last, text }] };
           }
-          return { items: [...s.items, { kind: "assistant", id: answerId, text: answer }] };
+          return { items: [...s.items, { kind: "assistant", id: answerId, text }] };
         });
       },
-      onTool: (name) => this.push({ kind: "tool", id: this.nextId(), text: name }),
+      onTool: (name) => {
+        answerId = this.nextId();
+        answer = "";
+        this.push({ kind: "tool", id: this.nextId(), text: name });
+      },
       onEvent: (m) => {
         if (m.event === "permission" && typeof m.data.requestId === "string") {
           this.push({
