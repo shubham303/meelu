@@ -49,3 +49,12 @@ export function sameHost(url, other) {
 export function otherHostForm(url, other) {
   return !sameHost(url, other) && sameSite(url, other);
 }
+
+export function onOrigin(url, origin) {
+  if (!otherHostForm(url, origin)) return url;
+  const moved = new URL(url);
+  const target = new URL(origin);
+  moved.protocol = target.protocol;
+  moved.host = target.host;
+  return moved.toString();
+}
