@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import { TriangleAlert } from "lucide-react";
 import { DownloadButtons } from "@/components/download-buttons";
 import { site } from "@/lib/site";
+import { softwareApplicationJson } from "@/lib/software-schema";
 
 const title = "Download the Meelu desktop app (beta) for macOS and Windows";
 const description =
-  "Meelu's desktop app is in beta. It runs crawls and the agent on your own computer and connects to your Meelu account. Not yet verified by Apple, Microsoft or Google, so expect a security warning on first download and launch.";
+  "Download the Meelu beta for macOS and Windows. It runs crawls and the AI agent on your own computer; expect a security warning on first launch.";
 
 const warnings = [
   {
@@ -48,6 +49,7 @@ export const metadata: Metadata = {
 export default function DownloadPage() {
   return (
     <div>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: softwareApplicationJson }} />
       <section className="relative overflow-hidden border-b border-edge">
         <div aria-hidden className="grain absolute inset-0" />
         <div
