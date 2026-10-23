@@ -189,6 +189,26 @@ export async function searchAnalyticsDay(property, day) {
   return rows;
 }
 
+export async function searchTotalsDay(property, day, dataState = "final") {
+  const { rows } = await querySearchAnalytics(property, {
+    startDate: day,
+    endDate: day,
+    dataState,
+    dimensions: ["device"],
+  });
+  return rows;
+}
+
+export async function searchPagesDay(property, day, dataState = "final") {
+  const { rows } = await querySearchAnalytics(property, {
+    startDate: day,
+    endDate: day,
+    dataState,
+    dimensions: ["page"],
+  });
+  return rows;
+}
+
 export async function inspectUrl(property, url) {
   try {
     const data = await call(INSPECTION, {

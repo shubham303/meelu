@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.seo.site_search.repositories.site_page_index_status import site_page_index_statuses
 from src.seo.site_search.repositories.site_search_daily import site_search_dailies, strip_slash
+from src.seo.site_search.repositories.site_search_page_daily import site_search_pages
 from src.seo.site_search.repositories.site_search_sync import site_search_syncs
+from src.seo.site_search.repositories.site_search_totals_daily import site_search_totals
 from src.seo.site_search.schemas import (
     GooglePreferredCanonical,
     IndexationSummary,
@@ -128,6 +130,18 @@ def _end_day() -> str:
     return _iso((datetime.now(UTC) - timedelta(days=LAG_DAYS)).date())
 
 
+def _fresh_days(end_day: str) -> list[str]:
+    last = datetime.now(UTC).date() - timedelta(days=1)
+    first = date.fromisoformat(end_day) + timedelta(days=1)
+    return [_iso(first + timedelta(days=i)) for i in range((last - first).days + 1)]
+
+
+def _resume_from(last_days: list[str | None], start: str) -> str | None:
+    if any(d is None or d < start for d in last_days):
+        return None
+    return _iso(date.fromisoformat(min(d for d in last_days if d)) + timedelta(days=1))
+
+
 def _backfill_start() -> str:
     today = datetime.now(UTC).date()
     months = today.year * 12 + (today.month - 1) - BACKFILL_MONTHS
@@ -218,13 +232,10 @@ class SiteSearchService:
             raise HTTPException(409, f"This sync is {sync.status}, not waiting to be claimed.")
 
         cov = await site_search_dailies.coverage(db, site_id)
+        last_final = await site_search_totals.last_final_day(db, site_id)
         start = _backfill_start()
         end = _end_day()
-        resume_from = (
-            _iso(date.fromisoformat(cov.last_day) + timedelta(days=1))
-            if cov.last_day and cov.last_day >= start
-            else None
-        )
+        resume_from = _resume_from([cov.last_day, last_final], start)
         frm = resume_from or start
         days_total = max(0, (date.fromisoformat(end) - date.fromisoformat(frm)).days + 1)
 
@@ -251,6 +262,7 @@ class SiteSearchService:
             end_day=end,
             resume_from=resume_from,
             days_total=days_total,
+            fresh_days=_fresh_days(end),
         )
 
     async def patch_sync(
@@ -286,8 +298,15 @@ class SiteSearchService:
         await site_service.get(db, user_id, site_id)
         stored = 0
         for entry in body.days:
-            stored += await site_search_dailies.replace_day(
-                db, user_id, site_id, entry.day, entry.rows
+            if entry.final:
+                stored += await site_search_dailies.replace_day(
+                    db, user_id, site_id, entry.day, entry.rows
+                )
+            await site_search_totals.replace_day(
+                db, user_id, site_id, entry.day, entry.totals, entry.final
+            )
+            await site_search_pages.replace_day(
+                db, user_id, site_id, entry.day, entry.pages, entry.final
             )
             await db.commit()
         return SearchRowsIngestResponse(days=len(body.days), rows=stored)
@@ -369,7 +388,7 @@ class SiteSearchService:
         self, db: AsyncSession, user_id: str, site_id: str
     ) -> SearchOverviewResponse:
         site = await site_service.get(db, user_id, site_id)
-        cov = await site_search_dailies.coverage(db, site_id)
+        cov = await site_search_totals.coverage(db, site_id)
         latest = await site_search_syncs.latest(db, site_id)
         sync = _sync_response(latest)
         active = sync if latest is not None and latest.status in ("queued", "running") else None
@@ -384,9 +403,9 @@ class SiteSearchService:
                 active=active,
             )
 
-        current = await site_search_dailies.totals_for_window(db, site_id, cov.last_day, 28)
-        previous = await site_search_dailies.totals_for_window(db, site_id, cov.last_day, 28, 28)
-        weekly = await site_search_dailies.weekly_clicks(db, site_id, cov.last_day, 12)
+        current = await site_search_totals.totals_for_window(db, site_id, cov.last_day, 28)
+        previous = await site_search_totals.totals_for_window(db, site_id, cov.last_day, 28, 28)
+        weekly = await site_search_totals.weekly_clicks(db, site_id, cov.last_day, 12)
         indexation = await self._indexation(db, site_id)
 
         return SearchOverviewResponse(
@@ -396,6 +415,7 @@ class SiteSearchService:
             operating_blind=cov.impressions_28d < BLIND_IMPRESSIONS,
             first_day=cov.first_day,
             last_day=cov.last_day,
+            fresh_from=cov.fresh_from,
             days_stored=cov.days_stored,
             current=current,
             previous=previous,
@@ -423,7 +443,7 @@ class SiteSearchService:
         pages: list[str] | None = None,
     ) -> SearchSeriesResponse:
         await site_service.get(db, user_id, site_id)
-        cov = await site_search_dailies.coverage(db, site_id)
+        cov = await site_search_totals.coverage(db, site_id)
         if not cov.last_day:
             return SearchSeriesResponse(
                 has_data=False, last_day=None, days=_clamp_days(days), series=[]
@@ -432,14 +452,22 @@ class SiteSearchService:
         span = _clamp_days(days)
         normalised = self._normalised_pages(pages, "compared")
 
-        scope = normalised if normalised else None
-        points = await site_search_dailies.daily_series(db, site_id, cov.last_day, span, scope)
-        current = await site_search_dailies.totals_for_window(
-            db, site_id, cov.last_day, span, 0, scope
-        )
-        previous = await site_search_dailies.totals_for_window(
-            db, site_id, cov.last_day, span, span, scope
-        )
+        if normalised:
+            points = await site_search_pages.daily_series(
+                db, site_id, cov.last_day, span, normalised
+            )
+            current = await site_search_pages.totals_for_window(
+                db, site_id, cov.last_day, span, 0, normalised
+            )
+            previous = await site_search_pages.totals_for_window(
+                db, site_id, cov.last_day, span, span, normalised
+            )
+        else:
+            points = await site_search_totals.daily_series(db, site_id, cov.last_day, span)
+            current = await site_search_totals.totals_for_window(db, site_id, cov.last_day, span)
+            previous = await site_search_totals.totals_for_window(
+                db, site_id, cov.last_day, span, span
+            )
 
         cursor = date.fromisoformat(cov.last_day) - timedelta(days=span - 1)
         day_axis = [_iso(cursor + timedelta(days=i)) for i in range(span)]
@@ -465,6 +493,7 @@ class SiteSearchService:
         return SearchSeriesResponse(
             has_data=True,
             last_day=cov.last_day,
+            fresh_from=cov.fresh_from,
             days=span,
             series=grouped,
             current=current,
@@ -484,7 +513,7 @@ class SiteSearchService:
         offset: int | None = None,
     ) -> SearchPagesResponse:
         await site_service.get(db, user_id, site_id)
-        cov = await site_search_dailies.coverage(db, site_id)
+        cov = await site_search_totals.coverage(db, site_id)
         if not cov.last_day:
             return SearchPagesResponse(rows=[], total=0, last_day=None)
         span = _clamp_days(days)
@@ -493,7 +522,7 @@ class SiteSearchService:
         direction = "asc" if direction == "asc" else "desc"
         status_field = STATUS_SORTS.get(sort or "")
         if status_field is None:
-            rollup = await site_search_dailies.pages_rollup(
+            rollup = await site_search_pages.pages_rollup(
                 db,
                 site_id,
                 cov.last_day,
@@ -509,10 +538,11 @@ class SiteSearchService:
                 rows=[row for row, _ in enriched],
                 total=rollup.total,
                 last_day=cov.last_day,
+                fresh_from=cov.fresh_from,
                 days=span,
             )
 
-        rollup = await site_search_dailies.pages_rollup(
+        rollup = await site_search_pages.pages_rollup(
             db, site_id, cov.last_day, span, search=search
         )
         enriched = await self._enrich_pages(db, site_id, rollup.rows)
@@ -533,6 +563,7 @@ class SiteSearchService:
             rows=window,
             total=rollup.total if window else 0,
             last_day=cov.last_day,
+            fresh_from=cov.fresh_from,
             days=span,
         )
 

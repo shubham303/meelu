@@ -27,21 +27,30 @@ GUIDES: dict[str, str] = {
     "search-data": """\
 ## Search Console data
 
+- `site_search_totals_daily`: the site's totals per (day, device), exactly the
+  numbers Search Console's Performance report shows. Use it for site-wide
+  clicks, impressions, CTR, position and trends.
+- `site_search_page_daily`: per (day, page) totals, matching Search Console's
+  Pages report. Use it for any page's clicks, impressions and position.
 - `site_search_daily`: one row per (day, query, page, device, country) with
   clicks, impressions, position; device is desktop, mobile or tablet, country is
   the searcher's ISO alpha-2 code (`ZZ` when Google does not know it), the same
-  codes as the website's `markets`. The grain is query x page x device x country
-  x day — aggregate before comparing, and filter or group by device or country
-  when the question is about one of them. This is the website's own measured
-  ranking history: a query's position over time is its impression-weighted
-  position per day or month.
+  codes as the website's `markets`. Use it only for questions about queries, or
+  about countries. Google leaves out the searches it hides for privacy, so its
+  sums undercount clicks and impressions and must never stand in for site or page
+  totals. A query's position over time is its impression-weighted position per
+  day or month.
+- In the two totals tables, `final` is false for the last few days Google still
+  revises; say so when a claim rests on them.
 - `site_page_index_status`: per-page indexation state from URL inspection.
 - `site_search_syncs`: sync-run bookkeeping; check it before trusting freshness.
 
 Rules that keep answers honest:
-- Google publishes with ~3 days of lag and syncs may be behind. Always check the
-  actual coverage first (`SELECT min(day), max(day) FROM site_search_daily WHERE
-  site_id = '...'`) and anchor any "last N days" window to max(day), not today.
+- Google publishes with days of lag and syncs may be behind. Always check the
+  actual coverage first (`SELECT min(day), max(day) FROM site_search_totals_daily
+  WHERE site_id = '...'`, and the same on `site_search_daily` for query questions,
+  which ends a few days earlier) and anchor any "last N days" window to max(day),
+  not today.
 - Compare a window against the previous window of equal length for trend claims.
 - CTR = sum(clicks)::float / NULLIF(sum(impressions), 0). Weight average
   position by impressions, not a plain AVG.

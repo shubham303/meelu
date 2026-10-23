@@ -48,6 +48,13 @@ def _number(value: Any) -> float:
     return 0.0
 
 
+def _device(value: Any) -> str:
+    device = str(value or "").strip().lower()
+    if device not in DEVICES:
+        raise ValueError(f'"{value}" is not a device. Allowed values: {", ".join(DEVICES)}.')
+    return device
+
+
 class SearchPropertyRequest(RequestModel):
     property: str
 
@@ -79,10 +86,7 @@ class SearchDailyRowInput(RequestModel):
     @field_validator("device", mode="before")
     @classmethod
     def _validate_device(cls, v: Any) -> str:
-        device = str(v or "").strip().lower()
-        if device not in DEVICES:
-            raise ValueError(f'"{v}" is not a device. Allowed values: {", ".join(DEVICES)}.')
-        return device
+        return _device(v)
 
     @field_validator("country", mode="before")
     @classmethod
@@ -106,9 +110,58 @@ class SearchDailyRowInput(RequestModel):
         return _number(v)
 
 
+class SearchTotalsRowInput(RequestModel):
+    device: str
+    clicks: int = 0
+    impressions: int = 0
+    position: float = 0.0
+
+    @field_validator("device", mode="before")
+    @classmethod
+    def _validate_device(cls, v: Any) -> str:
+        return _device(v)
+
+    @field_validator("clicks", "impressions", mode="before")
+    @classmethod
+    def _validate_count(cls, v: Any) -> int:
+        return _count(v)
+
+    @field_validator("position", mode="before")
+    @classmethod
+    def _validate_position(cls, v: Any) -> float:
+        return _number(v)
+
+
+class SearchPageRowInput(RequestModel):
+    page: str
+    clicks: int = 0
+    impressions: int = 0
+    position: float = 0.0
+
+    @field_validator("page", mode="before")
+    @classmethod
+    def _validate_page(cls, v: Any) -> str:
+        if not isinstance(v, str):
+            raise ValueError("page must be a string.")
+        return v[:MAX_TEXT_CHARS]
+
+    @field_validator("clicks", "impressions", mode="before")
+    @classmethod
+    def _validate_count(cls, v: Any) -> int:
+        return _count(v)
+
+    @field_validator("position", mode="before")
+    @classmethod
+    def _validate_position(cls, v: Any) -> float:
+        return _number(v)
+
+
 class SearchDayRowsInput(RequestModel):
     day: str
+    final: bool = True
     rows: list[SearchDailyRowInput] = Field(default_factory=list)
+    totals: list[SearchTotalsRowInput] = Field(default_factory=list)
+    pages: list[SearchPageRowInput] = Field(default_factory=list)
 
     @field_validator("day", mode="before")
     @classmethod
@@ -195,6 +248,7 @@ class SearchCoverageRecord(EntityModel):
     last_day: str | None
     days_stored: int
     impressions_28d: int
+    fresh_from: str | None = None
 
 
 class SearchTotals(EntityModel):
@@ -328,6 +382,7 @@ class SearchOverviewResponse(EntityModel):
     operating_blind: bool
     first_day: str | None = None
     last_day: str | None = None
+    fresh_from: str | None = None
     days_stored: int | None = None
     current: SearchTotals | None = None
     previous: SearchTotals | None = None
@@ -358,6 +413,7 @@ class SearchSeriesGroup(EntityModel):
 class SearchSeriesResponse(EntityModel):
     has_data: bool
     last_day: str | None
+    fresh_from: str | None = None
     days: int
     series: list[SearchSeriesGroup]
     current: SearchTotals | None = None
@@ -368,6 +424,7 @@ class SearchPagesResponse(EntityModel):
     rows: list[SearchPageRollupRow]
     total: int
     last_day: str | None
+    fresh_from: str | None = None
     days: int | None = None
 
 
@@ -413,6 +470,7 @@ class SearchSyncClaimResponse(EntityModel):
     end_day: str
     resume_from: str | None
     days_total: int
+    fresh_days: list[str] = Field(default_factory=list)
 
 
 class SitePageIndexStatusRecord(EntityModel):
