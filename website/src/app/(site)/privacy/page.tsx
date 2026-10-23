@@ -93,8 +93,8 @@ export default function PrivacyPage() {
           <strong className={strong}>Leads.</strong> If you use Find Leads, the briefs you write
           and the people found for them from public sources: their public name, handle, headline
           and profile link, an email address only when a public page prints it, and the public
-          posts behind the reason Meelu gives. Meelu does not send messages to them, store your
-          messages or track replies.
+          posts behind the reason Meelu gives. Meelu does not store your messages or track replies,
+          and it sends an email only through your own connected Resend account, when you approve it.
         </p>
         <p>
           <strong className={strong}>Billing.</strong> Your credit balance, a history of credit
