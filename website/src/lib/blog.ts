@@ -104,6 +104,10 @@ export async function getPost(slug: string): Promise<Post | null> {
   }
   const raw = fs.readFileSync(file, "utf8");
   const { data, content } = matter(raw);
+  return { ...parseMeta(slug, data, content), html: await renderMarkdown(content) };
+}
+
+export async function renderMarkdown(content: string): Promise<string> {
   const html = await unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -113,7 +117,7 @@ export async function getPost(slug: string): Promise<Post | null> {
     .use(rehypeImageDimensions)
     .use(rehypeStringify)
     .process(content);
-  return { ...parseMeta(slug, data, content), html: String(html) };
+  return String(html);
 }
 
 export function getAdjacentPosts(slug: string): {

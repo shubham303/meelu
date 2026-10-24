@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { listComparisons } from "@/lib/alternatives";
 import { listPosts } from "@/lib/blog";
 import { docsSource } from "@/lib/docs-source";
 import { site } from "@/lib/site";
@@ -7,6 +8,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const posts = listPosts().map((post) => ({
     url: `${site.url}/blog/${post.slug}`,
     lastModified: new Date(`${post.date}T00:00:00Z`),
+  }));
+
+  const comparisons = listComparisons().map((comparison) => ({
+    url: `${site.url}/alternatives/${comparison.slug}`,
+    lastModified: new Date(`${comparison.checked}T00:00:00Z`),
+    priority: 0.7,
   }));
 
   const docs = docsSource.getPages().map((page) => ({
@@ -28,10 +35,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${site.url}/tools`, priority: 0.7 },
     { url: `${site.url}/blog`, priority: 0.8 },
     { url: `${site.url}/case-studies`, priority: 0.8 },
+    { url: `${site.url}/alternatives`, priority: 0.7 },
     { url: `${site.url}/contact`, priority: 0.5 },
     { url: `${site.url}/terms`, priority: 0.3 },
     { url: `${site.url}/privacy`, priority: 0.3 },
     ...posts,
+    ...comparisons,
     ...docs,
   ];
 }
