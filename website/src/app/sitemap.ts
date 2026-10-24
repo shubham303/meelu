@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { listComparisons } from "@/lib/alternatives";
 import { listPosts } from "@/lib/blog";
+import { useCases } from "@/lib/use-cases";
 import { docsSource } from "@/lib/docs-source";
 import { site } from "@/lib/site";
 
@@ -36,6 +37,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${site.url}/blog`, priority: 0.8 },
     { url: `${site.url}/case-studies`, priority: 0.8 },
     { url: `${site.url}/alternatives`, priority: 0.7 },
+    { url: `${site.url}/use-cases`, priority: 0.8 },
+    ...useCases.map((useCase) => ({ url: `${site.url}/use-cases/${useCase.slug}`, priority: 0.8 })),
     { url: `${site.url}/contact`, priority: 0.5 },
     { url: `${site.url}/terms`, priority: 0.3 },
     { url: `${site.url}/privacy`, priority: 0.3 },

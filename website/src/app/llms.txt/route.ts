@@ -1,5 +1,6 @@
 import { listComparisons } from "@/lib/alternatives";
 import { listPosts } from "@/lib/blog";
+import { useCases } from "@/lib/use-cases";
 import { site } from "@/lib/site";
 
 const tools = [
@@ -55,6 +56,10 @@ All run without sign-up; most run entirely in the browser.
 
 - [All tools](${site.url}/tools)
 ${tools.map(([slug, line]) => `- [${line}](${site.url}/tools/${slug})`).join("\n")}
+
+## Use cases
+
+${useCases.map((useCase) => `- [${useCase.name}](${site.url}/use-cases/${useCase.slug}): ${useCase.metaDescription}`).join("\n")}
 
 ## Comparisons
 
