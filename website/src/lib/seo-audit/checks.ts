@@ -307,9 +307,22 @@ export const PAGE_CHECKS: PageCheck[] = [
     fix: "Expand it, merge it into a fuller page, or drop it.",
     test: (page) =>
       isIndexable(page) &&
+      !page.clientRendered &&
       ["article", "product", "docs"].includes(page.kind) &&
       page.wordCount < 250
         ? `${page.wordCount} words on a ${page.kind} page`
+        : null,
+  },
+  {
+    id: "js-only-content",
+    label: "Content loads only with JavaScript",
+    severity: "high",
+    category: "crawlability",
+    why: "The HTML the server sends is an almost empty shell, and the page builds its text in the browser. AI crawlers such as GPTBot and ClaudeBot do not run JavaScript, so they see no content, and Google sees it only after a delayed second pass.",
+    fix: "Render the main content on the server (server-side rendering or static generation), or prerender the pages crawlers visit.",
+    test: (page) =>
+      isIndexable(page) && page.clientRendered
+        ? `${page.wordCount} words in the HTML the server sends; the rest is built by JavaScript`
         : null,
   },
   {

@@ -720,3 +720,26 @@ async def test_raw_counterpart_rules_compare_crawl_and_render(client, email):
         assert groups[kind]["issueType"] == "desktop"
         assert groups[kind]["examples"] == [f"{ORIGIN}/static"], kind
         assert f"mobile-{kind}" not in groups, kind
+
+
+async def test_thin_content_counts_the_rendered_words_when_a_render_exists(client, email):
+    site, user_id, _ = await prepare(client, email)
+    extra = await seed_pages(
+        site["id"],
+        user_id,
+        [
+            page("/js-article", page_type="informational", word_count=8),
+            page("/thin-article", page_type="informational", word_count=40),
+        ],
+    )
+    await seed_renders(
+        site["id"],
+        user_id,
+        [{"page_id": extra[f"{ORIGIN}/js-article"], "title": "Rendered article", "word_count": 900}],
+    )
+
+    r = await client.post("/api/v1/site/technical-seo/run-audit", json={})
+    assert r.status_code == 201, r.text
+    groups = by_kind(r.json()["data"]["openPageIssues"])
+    assert groups["thin-content"]["examples"] == [f"{ORIGIN}/thin-article"]
+    assert f"{ORIGIN}/js-article" in groups["js-only-content"]["examples"]

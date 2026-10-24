@@ -73,6 +73,7 @@ export type Page = {
   twitterCard: boolean;
   favicon: boolean;
   ampHtml: string | null;
+  clientRendered: boolean;
   noindexHeaderOnly: boolean;
 };
 

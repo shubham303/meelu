@@ -77,7 +77,20 @@ export type Facts = {
   twitterCard: boolean;
   favicon: boolean;
   ampHtml: string | null;
+  clientRendered: boolean;
 };
+
+const MOUNT_IDS = ["root", "app", "__next", "__nuxt", "svelte", "main-app"];
+const NOSCRIPT_JS = /enable javascript|javascript (is )?(required|disabled)|requires javascript/i;
+
+function looksClientRendered($: cheerio.CheerioAPI, wordCount: number): boolean {
+  if (wordCount >= 50 || $("script[src], script[type='module']").length === 0) return false;
+  const emptyMount = MOUNT_IDS.some((id) => {
+    const node = $(`#${id}`);
+    return node.length > 0 && node.text().trim().split(/\s+/).filter(Boolean).length < 20;
+  });
+  return emptyMount || NOSCRIPT_JS.test($("noscript").text());
+}
 
 export function extract(html: string, url: string): Facts {
   const $ = cheerio.load(html);
@@ -203,6 +216,7 @@ export function extract(html: string, url: string): Facts {
       return block.text;
     })
     .join("\n");
+  const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
 
   return {
     title,
@@ -211,7 +225,7 @@ export function extract(html: string, url: string): Facts {
     h1,
     headings,
     bodyText,
-    wordCount: bodyText.split(/\s+/).filter(Boolean).length,
+    wordCount,
     outLinks,
     externalLinks,
     canonical: canonical ? (absolute(canonical, url) ?? canonical) : null,
@@ -227,6 +241,7 @@ export function extract(html: string, url: string): Facts {
     twitterCard,
     favicon,
     ampHtml,
+    clientRendered: looksClientRendered($, wordCount),
   };
 }
 
