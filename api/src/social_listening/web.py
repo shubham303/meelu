@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from src.providers.social_search.store import social_post_row
-from src.social_listening.schemas import WEB_PLATFORM, WebPost
+from src.social_listening.schemas import WebPost
 
 FUTURE_SLACK = timedelta(days=1)
 
@@ -11,7 +11,9 @@ def aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def web_post_rows(posts: list[WebPost], oldest: datetime, now: datetime) -> list[dict[str, Any]]:
+def web_post_rows(
+    platform: str, posts: list[WebPost], oldest: datetime, now: datetime
+) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for post in posts:
         posted = aware(post.posted_at)
@@ -20,7 +22,7 @@ def web_post_rows(posts: list[WebPost], oldest: datetime, now: datetime) -> list
         row = social_post_row(
             {
                 "url": post.url,
-                "platform": WEB_PLATFORM,
+                "platform": platform,
                 "title": post.title,
                 "text": post.text,
                 "author": {"handle": post.author_handle, "displayName": post.author_name},

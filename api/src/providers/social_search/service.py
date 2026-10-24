@@ -1,6 +1,5 @@
 from src.providers.errors import ProviderRequestError
 from src.providers.registry import Caller, ProviderFacade
-from src.providers.social_search.apify import apify_adapters
 from src.providers.social_search.meelu_public import MeeluPublicAdapter
 from src.providers.social_search.platforms import PLATFORMS
 
@@ -15,7 +14,7 @@ class SocialSearchProvider(ProviderFacade):
                 "id": p["id"],
                 "label": p["label"],
                 "access": p["access"],
-                "available": self.supports(f"search.{p['id']}"),
+                "available": p["access"] == "web" or self.supports(f"search.{p['id']}"),
             }
             for p in PLATFORMS
         ]
@@ -51,4 +50,4 @@ class SocialSearchProvider(ProviderFacade):
             return None
 
 
-social_search = SocialSearchProvider([MeeluPublicAdapter(), *apify_adapters()])
+social_search = SocialSearchProvider([MeeluPublicAdapter()])

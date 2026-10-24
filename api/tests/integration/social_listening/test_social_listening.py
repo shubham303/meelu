@@ -193,12 +193,12 @@ async def test_lines_cap_and_two_keywords(client, email):
     assert r.json()["data"]["keywords"] == []
 
 
-async def test_run_needs_five_dollars_and_one_at_a_time(client, email):
-    await prepare(client, email, credits=1.0)
+async def test_run_needs_one_dollar_and_one_at_a_time(client, email):
+    await prepare(client, email, credits=0.5)
     r = await client.post("/api/v1/social-listening/runs")
     assert r.status_code == 402
     assert r.json()["error"]["message"] == (
-        "Social listening needs a credit balance of at least $5."
+        "Social listening needs a credit balance of at least $1."
     )
 
     await grant(email, 10)
@@ -613,6 +613,44 @@ async def test_web_posts_become_candidates_once(client, email):
         f"/api/v1/social-listening/runs/{run['id']}/web-posts", json={"posts": []}
     )
     assert r.status_code == 409
+
+
+async def test_web_searched_platform_posts_keep_their_platform(client, email):
+    await prepare(client, email)
+    await add_line(client, "people asking for an seo tool", ["reddit zebra", "reddit yak"])
+    run = await start_run(client)
+    url = f"/api/v1/social-listening/runs/{run['id']}/web-posts"
+    thread = "https://www.reddit.com/r/SaaS/comments/1zx9qa/which_seo_tool_do_you_use/"
+
+    r = await client.post(
+        url,
+        json={
+            "platform": "reddit",
+            "posts": [
+                {**web_post(thread, "which seo tool do you use?"), "authorHandle": "u/ana_builds"},
+                web_post(thread.replace("www.", "old."), "the same thread on old reddit"),
+            ],
+            "searchedLines": 1,
+            "searchedQueries": ["people asking for an seo tool"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["platformStats"]["reddit"]["candidates"] == 1
+    found = await posts(client, "candidate")
+    assert [(p["platform"], p["url"]) for p in found] == [("reddit", thread)]
+    rows = sql("select post_key, author_handle from social_post where url = %s", (thread,))
+    assert rows == [("reddit:1zx9qa", "u/ana_builds")]
+
+    r = await client.get("/api/v1/social-listening/searches?platform=reddit")
+    assert [row["query"] for row in r.json()["data"]] == ["people asking for an seo tool"]
+
+    r = await client.post(url, json={"platform": "hackernews", "posts": []})
+    assert r.status_code == 400
+
+    r = await client.post(
+        f"/api/v1/social-listening/runs/{run['id']}/collect", json={"platform": "reddit"}
+    )
+    assert r.status_code == 400
 
 
 async def test_check_keeps_only_posts_that_fit(client, email, vendor, monkeypatch):
