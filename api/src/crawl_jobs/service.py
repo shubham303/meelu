@@ -173,6 +173,8 @@ class CrawlJobService:
             patch["sitemap_urls"] = body.sitemaps_used
         if body.sitemap_at_root is not None:
             patch["sitemap_at_root"] = body.sitemap_at_root
+        if body.sitemaps_listing_sitemaps is not None:
+            patch["sitemaps_listing_sitemaps"] = body.sitemaps_listing_sitemaps
 
         return patch
 

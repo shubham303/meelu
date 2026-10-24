@@ -122,10 +122,11 @@ function halted(origin, startedAt, note, extra = {}) {
 }
 
 async function readSitemaps(urls, depth = 0) {
-  if (depth > 2) return { urls: [], used: [] };
+  if (depth > 2) return { urls: [], used: [], listingSitemaps: [] };
   const parser = new XMLParser({ ignoreAttributes: false });
   const out = [];
   const used = [];
+  const listingSitemaps = [];
 
   for (const url of urls.slice(0, 50)) {
     try {
@@ -153,6 +154,7 @@ async function readSitemaps(urls, depth = 0) {
           out.push(...inner.urls);
           used.push(url, ...inner.used);
         }
+        listingSitemaps.push(...inner.listingSitemaps);
         continue;
       }
 
@@ -161,15 +163,27 @@ async function readSitemaps(urls, depth = 0) {
         const locs = (Array.isArray(entries) ? entries : [entries])
           .map((entry) => entry.loc)
           .filter((loc) => typeof loc === "string");
-        if (locs.length) {
-          out.push(...locs);
-          used.push(url);
+        const isSitemapLoc = (loc) => /\.xml([?#]|$)/i.test(loc.trim());
+        const pages = locs.filter((loc) => !isSitemapLoc(loc));
+        const nested = locs.filter(isSitemapLoc);
+        const inner = nested.length
+          ? await readSitemaps(nested, depth + 1)
+          : { urls: [], used: [], listingSitemaps: [] };
+        if (pages.length || inner.urls.length) {
+          out.push(...pages, ...inner.urls);
+          used.push(url, ...inner.used);
         }
+        if (inner.urls.length) listingSitemaps.push(url);
+        listingSitemaps.push(...inner.listingSitemaps);
       }
     } catch {
     }
   }
-  return { urls: [...new Set(out)], used: [...new Set(used)] };
+  return {
+    urls: [...new Set(out)],
+    used: [...new Set(used)],
+    listingSitemaps: [...new Set(listingSitemaps)],
+  };
 }
 
 async function servesSitemapAtRoot(origin, used) {
@@ -198,7 +212,7 @@ async function findSitemapUrls(origin, declared, fromRobots) {
       };
     }
   }
-  return { urls: [], used: [], tried: [...new Set(tried)], atRoot: false };
+  return { urls: [], used: [], listingSitemaps: [], tried: [...new Set(tried)], atRoot: false };
 }
 
 async function resolveOrigin(start, crawlToken) {
@@ -623,6 +637,7 @@ export async function crawlSite(domain, known, opts = {}) {
     stopped,
     sitemapsUsed: sitemap.used,
     sitemapAtRoot: sitemap.atRoot,
+    sitemapsListingSitemaps: sitemap.listingSitemaps,
     sitemapUrlCount: worklist.length,
     notes,
   };
