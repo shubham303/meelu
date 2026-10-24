@@ -44,7 +44,6 @@ class Settings(EnvSettings):
     dataforseo_base_url: str = "https://api.dataforseo.com"
     dataforseo_chatgpt_model: str = "gpt-6-luna"
     dataforseo_claude_model: str = "claude-haiku-5-5"
-    apify_api_key: str = ""
     composio_api_key: str = ""
     composio_base_url: str = "https://backend.composio.dev/api/v3.1"
     github_token: str = ""

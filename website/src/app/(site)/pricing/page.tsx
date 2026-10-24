@@ -20,12 +20,8 @@ const services = [
     what: "Keyword volumes, rankings, backlinks, search results pages, and the answers ChatGPT, Claude and Google's AI Overview give for GEO checks.",
   },
   {
-    name: "Apify",
-    what: "Searches across social platforms for social listening and Find Leads, LinkedIn people search and reading the recent posts of shortlisted leads. A run needs a balance of at least $5 to start.",
-  },
-  {
     name: "OpenRouter",
-    what: "AI models that read and classify your pages, and judge whether they answer the questions you track on the GEO desk.",
+    what: "AI models that read and classify your pages, judge whether they answer the questions you track on the GEO desk, and run the web searches behind social listening and Find Leads. A social listening or Find Leads run needs a balance of at least $1 to start.",
   },
 ];
 

@@ -29,27 +29,15 @@ def mount_routers():
 
 @pytest.fixture
 def vendors(monkeypatch):
-    from src.providers.people_search.service import people_search
     from src.providers.social_search.service import social_search
 
-    state = {"posts": {}, "people": [], "people_by_page": {}, "activity": {}, "calls": []}
+    state = {"posts": {}, "calls": []}
 
     async def search_platform(caller, platform, keywords, since, per_keyword):
         state["calls"].append(("posts", platform, sorted(keywords)))
         return {"posts": state["posts"].get(platform, []), "failedKeywords": []}
 
-    async def search_linkedin(caller, query, titles, locations, limit, page=1):
-        state["calls"].append(("linkedin", query, titles, locations, limit, page))
-        return state["people_by_page"].get(page, state["people"])
-
-    async def activity(caller, platform, people, per_person):
-        state["calls"].append(("activity", platform, sorted(people)))
-        return {p: state["activity"].get(p, []) for p in people}
-
     monkeypatch.setattr(social_search, "search_platform", search_platform)
-    monkeypatch.setattr(people_search, "search_linkedin", search_linkedin)
-    monkeypatch.setattr(people_search, "activity", activity)
-    monkeypatch.setattr(people_search, "supports", lambda capability: True)
     monkeypatch.setattr(social_search, "supports", lambda capability: True)
     sql("delete from social_search_cursor")
     return state
@@ -81,18 +69,18 @@ def decider(monkeypatch):
 RUN_TOKEN = uuid.uuid4().hex[:8]
 
 
-def vendor_post(post_id, handle, text, platform="reddit", hours_ago=2):
+def vendor_post(post_id, handle, text, platform="hackernews", hours_ago=2):
     post_id = f"{post_id}{RUN_TOKEN}"
     return {
         "id": post_id,
-        "url": f"https://www.reddit.com/r/shopify/comments/{post_id}/x",
+        "url": f"https://news.ycombinator.com/item?id={post_id}",
         "platform": platform,
         "author": {"handle": handle, "displayName": None},
         "title": "Traffic dropped",
         "text": text,
         "createdAt": (datetime.now(UTC) - timedelta(hours=hours_ago)).isoformat(),
         "engagement": {"score": 3, "comments": 1, "views": None},
-        "context": {"subreddit": "shopify", "tags": None},
+        "context": {"subreddit": None, "tags": None},
     }
 
 
@@ -215,10 +203,10 @@ async def test_briefs_crud_limit_and_plan(client, email):
 
 
 async def test_run_guards(client, email):
-    await prepare(client, email, credits=1.0)
+    await prepare(client, email, credits=0.5)
     r = await client.post(f"{BASE}/runs")
     assert r.status_code == 402
-    assert r.json()["error"]["message"] == ("Finding leads needs a credit balance of at least $5.")
+    assert r.json()["error"]["message"] == ("Finding leads needs a credit balance of at least $1.")
     await grant(email, 20)
     r = await client.post(f"{BASE}/runs")
     assert r.status_code == 400
@@ -237,7 +225,7 @@ async def test_post_authors_become_candidates_once(client, email, vendors):
     brief = await add_brief(
         client, "Shopify owners whose traffic dropped", ["posts"], ["walrus dropped", "shop seo"]
     )
-    vendors["posts"]["reddit"] = [
+    vendors["posts"]["hackernews"] = [
         vendor_post("a1", "candlesbydana", "My shop walrus dropped by half after a theme change"),
         vendor_post("a2", "candlesbydana", "Still no idea which pages lost rankings", hours_ago=5),
         vendor_post("b1", "[deleted]", "walrus dropped for me too"),
@@ -245,8 +233,8 @@ async def test_post_authors_become_candidates_once(client, email, vendors):
         vendor_post("o1", "old_olga", "walrus dropped back in the day", hours_ago=24 * 40),
     ]
     run = await start_run(client)
-    finished = await collect(client, run["id"], "posts", "reddit")
-    stats = finished["sourceStats"]["posts:reddit"]
+    finished = await collect(client, run["id"], "posts", "hackernews")
+    stats = finished["sourceStats"]["posts:hackernews"]
     assert stats["status"] == "done"
     assert stats["candidates"] == 2
     assert finished["foundCount"] == 2
@@ -254,15 +242,15 @@ async def test_post_authors_become_candidates_once(client, email, vendors):
     found = {lead["handle"]: lead for lead in await leads(client, "candidate")}
     assert set(found) == {"candlesbydana", "tom_b"}
     dana = found["candlesbydana"]
-    assert dana["profileUrl"] == "https://www.reddit.com/user/candlesbydana/"
+    assert dana["profileUrl"] == "https://news.ycombinator.com/user?id=candlesbydana"
     assert dana["briefId"] == brief["id"]
-    assert dana["source"] == "posts" and dana["platform"] == "reddit"
+    assert dana["source"] == "posts" and dana["platform"] == "hackernews"
     assert len(dana["evidence"]) == 2
 
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"status": "done"})
     run = await start_run(client)
-    finished = await collect(client, run["id"], "posts", "reddit")
-    stats = finished["sourceStats"]["posts:reddit"]
+    finished = await collect(client, run["id"], "posts", "hackernews")
+    stats = finished["sourceStats"]["posts:hackernews"]
     assert stats["candidates"] == 0
     assert sorted(s["query"] for s in stats["skippedQueries"]) == ["shop seo", "walrus dropped"]
     assert len([c for c in vendors["calls"] if c[0] == "posts"]) == 1
@@ -277,21 +265,67 @@ async def test_linkedin_and_web_candidates(client, email, vendors):
         ["linkedin", "web"],
         linkedin={"query": "freelance web designer", "titles": ["Web Designer"]},
     )
-    vendors["people"] = [
-        {
-            "id": "ACwAAA1",
-            "name": "Marco Ilic",
-            "headline": "Founder at Ilic Studio",
-            "profileUrl": "https://www.linkedin.com/in/ACwAAA1",
-            "location": "Zagreb",
-            "summary": "WordPress sites for restaurants",
-        },
-        {"id": "nourl", "name": "No Url", "profileUrl": None},
-    ]
     run = await start_run(client)
-    finished = await collect(client, run["id"], "linkedin")
-    assert finished["sourceStats"]["linkedin"]["candidates"] == 1
-    assert vendors["calls"][0][1:] == ("freelance web designer", ["Web Designer"], [], 25, 1)
+    r = await client.post(f"{BASE}/runs/{run['id']}/collect", json={"source": "linkedin"})
+    assert r.status_code == 400
+
+    r = await client.post(
+        f"{BASE}/leads/candidates",
+        json={
+            "runId": run["id"],
+            "source": "linkedin",
+            "platform": "linkedin",
+            "leads": [
+                {
+                    "briefId": brief["id"],
+                    "name": "Marco Ilic",
+                    "headline": "Founder at Ilic Studio",
+                    "profileUrl": "https://hr.linkedin.com/in/Marco-Ilic?trk=search",
+                    "snippet": "WordPress sites for restaurants",
+                },
+                {"name": "No Url"},
+            ],
+        },
+    )
+    assert r.json()["data"] == {"inserted": 1, "skipped": 0}
+    run_row = (await client.get(f"{BASE}/runs/{run['id']}")).json()["data"]
+    assert run_row["sourceStats"]["linkedin"]["candidates"] == 1
+    marco = next(x for x in await leads(client, "candidate") if x["source"] == "linkedin")
+    assert marco["profileUrl"] == "https://www.linkedin.com/in/marco-ilic/"
+
+    r = await client.post(
+        f"{BASE}/leads/candidates",
+        json={
+            "runId": run["id"],
+            "source": "posts",
+            "platform": "reddit",
+            "leads": [
+                {
+                    "briefId": brief["id"],
+                    "handle": "u/rosa_designs",
+                    "snippet": "Need a web designer for my cafe",
+                    "evidence": [
+                        {
+                            "url": "https://www.reddit.com/r/smallbusiness/comments/q1/x",
+                            "quote": "Need a web designer",
+                        }
+                    ],
+                },
+                {"name": "No handle"},
+            ],
+        },
+    )
+    assert r.json()["data"] == {"inserted": 1, "skipped": 0}
+    rosa = next(x for x in await leads(client, "candidate") if x["platform"] == "reddit")
+    assert (rosa["handle"], rosa["profileUrl"]) == (
+        "rosa_designs",
+        "https://www.reddit.com/user/rosa_designs/",
+    )
+    r = await client.post(
+        f"{BASE}/leads/candidates",
+        json={"runId": run["id"], "source": "posts", "platform": "hackernews", "leads": []},
+    )
+    assert r.status_code == 400
 
     r = await client.post(
         f"{BASE}/leads/candidates",
@@ -325,7 +359,7 @@ async def test_linkedin_and_web_candidates(client, email, vendors):
     assert web["Guessed"].get("email") is None
     run_row = (await client.get(f"{BASE}/runs/{run['id']}")).json()["data"]
     assert run_row["sourceStats"]["web"]["candidates"] == 2
-    assert run_row["foundCount"] == 3
+    assert run_row["foundCount"] == 4
 
 
 async def screen(client, run_id):
@@ -337,13 +371,13 @@ async def screen(client, run_id):
 async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider):
     await prepare(client, email)
     await add_brief(client, "Shopify owners", ["posts"], ["otter dropped", "shop seo"])
-    vendors["posts"]["reddit"] = [
+    vendors["posts"]["hackernews"] = [
         vendor_post("f1", "candlesbydana", "My shop otter dropped by half"),
         vendor_post("g1", "agency_bob", "We fix otter dropped issues, DM us"),
         vendor_post("h1", "maybe_mia", "otter dropped, what now"),
     ]
     run = await start_run(client)
-    await collect(client, run["id"], "posts", "reddit")
+    await collect(client, run["id"], "posts", "hackernews")
     by_handle = {lead["handle"]: lead for lead in await leads(client, "candidate")}
 
     decider["drop"] = {"agency_bob"}
@@ -356,34 +390,19 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider)
         "candlesbydana",
         "maybe_mia",
     }
-    assert sql("select kind from lead_seen where identity_key = 'reddit:agency_bob'") == [
+    assert sql("select kind from lead_seen where identity_key = 'hackernews:agency_bob'") == [
         ("judged",)
     ]
 
-    activity_url = "https://www.reddit.com/r/smallbusiness/comments/z9/x"
-    old_url = "https://www.reddit.com/r/smallbusiness/comments/z1/x"
-    recent_at = (datetime.now(UTC) - timedelta(days=3)).isoformat()
-    old_at = (datetime.now(UTC) - timedelta(days=40)).isoformat()
-    vendors["activity"]["candlesbydana"] = [
-        {
-            "url": activity_url,
-            "text": "which pages lost rankings?",
-            "at": recent_at,
-            "kind": "post",
-        },
-        {"url": old_url, "text": "2019 rant", "at": old_at, "kind": "post"},
-        {"url": "https://x.example/undated", "text": "no date", "at": None, "kind": "comment"},
-    ]
+    activity_url = by_handle["candlesbydana"]["evidence"][0]["url"]
     r = await client.post(f"{BASE}/runs/{run['id']}/enrich")
     assert r.status_code == 200, r.text
     finished = await wait_for(client, run["id"], "enrich")
     assert finished["sourceStats"]["enrich"]["people"] == 2
-    assert ("activity", "reddit", ["candlesbydana", "maybe_mia"]) in vendors["calls"]
+    assert finished["sourceStats"]["enrich"]["fromStore"] >= 1
     dana = (await client.get(f"{BASE}/leads/{by_handle['candlesbydana']['id']}")).json()["data"]
     assert dana["enrichedAt"] is not None
     assert activity_url in {a["url"] for a in dana["activity"]}
-    assert old_url not in {a["url"] for a in dana["activity"]}
-    assert "https://x.example/undated" not in {a["url"] for a in dana["activity"]}
 
     r = await client.post(
         f"{BASE}/leads/judged",
@@ -395,7 +414,7 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider)
                     "reason": "Traffic halved after a theme change.",
                     "angle": "Offer the list of pages that lost clicks.",
                     "evidence": [
-                        {"url": activity_url, "quote": "which pages lost rankings?"},
+                        {"url": activity_url, "quote": "My shop otter dropped by half"},
                         {"url": "https://made.up/url", "quote": "invented"},
                     ],
                 },
@@ -424,17 +443,17 @@ async def test_screen_enrich_judge_and_statuses(client, email, vendors, decider)
     assert summary["lastRun"]["id"] == run["id"]
 
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"status": "done"})
-    vendors["posts"]["reddit"].append(vendor_post("e1", "new_nick", "otter dropped again"))
+    vendors["posts"]["hackernews"].append(vendor_post("e1", "new_nick", "otter dropped again"))
     sql("delete from social_search_cursor")
     sql("update lead_search set searched_at = now() - interval '13 hours'")
     run = await start_run(client)
-    finished = await collect(client, run["id"], "posts", "reddit")
+    finished = await collect(client, run["id"], "posts", "hackernews")
     handles = {lead["handle"] for lead in await leads(client, "candidate")}
     assert handles == {"new_nick"}
 
     r = await client.delete(lead_url)
     assert r.json()["data"]["id"] == dana["id"]
-    assert sql("select kind from lead_seen where identity_key = 'reddit:candlesbydana'") == [
+    assert sql("select kind from lead_seen where identity_key = 'hackernews:candlesbydana'") == [
         ("discarded",)
     ]
 
@@ -490,24 +509,16 @@ async def test_runs_take_a_target_and_later_rounds_search_anew(client, email, ve
     run = r.json()["data"]
     assert (run["targetCount"], run["round"]) == (35, 0)
 
-    person = lambda i: {"id": f"p{i}", "name": f"P {i}", "profileUrl": f"https://l.in/p{i}"}
-    vendors["people_by_page"] = {1: [person(1), person(2)], 2: [person(2), person(3)]}
-    finished = await collect(client, run["id"], "linkedin")
-    assert finished["sourceStats"]["linkedin"]["candidates"] == 2
-    finished = await collect(client, run["id"], "linkedin")
-    assert finished["sourceStats"]["linkedin"]["candidates"] == 3
-    assert [c[-1] for c in vendors["calls"] if c[0] == "linkedin"] == [1, 2]
-
-    vendors["posts"]["reddit"] = [vendor_post("k1", "kite_kim", "kestrel agency growth")]
+    vendors["posts"]["hackernews"] = [vendor_post("k1", "kite_kim", "kestrel agency growth")]
     finished = await collect(
         client,
         run["id"],
         "posts",
-        "reddit",
+        "hackernews",
         searches=[{"briefId": brief["id"], "keywords": ["kestrel agency", "agency growth"]}],
     )
-    assert ("posts", "reddit", ["agency growth", "kestrel agency"]) in vendors["calls"]
-    assert finished["sourceStats"]["posts:reddit"]["candidates"] == 1
+    assert ("posts", "hackernews", ["agency growth", "kestrel agency"]) in vendors["calls"]
+    assert finished["sourceStats"]["posts:hackernews"]["candidates"] == 1
 
     r = await client.patch(f"{BASE}/runs/{run['id']}", json={"round": 2})
     assert r.json()["data"]["round"] == 2
@@ -559,12 +570,12 @@ async def test_starting_a_run_closes_one_the_app_stopped_driving(client, email):
 async def test_check_drops_misfits_and_web_searches_are_remembered(client, email, vendors, decider):
     await prepare(client, email)
     await add_brief(client, "Shopify owners", ["posts"], ["otter sank", "shop seo"])
-    vendors["posts"]["reddit"] = [
+    vendors["posts"]["hackernews"] = [
         vendor_post("m1", "candlesbydana", "My shop otter sank by half"),
         vendor_post("m2", "agency_bob", "We fix otter sank issues, DM us"),
     ]
     run = await start_run(client)
-    await collect(client, run["id"], "posts", "reddit")
+    await collect(client, run["id"], "posts", "hackernews")
     await screen(client, run["id"])
     shortlisted = await leads(client, "shortlisted")
     assert len(shortlisted) == 2
@@ -592,7 +603,7 @@ async def test_check_drops_misfits_and_web_searches_are_remembered(client, email
     assert [(row["query"], row["results"]) for row in rows] == [
         ("Shopify owners on community forums", results)
     ]
-    r = await client.get(f"{BASE}/searches?platform=reddit")
+    r = await client.get(f"{BASE}/searches?platform=hackernews")
     assert sorted(row["query"] for row in r.json()["data"]) == ["otter sank", "shop seo"]
 
 

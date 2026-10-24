@@ -76,11 +76,11 @@ export function startEnrich(siteId, runId, cookieHeader) {
   return api(`/find-leads/runs/${runId}/enrich`, { method: "POST", body: {}, siteId, cookieHeader });
 }
 
-export function saveCandidates(siteId, runId, leads, cookieHeader) {
+export function saveCandidates(siteId, runId, leads, cookieHeader, origin = { source: "web", platform: "web" }) {
   if (leads.length === 0) return Promise.resolve({ inserted: 0, skipped: 0 });
   return api("/find-leads/leads/candidates", {
     method: "POST",
-    body: { runId, leads },
+    body: { runId, ...origin, leads },
     siteId,
     cookieHeader,
   });

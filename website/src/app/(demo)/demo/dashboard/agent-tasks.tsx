@@ -86,7 +86,7 @@ declare global {
       socialSignalsStop?: (jobId: string) => Promise<{ stopping?: boolean; error?: string }>;
       socialSignalsActive?: (siteId: string) => Promise<SocialSignalsSnapshot | { error: string }>;
       socialSignalsPlatforms?: () => Promise<
-        | { platforms: Array<{ id: string; label: string; access: "direct" | "apify"; available: boolean }> }
+        | { platforms: Array<{ id: string; label: string; access: "direct" | "web"; available: boolean }> }
         | { error: string }
       >;
       onSocialSignalsEvent?: (

@@ -11,7 +11,7 @@ import { SITE_ID } from "./site";
 export interface PlatformInfo {
   id: string;
   label: string;
-  access: "direct" | "apify";
+  access: "direct" | "web";
   available: boolean;
 }
 
@@ -20,11 +20,11 @@ export const PLATFORMS: PlatformInfo[] = [
   { id: "stackexchange", label: "Stack Exchange", access: "direct", available: true },
   { id: "devto", label: "Dev.to", access: "direct", available: true },
   { id: "github", label: "GitHub Issues", access: "direct", available: true },
-  { id: "reddit", label: "Reddit", access: "apify", available: true },
-  { id: "x", label: "X (Twitter)", access: "apify", available: true },
-  { id: "linkedin", label: "LinkedIn", access: "apify", available: true },
+  { id: "reddit", label: "Reddit", access: "web", available: true },
+  { id: "x", label: "X (Twitter)", access: "web", available: true },
+  { id: "linkedin", label: "LinkedIn", access: "web", available: true },
   { id: "bluesky", label: "Bluesky", access: "direct", available: true },
-  { id: "facebook", label: "Facebook", access: "apify", available: true },
+  { id: "facebook", label: "Facebook", access: "web", available: true },
 ];
 
 export const MAX_LINES = 30;

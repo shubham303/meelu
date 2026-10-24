@@ -364,7 +364,7 @@ anyone; a lead is new, contacted or discarded.
 
 ## Data providers
 
-Shared third-party data vendors (DataForSEO, Apify). The server holds one
+Shared third-party data vendors (DataForSEO). The server holds one
 account per vendor and charges calls to the user's credits.
 
 | Method | Path | Purpose |
@@ -372,7 +372,6 @@ account per vendor and charges calls to the user's credits.
 | GET | `/providers/status` | Which providers are configured. |
 | GET | `/providers/calls` | The user's provider call log (paged). |
 | GET | `/providers/social-listening/platforms` | Platforms social search supports. |
-| POST | `/providers/social-listening/search` | Search social posts through the provider. |
 
 ## LLM
 

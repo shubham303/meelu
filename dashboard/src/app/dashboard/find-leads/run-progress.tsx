@@ -56,7 +56,7 @@ export function RunProgress({ live }: { live: LiveRun }) {
           ? "Could not read activity; judging on what was found"
           : live.enriched.status === "running"
             ? "Reading profiles"
-            : `${live.enriched.people} ${live.enriched.people === 1 ? "profile" : "profiles"} read`
+            : `${live.enriched.people} ${live.enriched.people === 1 ? "person" : "people"} checked`
         : "Waiting",
     },
     {

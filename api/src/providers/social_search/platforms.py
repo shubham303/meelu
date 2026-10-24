@@ -4,8 +4,10 @@ PLATFORMS = [
     {"id": "devto", "label": "Dev.to", "access": "direct"},
     {"id": "github", "label": "GitHub Issues", "access": "direct"},
     {"id": "bluesky", "label": "Bluesky", "access": "direct"},
-    {"id": "reddit", "label": "Reddit", "access": "apify"},
-    {"id": "x", "label": "X (Twitter)", "access": "apify"},
-    {"id": "linkedin", "label": "LinkedIn", "access": "apify"},
-    {"id": "facebook", "label": "Facebook", "access": "apify"},
+    {"id": "reddit", "label": "Reddit", "access": "web"},
+    {"id": "x", "label": "X (Twitter)", "access": "web"},
+    {"id": "linkedin", "label": "LinkedIn", "access": "web"},
+    {"id": "facebook", "label": "Facebook", "access": "web"},
 ]
+
+WEB_SEARCHED_PLATFORMS = tuple(p["id"] for p in PLATFORMS if p["access"] == "web")
