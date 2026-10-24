@@ -20,6 +20,9 @@ export function SiteFooter() {
           <Link href="/case-studies" className="transition-colors hover:text-ink">
             Case studies
           </Link>
+          <Link href="/alternatives" className="transition-colors hover:text-ink">
+            Compare
+          </Link>
           <Link href="/pricing" className="transition-colors hover:text-ink">
             Pricing
           </Link>
