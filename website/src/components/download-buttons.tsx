@@ -75,15 +75,22 @@ function usePlatform(): Platform {
   return useSyncExternalStore(subscribe, detectPlatform, serverPlatform);
 }
 
-export function HeroDownload({ children }: { children?: ReactNode }) {
+export function HeroDownload({
+  children,
+  align = "center",
+}: {
+  children?: ReactNode;
+  align?: "center" | "start";
+}) {
   const platform = usePlatform();
   const primary = builds.find((build) => build.platform === platform);
   const { onDownloadClick, prompt } = useDownloadPrompt();
+  const alignment = align === "start" ? "items-start" : "items-center";
 
   return (
-    <div className="flex flex-col items-center">
+    <div className={`flex flex-col ${alignment}`}>
       {prompt}
-      <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <div className={`flex flex-col justify-center gap-3 sm:flex-row ${alignment}`}>
         <a
           href={primary?.href ?? "/download"}
           onClick={primary ? onDownloadClick(primary) : undefined}
@@ -104,16 +111,7 @@ export function HeroDownload({ children }: { children?: ReactNode }) {
           {primary ? "Other platforms" : "All downloads"}
         </Link>
       </p>
-      <p className="mt-2 max-w-md text-xs text-faint text-pretty">
-        Beta, updated continuously. Expect some bugs. Not yet verified by Apple, Microsoft or
-        Google, so expect a security warning when you download and open it.{" "}
-        <Link
-          href="/download#first-launch"
-          className="text-sub underline decoration-edge underline-offset-4 transition-colors hover:text-ink hover:decoration-accent"
-        >
-          How to open it
-        </Link>
-      </p>
+      <p className="mt-2 max-w-md text-xs text-faint text-pretty">Meelu is in beta.</p>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Logo } from "@/components/logo";
 const links = [
   { href: "/tools", label: "Free tools", short: "Tools" },
   { href: "/docs", label: "Docs", short: "Docs" },
+  { href: "/case-studies", label: "Case studies", short: null },
   { href: "/pricing", label: "Pricing", short: "Pricing" },
   { href: "/blog", label: "Blog", short: "Blog" },
 ] as const;
@@ -20,9 +21,9 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="whitespace-nowrap rounded-lg px-1.5 py-2 text-[13px] text-sub transition-colors hover:bg-panel2 hover:text-ink sm:px-3 sm:text-sm"
+              className={`whitespace-nowrap rounded-lg px-1.5 py-2 text-[13px] text-sub transition-colors hover:bg-panel2 hover:text-ink sm:px-3 sm:text-sm ${link.short ? "" : "hidden sm:inline-block"}`}
             >
-              <span className="sm:hidden">{link.short}</span>
+              {link.short && <span className="sm:hidden">{link.short}</span>}
               <span className="hidden sm:inline">{link.label}</span>
             </Link>
           ))}

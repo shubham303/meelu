@@ -1,27 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  ArrowRight,
-  BarChart3,
-  Check,
-  Download,
-  FileChartColumn,
-  FileText,
-  Globe,
-  MessageCircleQuestion,
-  NotebookPen,
-  Radar,
-  Search,
-  ShieldCheck,
-  Sparkles,
-  UserSearch,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Download } from "lucide-react";
 import type { ReactNode } from "react";
 import { DemoFrame } from "@/components/demo-frame";
 import { HeroDownload } from "@/components/download-buttons";
-import { listPosts, formatDate } from "@/lib/blog";
+import { listCaseStudies } from "@/lib/blog";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -58,144 +41,103 @@ const organizationSchema = {
   ],
 };
 
-const heroStats = [
-  { value: "9", label: "desks, one coworker" },
-  { value: "25+", label: "apps and data sources" },
-  { value: "0", label: "changes without your OK" },
-];
-
-type Finding = {
-  desk: string;
-  icon: LucideIcon;
-  tone: string;
-  headline: string;
-  evidence: string;
-  action: string;
-};
-
-const findings: Finding[] = [
+const heroFindings = [
   {
-    desk: "GEO",
-    icon: MessageCircleQuestion,
-    tone: "text-accent",
-    headline: "ChatGPT and Claude cite four sites for “how do I find keyword cannibalization”. None of them is you.",
-    evidence: "Your guide answers 5 of the 7 points a full answer needs. It skips how to fix it and when to merge.",
-    action: "Extend the guide",
+    headline: "“internal linking tool” sits at position 11.4",
+    evidence: "One step from page one. 1,840 impressions, 9 clicks in 28 days.",
   },
   {
-    desk: "SEO",
-    icon: Search,
-    tone: "text-good",
-    headline: "“internal linking tool” sits at position 11.4. Page two, one step from page one.",
-    evidence: "2,900 searches a month. 1,840 impressions in Search Console over 28 days, 9 clicks.",
-    action: "Add three internal links",
+    headline: "ChatGPT cites four sites for your main question. Not you.",
+    evidence: "Your guide covers 5 of the 7 points a full answer needs.",
   },
   {
-    desk: "Social Listening",
-    icon: Radar,
-    tone: "text-warn",
-    headline: "A Reddit thread with 42 comments asks for a tool that finds orphan pages.",
-    evidence: "Posted 6 hours ago in r/TechSEO. Nobody has named a tool yet. A reply is drafted for you.",
-    action: "Review the reply",
-  },
-  {
-    desk: "Technical SEO",
-    icon: Wrench,
-    tone: "text-bad",
-    headline: "18 pages render differently on mobile. The menu hides your pricing link.",
-    evidence: "Found in the last crawl, comparing the raw HTML with the desktop and mobile render.",
-    action: "See the 18 pages",
-  },
-  {
-    desk: "Find Leads",
-    icon: UserSearch,
-    tone: "text-accent",
-    headline: "A head of growth at a 40-person SaaS posted twice this week that organic traffic is flat.",
-    evidence: "Both posts linked, with an opening angle based on what they wrote. You write the message.",
-    action: "Open their profile",
+    headline: "A 42-comment r/TechSEO thread asks for a tool like yours",
+    evidence: "Posted 6 hours ago. A reply is drafted for you to review.",
   },
 ];
 
-type Desk = { icon: LucideIcon; name: string; body: string; href: string };
+const problems = [
+  {
+    title: "“Data gathering takes half my day.”",
+    body: "A marketer on r/DigitalMarketing. Most founders say the same.",
+  },
+  {
+    title: "You audit once, then never again.",
+    body: "A full audit takes a day. Your site changes every week.",
+  },
+  {
+    title: "Search Console gives you numbers.",
+    body: "It does not tell you which page to fix first.",
+  },
+];
 
-const stages: { stage: string; title: string; desks: Desk[] }[] = [
+const timeRows = [
+  { task: "Audit the site", byHand: "A full day, once a month", withMeelu: "Every crawl" },
+  { task: "Keyword research", byHand: "Hours in a spreadsheet", withMeelu: "A sorted list" },
+  { task: "Check AI answers", byHand: "One question at a time", withMeelu: "Your questions, tracked" },
+  { task: "Find threads to answer", byHand: "Doom scrolling social media", withMeelu: "Found and sorted for you" },
+  { task: "Write a page", byHand: "Start from nothing", withMeelu: "Start from a draft" },
+];
+
+const promises = [
   {
-    stage: "Know",
-    title: "See your site the way Google does",
-    desks: [
-      {
-        icon: Globe,
-        name: "Site",
-        href: "/docs/site",
-        body: "Meelu crawls every page, reads what each one says and maps how they link. Technical SEO finds broken links, missing tags and pages that render differently on mobile.",
-      },
-    ],
+    title: "Watch every step",
+    body: "You can see each query Meelu runs and each page it reads.",
   },
   {
-    stage: "Decide",
-    title: "Know what to work on next",
-    desks: [
-      {
-        icon: Search,
-        name: "SEO",
-        href: "/docs/seo",
-        body: "Your Search Console and Google Analytics data next to live keyword volumes, Google's top 10, competitors and backlinks. Keywords are grouped so that each page targets one search.",
-      },
-      {
-        icon: MessageCircleQuestion,
-        name: "GEO",
-        href: "/docs/geo",
-        body: "Track the questions people ask AI search. See if one of your pages answers each one, and what ChatGPT, Claude and Google's AI Overview say and cite.",
-      },
-    ],
+    title: "It remembers",
+    body: "Write your tone and audience in a note once. Meelu reads it before every task.",
   },
   {
-    stage: "Make",
-    title: "Write pages that are built to rank",
-    desks: [
-      {
-        icon: FileText,
-        name: "Content",
-        href: "/docs/content",
-        body: "Title, H1, meta description, slug, target keyword and body, checked on every save. The writer picks the keyword and internal links from your own data, and can save a draft into Webflow or Contentful.",
-      },
-    ],
+    title: "Ready-made prompts",
+    body: "Click a prompt such as “Which pages lost clicks this month?”",
   },
   {
-    stage: "Earn",
-    title: "Go where your customers already are",
-    desks: [
-      {
-        icon: Radar,
-        name: "Social Listening",
-        href: "/docs/social-listening",
-        body: "Describe your business and Meelu finds conversations on Reddit, X, LinkedIn, Hacker News and more where a reply from you would help. You pick which ones to answer.",
-      },
-      {
-        icon: UserSearch,
-        name: "Find Leads",
-        href: "/docs/find-leads",
-        body: "Describe who you want to reach. Meelu finds people with a real reason to hear from you, and shows the posts behind each one. You write and send the message yourself.",
-      },
-    ],
+    title: "Built in the open",
+    body: "The blog shows how each feature is made.",
+  },
+];
+
+const features = [
+  {
+    name: "Site audit",
+    href: "/docs/site",
+    body: "Meelu crawls every page on your site and reads what it says. It finds broken links, missing tags and pages that look different on mobile.",
   },
   {
-    stage: "Measure",
-    title: "Ask your data anything",
-    desks: [
-      {
-        icon: BarChart3,
-        name: "Analytics",
-        href: "/docs/analytics",
-        body: "Ask about traffic, clicks and rankings in plain words. Answers come with charts, the evidence behind them and how far to trust them.",
-      },
-      {
-        icon: FileChartColumn,
-        name: "Reports",
-        href: "/docs/reports",
-        body: "Keep the answers that matter from Analytics, SEO and Technical SEO. Rename them, save them as files, come back to them.",
-      },
-    ],
+    name: "SEO",
+    href: "/docs/seo",
+    body: "Meelu puts your Search Console data next to search volumes and Google's top 10. It shows which keywords you can win and which page should target each one.",
+  },
+  {
+    name: "AI search",
+    href: "/docs/geo",
+    body: "Meelu asks ChatGPT, Claude and Google's AI Overview the questions your buyers ask. It shows which sites they cite and what your page is missing.",
+  },
+  {
+    name: "Content",
+    href: "/docs/content",
+    body: "Meelu writes page drafts with a title, a meta description and a target keyword. It adds links to your other pages and can save the draft in Webflow or Contentful.",
+  },
+  {
+    name: "Social listening",
+    href: "/docs/social-listening",
+    body: "Meelu finds posts on Reddit, X, LinkedIn and Hacker News where people ask for a product like yours. You choose which ones to answer.",
+  },
+  {
+    name: "Find leads",
+    href: "/docs/find-leads",
+    body: "Meelu finds people who posted about the problem you solve and links their posts. You write and send the message yourself.",
+  },
+  {
+    name: "Analytics",
+    href: "/docs/analytics",
+    body: "Ask a question about your traffic, impressions or pages. Meelu answers in plain English and shows the numbers in a chart.",
+  },
+  {
+    name: "Reports",
+    href: "/docs/reports",
+    body: "Save the answers that matter. You can rename them, export them as files and share them with your team.",
   },
 ];
 
@@ -208,7 +150,7 @@ const integrationGroups: {
 }[] = [
   {
     title: "Your own data",
-    body: "Connect once per website from the app. Every desk can read it.",
+    body: "Connect once per website from the app. Every part of Meelu can read it.",
     items: [
       { name: "Google Search Console", color: "#4285F4" },
       { name: "Google Analytics 4", color: "#E37400" },
@@ -216,7 +158,7 @@ const integrationGroups: {
   },
   {
     title: "Email",
-    body: "Drafts in your mailbox and draft campaigns. Through Resend, only email you approved is sent.",
+    body: "Drafts in your mailbox and draft campaigns. Through Resend, Meelu sends only email you approved.",
     items: [
       { name: "Gmail", color: "#EA4335" },
       { name: "Outlook", color: "#0078D4" },
@@ -252,7 +194,7 @@ const integrationGroups: {
   },
   {
     title: "Social replies",
-    body: "Posts only the reply you approved, on the thread you picked.",
+    body: "Meelu posts only the reply you approved, on the thread you picked.",
     items: [
       { name: "Reddit", color: "#FF4500" },
       { name: "LinkedIn", color: "#0A66C2" },
@@ -278,87 +220,18 @@ const dataSources = [
   { name: "DataForSEO", what: "Keyword volumes, Google results, backlinks and AI answers" },
   { name: "Apify", what: "Social search and LinkedIn people search" },
   { name: "ChatGPT · Claude · AI Overview", what: "What AI search answers and cites" },
-  { name: "Claude or OpenRouter", what: "The model behind the agent. Bring your own Anthropic key if you like" },
-];
-
-const loop = [
-  {
-    step: "1",
-    title: "You ask, or click a chip",
-    body: "“Which pages lost clicks this month?” “Find threads where people ask for a tool like mine.” Every desk has ready-made prompts.",
-  },
-  {
-    step: "2",
-    title: "Meelu does the legwork",
-    body: "It runs SQL over your own data, pulls live search and social data, reads your pages and checks its own work. You can watch every step.",
-  },
-  {
-    step: "3",
-    title: "You get a suggestion with evidence",
-    body: "The pages, the numbers and the reason. Approve it, edit it or throw it away. Nothing changes on your site until you say so.",
-  },
-];
-
-const reasons: { title: string; body: ReactNode }[] = [
-  {
-    title: "You decide, every time.",
-    body: "Meelu points at what it found and shows the evidence. It never changes your site, publishes a page or sends an email on its own.",
-  },
-  {
-    title: "Pay per website, not per seat.",
-    body: (
-      <>
-        Each website costs 0.4 credits a day, 0.2 from the sixth website on, and outside data is charged at what it
-        costs. Your whole team uses it with no seat fees. See{" "}
-        <Link href="/pricing" className="text-ink underline underline-offset-4 hover:text-accent">
-          pricing
-        </Link>
-        .
-      </>
-    ),
-  },
-  {
-    title: "It remembers what you told it.",
-    body: "Write a note once: your tone, your audience, the competitor you never mention. Meelu reads your notes before every task.",
-  },
-  {
-    title: "Built in the open.",
-    body: (
-      <>
-        Watch how Meelu is made and the SEO thinking behind every feature on the{" "}
-        <Link href="/blog" className="text-ink underline underline-offset-4 hover:text-accent">
-          blog
-        </Link>
-        .
-      </>
-    ),
-  },
+  { name: "Claude or OpenRouter", what: "The model behind the agent. You can bring your own Anthropic key." },
 ];
 
 function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="font-mono text-[11px] uppercase tracking-widest text-faint">{children}</p>;
 }
 
-function FindingCard({ finding }: { finding: Finding }) {
-  const Icon = finding.icon;
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
-    <div className="flex w-[19rem] shrink-0 flex-col rounded-2xl border border-edge bg-panel p-5 shadow-[0_1px_0_#1f2d3d0a] sm:w-[22rem]">
-      <div className="flex items-center gap-2 text-xs font-medium">
-        <Icon size={14} className={finding.tone} />
-        <span className="text-ink">{finding.desk}</span>
-        <span className="ml-auto rounded-full bg-panel2 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-faint">
-          Suggestion
-        </span>
-      </div>
-      <p className="mt-3 text-[15px] leading-snug text-ink text-pretty">{finding.headline}</p>
-      <p className="mt-2 text-sm text-sub text-pretty">{finding.evidence}</p>
-      <div className="mt-auto flex items-center gap-2 pt-4 text-xs">
-        <span className="inline-flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 font-medium text-white">
-          <Check size={12} /> {finding.action}
-        </span>
-        <span className="rounded-md border border-edge2 px-2.5 py-1 text-sub">Dismiss</span>
-      </div>
-    </div>
+    <h2 className="mt-3 max-w-2xl font-display text-3xl tracking-tight text-ink text-balance sm:text-4xl">
+      {children}
+    </h2>
   );
 }
 
@@ -378,7 +251,7 @@ function IntegrationChip({ item }: { item: Integration }) {
 }
 
 export default function Home() {
-  const posts = listPosts().slice(0, 4);
+  const latestCaseStudy = listCaseStudies()[0];
 
   return (
     <div>
@@ -386,31 +259,31 @@ export default function Home() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
       />
+
       <section className="relative overflow-hidden border-b border-edge">
         <div aria-hidden className="grain absolute inset-0" />
         <div
           aria-hidden
           className="absolute inset-0"
           style={{
-            background: "radial-gradient(55% 45% at 50% 0%, var(--color-accent-soft), transparent 72%)",
+            background: "radial-gradient(55% 45% at 30% 0%, var(--color-accent-soft), transparent 72%)",
           }}
         />
-        <div className="relative mx-auto w-full max-w-6xl px-4 pt-16 sm:px-6 sm:pt-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-edge2 bg-panel px-3 py-1 text-xs text-sub">
-              <Sparkles size={12} className="text-accent" />
-              New: GEO, Find Leads and 14 connected apps
-            </span>
+        <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.15fr_1fr]">
+          <div>
+            <Eyebrow>For small SaaS teams that do their own SEO</Eyebrow>
             <h1 className="mt-5 font-display text-4xl leading-[1.06] tracking-tight text-ink text-balance sm:text-5xl lg:text-6xl">
-              Your AI <span className="text-accent">marketing coworker</span>
+              Do your own SEO.
+              <br />
+              <span className="text-accent">Skip the agency retainer.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-base text-sub text-pretty sm:text-lg">
-              Meelu is a desktop app with an AI agent that crawls your site, reads your Search Console, checks what
-              ChatGPT says about your niche, writes pages, and finds the conversations and people worth your time.
-              Every finding comes with its evidence. You make the call.
+            <p className="mt-6 max-w-xl text-base text-sub text-pretty sm:text-lg">
+              You know the basics. You don&apos;t have the time. Meelu crawls your site, reads your Search Console and
+              checks what ChatGPT says about your market. Then it gives you a short list of what to fix this week,
+              with the data behind each item.
             </p>
             <div className="mt-9">
-              <HeroDownload>
+              <HeroDownload align="start">
                 <Link
                   href="/demo"
                   className="inline-flex h-12 items-center gap-1.5 rounded-lg border border-edge2 bg-panel px-5 text-sm text-ink transition-colors hover:bg-panel2"
@@ -418,18 +291,165 @@ export default function Home() {
                   Try the live demo <ArrowRight size={14} />
                 </Link>
               </HeroDownload>
+              <p className="mt-2 text-xs text-faint">
+                Free for your first 3 days.{" "}
+                <Link
+                  href="/pricing"
+                  className="text-sub underline decoration-edge underline-offset-4 transition-colors hover:text-ink hover:decoration-accent"
+                >
+                  See pricing
+                </Link>
+              </p>
             </div>
-            <dl className="mx-auto mt-10 grid max-w-xl grid-cols-3 gap-4">
-              {heroStats.map((s) => (
-                <div key={s.label}>
-                  <dt className="sr-only">{s.label}</dt>
-                  <dd className="font-display text-3xl text-ink sm:text-4xl">{s.value}</dd>
-                  <dd className="mt-1 text-xs text-sub">{s.label}</dd>
+          </div>
+
+          <div className="rounded-2xl border border-edge bg-panel p-5 shadow-[0_24px_48px_-32px_rgba(31,45,61,0.35)] sm:p-6">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-faint">
+              This week on yoursaas.com · example
+            </p>
+            <div className="mt-4 flex flex-col gap-3">
+              {heroFindings.map((finding) => (
+                <div key={finding.headline} className="rounded-xl border border-edge bg-bg px-4 py-3.5">
+                  <p className="text-[15px] font-medium leading-snug text-ink">{finding.headline}</p>
+                  <p className="mt-1 text-sm text-sub">{finding.evidence}</p>
                 </div>
               ))}
-            </dl>
+            </div>
+            <div aria-hidden className="mt-4 grid grid-cols-3 gap-2 text-sm">
+              <span className="rounded-lg bg-ink py-2.5 text-center font-medium text-panel">Approve</span>
+              <span className="rounded-lg border border-edge2 py-2.5 text-center text-ink">Edit</span>
+              <span className="rounded-lg border border-edge2 py-2.5 text-center text-ink">Reject</span>
+            </div>
           </div>
-          <div className="mt-14 pb-16 sm:mt-16">
+        </div>
+      </section>
+
+      <section className="border-b border-edge bg-panel2/60">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-14 sm:grid-cols-3 sm:px-6">
+          {problems.map((problem) => (
+            <div key={problem.title}>
+              <p className="font-display text-xl text-ink">{problem.title}</p>
+              <p className="mt-2 text-sm text-sub text-pretty">{problem.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-b border-edge">
+        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+          <SectionTitle>Where your SEO time goes</SectionTitle>
+          <div className="mt-10 overflow-x-auto rounded-2xl border border-edge bg-panel">
+            <table className="w-full min-w-[640px] border-collapse text-left text-[15px]">
+              <thead>
+                <tr className="border-b border-edge">
+                  <th scope="col" className="px-5 py-4 font-medium text-sub">
+                    Task
+                  </th>
+                  <th scope="col" className="px-5 py-4 font-medium text-ink">
+                    By hand
+                  </th>
+                  <th scope="col" className="px-5 py-4 font-medium text-accent">
+                    With Meelu
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {timeRows.map((row) => (
+                  <tr key={row.task} className="border-b border-edge last:border-0">
+                    <th scope="row" className="px-5 py-4 font-medium text-ink">
+                      {row.task}
+                    </th>
+                    <td className="px-5 py-4 text-sub">{row.byHand}</td>
+                    <td className="px-5 py-4 text-ink">{row.withMeelu}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {latestCaseStudy && (
+        <section className="border-b border-edge">
+          <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <Eyebrow>Case studies</Eyebrow>
+                <SectionTitle>Real sites, real numbers</SectionTitle>
+              </div>
+              <p className="text-sm text-sub">
+                A new case study every week.{" "}
+                <Link href="/case-studies" className="text-ink underline underline-offset-4 hover:text-accent">
+                  Read them all
+                </Link>
+              </p>
+            </div>
+            <Link
+              href={`/blog/${latestCaseStudy.slug}`}
+              className="mt-10 flex flex-wrap items-center justify-between gap-8 rounded-3xl bg-ink px-6 py-10 text-panel transition-opacity hover:opacity-95 sm:px-10"
+            >
+              <div className="min-w-0 flex-[1_1_28rem]">
+                <p className="font-mono text-[11px] uppercase tracking-widest text-panel/70">Case study</p>
+                <p className="mt-3 font-display text-3xl leading-tight tracking-tight text-balance sm:text-4xl">
+                  {latestCaseStudy.title}
+                </p>
+                <p className="mt-4 max-w-2xl text-panel/75 text-pretty">{latestCaseStudy.description}</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-panel px-5 py-3 text-sm font-medium text-ink">
+                Read the case study <ArrowRight size={14} />
+              </span>
+            </Link>
+          </div>
+        </section>
+      )}
+
+      <section className="border-b border-edge">
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2">
+          <div>
+            <h2 className="font-display text-3xl tracking-tight text-ink sm:text-4xl">
+              You spend your time on decisions.
+            </h2>
+            <p className="mt-4 max-w-xl text-sub text-pretty">
+              Meelu never changes your site, publishes a page or sends an email by itself. Each suggestion shows the
+              pages, the numbers and the reason. You approve it, edit it or reject it.
+            </p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {promises.map((promise) => (
+              <div key={promise.title} className="border-t-2 border-ink pt-3">
+                <p className="font-medium text-ink">{promise.title}</p>
+                <p className="mt-1.5 text-sm text-sub text-pretty">{promise.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-edge bg-panel/60">
+        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+          <Eyebrow>What Meelu does while you ship</Eyebrow>
+          <SectionTitle>Everything Meelu does for your site</SectionTitle>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {features.map((feature, index) => (
+              <Link
+                key={feature.name}
+                href={feature.href}
+                className="rounded-2xl border border-edge bg-panel p-5 transition-colors hover:border-edge2"
+              >
+                <p className="font-mono text-xs text-accent">{String(index + 1).padStart(2, "0")}</p>
+                <p className="mt-2 text-lg font-medium text-ink">{feature.name}</p>
+                <p className="mt-2 text-sm text-sub text-pretty">{feature.body}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-edge">
+        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
+          <Eyebrow>Try it</Eyebrow>
+          <SectionTitle>Click through Meelu on a sample site</SectionTitle>
+          <div className="mt-10">
             <DemoFrame />
             <p className="mx-auto mt-6 max-w-xl text-center text-sm text-sub text-pretty">
               This is the real dashboard running on a sample website. Click anything. Nothing leaves your browser.
@@ -439,100 +459,21 @@ export default function Home() {
       </section>
 
       <section className="border-b border-edge">
-        <div className="mx-auto w-full max-w-6xl px-4 pt-20 sm:px-6">
-          <Eyebrow>A morning with Meelu</Eyebrow>
-          <h2 className="mt-3 max-w-2xl font-display text-3xl tracking-tight text-ink text-balance sm:text-4xl">
-            It finds the work. It shows you why. You decide what to do.
-          </h2>
-          <p className="mt-4 max-w-2xl text-sub text-pretty">
-            Each desk watches one part of your marketing and hands you suggestions like these, each one with the data it
-            came from.
-          </p>
-        </div>
-        <div className="mt-10 overflow-x-auto pb-20 [scrollbar-width:none]">
-          <div className="mx-auto flex w-max gap-4 px-4 sm:px-6 lg:max-w-6xl lg:w-auto lg:flex-wrap">
-            {findings.map((f) => (
-              <FindingCard key={f.desk} finding={f} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-edge bg-panel/60">
-        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-          <Eyebrow>Nine desks</Eyebrow>
-          <h2 className="mt-3 max-w-2xl font-display text-3xl tracking-tight text-ink text-balance sm:text-4xl">
-            From the first crawl to the first customer
-          </h2>
-          <p className="mt-4 max-w-2xl text-sub text-pretty">
-            A desk is one job: auditing, planning, writing, outreach or reporting. The agent works across all of them,
-            so one question can pull from your pages, your search data and the web at once.
-          </p>
-          <ol className="mt-12 space-y-10">
-            {stages.map((s, i) => (
-              <li key={s.stage} className="grid gap-5 lg:grid-cols-[14rem_1fr] lg:gap-10">
-                <div>
-                  <span className="font-mono text-xs text-accent">
-                    0{i + 1} · {s.stage}
-                  </span>
-                  <h3 className="mt-1 font-display text-xl text-ink text-balance">{s.title}</h3>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {s.desks.map((d) => {
-                    const Icon = d.icon;
-                    return (
-                      <Link
-                        key={d.name}
-                        href={d.href}
-                        className="group rounded-2xl border border-edge bg-panel p-5 transition-colors hover:border-edge2"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="grid size-8 place-items-center rounded-lg bg-accent-soft text-accent">
-                            <Icon size={16} />
-                          </span>
-                          <span className="font-medium text-ink">{d.name}</span>
-                          <ArrowRight
-                            size={14}
-                            className="ml-auto text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
-                          />
-                        </div>
-                        <p className="mt-3 text-sm text-sub text-pretty">{d.body}</p>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-10 flex items-start gap-3 rounded-2xl border border-edge bg-panel p-5">
-            <NotebookPen size={18} className="mt-0.5 shrink-0 text-accent" />
-            <p className="text-sm text-sub text-pretty">
-              <span className="font-medium text-ink">Plus Notes and an Overview.</span> Tell Meelu once about your
-              audience, your tone or the competitor you never mention, and it reads that before every task. The Overview
-              shows what is waiting on you across every desk.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-edge">
         <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
           <Eyebrow>Integrations</Eyebrow>
-          <h2 className="mt-3 max-w-2xl font-display text-3xl tracking-tight text-ink text-balance sm:text-4xl">
-            Works with the tools you already use
-          </h2>
+          <SectionTitle>Works with the tools you already use</SectionTitle>
           <p className="mt-4 max-w-2xl text-sub text-pretty">
             Connect your mailbox, CMS, CRM and docs from the Connections screen. Meelu saves drafts, records and new
-            pages there for you to review. It never publishes a page, and it sends email only through your own
-            Resend account, once you approve it.
+            pages there for you to review. It never publishes a page. It sends email only through your own Resend
+            account, after you approve it.
           </p>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {integrationGroups.map((g) => (
-              <div key={g.title} className="rounded-2xl border border-edge bg-panel p-5">
-                <h3 className="font-medium text-ink">{g.title}</h3>
-                <p className="mt-1 text-sm text-sub">{g.body}</p>
+            {integrationGroups.map((group) => (
+              <div key={group.title} className="rounded-2xl border border-edge bg-panel p-5">
+                <h3 className="font-medium text-ink">{group.title}</h3>
+                <p className="mt-1 text-sm text-sub">{group.body}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {g.items.map((item) => (
+                  {group.items.map((item) => (
                     <IntegrationChip key={item.name} item={item} />
                   ))}
                 </div>
@@ -543,11 +484,11 @@ export default function Home() {
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-edge bg-panel p-5">
               <h3 className="font-medium text-ink">Listens on</h3>
-              <p className="mt-1 text-sm text-sub">Where Social Listening and Find Leads look for conversations.</p>
+              <p className="mt-1 text-sm text-sub">Where social listening and Find leads look for conversations.</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {listeningPlatforms.map((p) => (
-                  <span key={p} className="rounded-full border border-edge2 px-3 py-1 text-sm text-ink">
-                    {p}
+                {listeningPlatforms.map((platform) => (
+                  <span key={platform} className="rounded-full border border-edge2 px-3 py-1 text-sm text-ink">
+                    {platform}
                   </span>
                 ))}
               </div>
@@ -558,10 +499,10 @@ export default function Home() {
                 Meelu holds the vendor accounts. You pay what each call costs, from one credit balance.
               </p>
               <dl className="mt-4 divide-y divide-edge">
-                {dataSources.map((d) => (
-                  <div key={d.name} className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:gap-4">
-                    <dt className="shrink-0 text-sm font-medium text-ink sm:w-52">{d.name}</dt>
-                    <dd className="text-sm text-sub">{d.what}</dd>
+                {dataSources.map((source) => (
+                  <div key={source.name} className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:gap-4">
+                    <dt className="shrink-0 text-sm font-medium text-ink sm:w-52">{source.name}</dt>
+                    <dd className="text-sm text-sub">{source.what}</dd>
                   </div>
                 ))}
               </dl>
@@ -569,79 +510,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <section className="border-b border-edge bg-panel/60">
-        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-          <Eyebrow>How a task runs</Eyebrow>
-          <h2 className="mt-3 max-w-2xl font-display text-3xl tracking-tight text-ink text-balance sm:text-4xl">
-            Meelu suggests. You decide.
-          </h2>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {loop.map((l) => (
-              <div key={l.step} className="rounded-2xl border border-edge bg-panel p-6">
-                <span className="grid size-8 place-items-center rounded-full bg-accent font-mono text-sm text-white">
-                  {l.step}
-                </span>
-                <h3 className="mt-4 font-medium text-ink">{l.title}</h3>
-                <p className="mt-2 text-sm text-sub text-pretty">{l.body}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-6 flex items-start gap-3 rounded-2xl border border-good/30 bg-good/5 p-5">
-            <ShieldCheck size={18} className="mt-0.5 shrink-0 text-good" />
-            <p className="text-sm text-sub text-pretty">
-              <span className="font-medium text-ink">Your judgement stays in the loop.</span> When several pages split
-              one search, Meelu names the query and suggests a pillar page. It does not rewrite, merge or redirect your
-              pages. That is your call.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-edge">
-        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-          <Eyebrow>Why Meelu</Eyebrow>
-          <h2 className="mt-3 font-display text-3xl tracking-tight text-ink sm:text-4xl">
-            Why Meelu, not another SaaS tool?
-          </h2>
-          <dl className="mt-8 grid gap-8 sm:grid-cols-2">
-            {reasons.map((r) => (
-              <div key={r.title}>
-                <dt className="text-base font-medium text-ink">{r.title}</dt>
-                <dd className="mt-2 text-sm text-sub text-pretty">{r.body}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
-
-      {posts.length > 0 && (
-        <section className="border-b border-edge">
-          <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-            <div className="flex items-end justify-between gap-4">
-              <h2 className="font-display text-2xl tracking-tight text-ink sm:text-3xl">From the blog</h2>
-              <Link
-                href="/blog"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-edge2 px-4 py-2 text-sm text-ink transition-colors hover:bg-panel2"
-              >
-                All posts <ArrowRight size={14} />
-              </Link>
-            </div>
-            <div className="mt-8 divide-y divide-edge">
-              {posts.map((post) => (
-                <Link
-                  key={post.slug}
-                  href={`/blog/${post.slug}`}
-                  className="group flex flex-col gap-1 py-5 sm:flex-row sm:items-baseline sm:justify-between"
-                >
-                  <span className="max-w-2xl font-medium text-ink group-hover:text-accent">{post.title}</span>
-                  <time className="shrink-0 font-mono text-xs text-faint">{formatDate(post.date)}</time>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
 
       <section className="relative overflow-hidden border-b border-edge">
         <div aria-hidden className="grain absolute inset-0" />
@@ -654,11 +522,10 @@ export default function Home() {
         />
         <div className="relative mx-auto w-full max-w-6xl px-4 py-24 text-center sm:px-6">
           <h2 className="font-display text-3xl tracking-tight text-ink text-balance sm:text-5xl">
-            Give your site a coworker
+            Start the crawl today. Read your list tomorrow.
           </h2>
           <p className="mx-auto mt-4 max-w-md text-sub text-pretty">
-            Free to download for Mac and Windows. Your first website is free for three days. The app is in beta and
-            not yet verified by Apple, Microsoft or Google, so expect a security warning the first time you open it.
+            Free to download for Mac and Windows. Your first website is free for three days. Meelu is in beta.
           </p>
           <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
             <Link
@@ -690,7 +557,11 @@ export default function Home() {
               className="text-ink underline underline-offset-4 hover:text-accent"
             >
               X (@shubham_19hshs)
-            </a>
+            </a>{" "}
+            and on the{" "}
+            <Link href="/blog" className="text-ink underline underline-offset-4 hover:text-accent">
+              blog
+            </Link>
             .
           </p>
         </div>
