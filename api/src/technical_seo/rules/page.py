@@ -399,7 +399,10 @@ PAGE_RULES: list[PageRule] = [
             "drop it."
         ),
         where=f"""{INDEXABLE} and x.page_type in ('informational', 'money', 'support')
-      and coalesce(site_pages.word_count, 0) < 250""",
+      and greatest(
+        coalesce(site_pages.word_count, 0),
+        case when r.rendered_at is not null and r.render_error is null then r.word_count else 0 end
+      ) < 250""",
     ),
     PageRule(
         kind="missing-title",
