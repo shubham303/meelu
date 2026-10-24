@@ -11,7 +11,7 @@ date: "2026-10-24"
 checked: "2026-10-24"
 faq:
   - question: "Is Meelu an OpenSEO alternative?"
-    answer: "Yes, if you want more than SEO data. Both charge for data by use instead of a big monthly plan. OpenSEO gives you SEO data, a site audit and AI visibility, and your own AI agent does the thinking over MCP. Meelu comes with its own agent and also writes pages, checks your pages against AI search questions, finds social posts where people ask for a tool like yours, and finds leads."
+    answer: "Yes, if you want more than SEO data. Both charge for data by use instead of a big monthly plan. OpenSEO gives you SEO data, a site audit and AI visibility, built mainly for your own AI agent over MCP, with its own in-app agent in beta. Meelu comes with its own agent and also writes pages, checks your pages against AI search questions, finds social posts where people ask for a tool like yours, and finds leads."
   - question: "How much does OpenSEO cost?"
     answer: "OpenSEO's hosted Base Plan is $10 a month and includes $10 of usage each month. The free trial includes $0.50 of credits. You can also self-host it for free and pay DataForSEO directly for the data."
   - question: "How much does Meelu cost?"
@@ -39,10 +39,10 @@ Pick OpenSEO if you want open source, already work in an AI agent like Claude Co
 | Domain traffic estimates for any site | No | Yes |
 | Rank tracking | From your Search Console data | Keyword positions over time |
 | Search Console | Yes | Yes |
-| Google Analytics | Yes | Not listed |
+| Google Analytics | Yes | Yes, GA4 |
 | Site audit | Crawl of up to 10,000 pages on your computer, with JavaScript rendering checks on desktop and mobile | Yes |
 | AI search (GEO) | ChatGPT, Claude, Google's AI Overview, checked point by point against your pages | AI mentions, citations and prompts |
-| Content writing | Yes, pages for your site | Not listed |
+| Content writing | Yes, pages for your site | Not yet. On its roadmap |
 | Social listening | Yes | Not listed |
 | Finding leads | Yes | Not listed |
 | Works inside Claude Code, Codex, ChatGPT | No, the agent runs in the app | Yes, over MCP |
