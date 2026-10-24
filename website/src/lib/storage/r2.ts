@@ -1,5 +1,7 @@
 import {
+  GetObjectCommand,
   ListObjectsV2Command,
+  NoSuchKey,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -36,6 +38,19 @@ export async function putJson(key: string, value: unknown): Promise<void> {
       ContentType: "application/json",
     }),
   );
+}
+
+export async function getJson(key: string): Promise<unknown | null> {
+  try {
+    const object = await r2().send(
+      new GetObjectCommand({ Bucket: process.env.R2_BUCKET, Key: key }),
+    );
+    const body = await object.Body?.transformToString();
+    return body ? JSON.parse(body) : null;
+  } catch (e) {
+    if (e instanceof NoSuchKey) return null;
+    throw e;
+  }
 }
 
 export async function listKeys(prefix: string): Promise<string[]> {
