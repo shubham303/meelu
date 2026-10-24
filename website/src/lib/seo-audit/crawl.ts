@@ -62,6 +62,7 @@ const blankPage = (url: string, inSitemap: boolean): Page => ({
   twitterCard: false,
   favicon: false,
   ampHtml: null,
+  clientRendered: false,
   noindexHeaderOnly: false,
 });
 
