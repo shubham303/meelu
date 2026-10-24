@@ -45,6 +45,7 @@ def well_known_rules(site: SiteRecord) -> list[SiteRule]:
     origin = origin_of(site)
     sitemaps = site.sitemap_urls or []
     sitemap_at_root = site.sitemap_at_root is True
+    listing_sitemaps = site.sitemaps_listing_sitemaps or []
 
     return [
         SiteRule(
@@ -121,6 +122,20 @@ def well_known_rules(site: SiteRecord) -> list[SiteRule]:
                 "is enough — and keep the Sitemap: line in robots.txt either way."
             ),
             holds=crawled and len(sitemaps) > 0 and not sitemap_at_root,
+        ),
+        SiteRule(
+            kind="sitemap-index-as-urlset",
+            severity="p0",
+            issue=(
+                f"{', '.join(listing_sitemaps)} lists other sitemaps but is written as a page list "
+                "(<urlset>), not a sitemap index (<sitemapindex>). The sitemap protocol and Google's "
+                "documentation only support listing sitemaps in a <sitemapindex>, so a search engine "
+                "that follows the format reads each listed sitemap as a page and may never read the "
+                "pages inside it. Meelu read the nested sitemaps anyway, so the crawl is complete. "
+                "Change the root tag to <sitemapindex> and wrap each entry in <sitemap> instead of "
+                "<url>. Search Console's Sitemaps report shows whether Google read the pages."
+            ),
+            holds=crawled and len(listing_sitemaps) > 0,
         ),
         SiteRule(
             kind="llms-missing",

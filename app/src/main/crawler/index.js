@@ -251,6 +251,7 @@ async function drive(jobId, siteId, cookieHeader, broadcast) {
         sitemapUrls: result.sitemapUrls,
         sitemapsUsed: result.sitemapsUsed,
         sitemapAtRoot: result.sitemapAtRoot,
+        sitemapsListingSitemaps: result.sitemapsListingSitemaps,
         sitemapUrlCount: result.sitemapUrlCount,
         robotsTxt: result.robotsTxt,
         robotsStatus: result.robotsStatus,

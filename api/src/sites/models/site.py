@@ -33,6 +33,9 @@ class Site(EntityMixin, Base):
     )
     sitemap_url_count: Mapped[int | None] = mapped_column(Integer)
     sitemap_at_root: Mapped[bool | None] = mapped_column(Boolean)
+    sitemaps_listing_sitemaps: Mapped[list[str]] = mapped_column(
+        ARRAY(TEXT), nullable=False, server_default=EMPTY_TEXT_ARRAY
+    )
     robots_txt: Mapped[str | None]
     robots_status: Mapped[int | None] = mapped_column(Integer)
     robots_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

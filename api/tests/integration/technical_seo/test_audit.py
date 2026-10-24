@@ -125,8 +125,8 @@ async def test_run_audit_finds_the_seeded_defects(client, email):
     assert r.status_code == 201, r.text
     body = r.json()["data"]
 
-    assert body["checks"] == 219
-    assert body["run"]["rulesRun"] == 219
+    assert body["checks"] == 220
+    assert body["run"]["rulesRun"] == 220
     assert body["run"]["trigger"] == "user"
     assert body["run"]["finishedAt"] is not None
     assert body["run"]["siteIssuesFound"] == 0
