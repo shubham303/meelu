@@ -335,7 +335,7 @@ function PlatformRow({
                 key={p.id}
                 type="button"
                 disabled={!p.available}
-                title={p.available ? undefined : "Needs the server's Apify key."}
+                title={p.available ? undefined : "Not available right now."}
                 onClick={() => onToggle(p.id)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-[13px] transition-colors",
@@ -355,7 +355,7 @@ function PlatformRow({
         {platformInfo !== null && chosen.length > 0 && !unpriced && (
           <span className="text-xs text-sub">
             {total > 0
-              ? `Next run costs up to ${dollars(total)}. You pay per post a platform returns, usually less.`
+              ? `Next run costs up to ${dollars(total)}. You pay for the searches and for reading the posts, usually less.`
               : "Next run costs nothing: these platforms are free or searched recently."}
           </span>
         )}

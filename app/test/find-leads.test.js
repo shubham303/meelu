@@ -208,3 +208,41 @@ test("a web angle is served from cache for 6 hours, skipped until 12, then searc
   );
   assert.deepEqual(webResults({ results: cachedResults(found) }, now), found);
 });
+
+test("LinkedIn people come only from linkedin.com/in profiles, with a clean profile url", async () => {
+  const { linkedinPeople, personCandidate, linkedinQuery } = await import("../src/main/find-leads/web-people.js");
+  assert.equal(linkedinQuery({ query: "web designer", titles: ["Owner"], locations: [] }), "web designer | Owner");
+  const people = linkedinPeople({
+    people: [
+      { name: "Marco Ilic", headline: "Founder at Ilic Studio", profileUrl: "https://hr.linkedin.com/in/marco-ilic?trk=x", why: "Runs a studio" },
+      { name: "Company", profileUrl: "https://www.linkedin.com/company/ilic" },
+      { name: "", profileUrl: "https://www.linkedin.com/in/nobody" },
+    ],
+  });
+  assert.deepEqual(people.map((p) => p.profileUrl), ["https://www.linkedin.com/in/marco-ilic/"]);
+  const c = personCandidate({ id: "b1" }, people[0]);
+  assert.equal(c.briefId, "b1");
+  assert.equal(c.snippet, "Founder at Ilic Studio · Runs a studio");
+});
+
+test("post authors need a recent post on the platform and a handle, one post per author", async () => {
+  const { authorPosts, authorCandidate } = await import("../src/main/find-leads/web-people.js");
+  const now = Date.parse("2026-10-20T00:00:00Z");
+  const posts = authorPosts(
+    "reddit",
+    {
+      posts: [
+        { url: "https://www.reddit.com/r/SaaS/comments/a1/x", text: "Need SEO help", handle: "u/dana", published: "2026-10-18" },
+        { url: "https://www.reddit.com/r/SaaS/comments/a2/y", text: "Again", handle: "dana", published: "2026-10-17" },
+        { url: "https://www.reddit.com/r/SaaS/comments/a3/z", text: "No author", published: "2026-10-17" },
+        { url: "https://forum.example.org/t/1", text: "Elsewhere", handle: "bob", published: "2026-10-17" },
+        { url: "https://www.reddit.com/r/SaaS/comments/a4/w", text: "Old", handle: "olga", published: "2026-08-01" },
+      ],
+    },
+    now,
+  );
+  assert.deepEqual(posts.map((p) => p.handle), ["dana"]);
+  const c = authorCandidate({ id: "b1" }, posts[0]);
+  assert.equal(c.handle, "dana");
+  assert.equal(c.evidence[0].url, "https://www.reddit.com/r/SaaS/comments/a1/x");
+});

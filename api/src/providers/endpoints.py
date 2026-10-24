@@ -6,7 +6,6 @@ from src.core.database import get_db
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.core.pagination.utils import get_pagination_params
 from src.providers.json_data_extractor.service import json_data_extractor
-from src.providers.people_search.service import people_search
 from src.providers.schemas import DomainStatus, ProviderCallResponse
 from src.providers.seo_data.service import seo_data
 from src.providers.service import provider_call_service
@@ -14,7 +13,7 @@ from src.providers.social_search.service import social_search
 
 router = APIRouter()
 
-FACADES = (seo_data, social_search, people_search, json_data_extractor)
+FACADES = (seo_data, social_search, json_data_extractor)
 
 
 @router.get("/providers/status")

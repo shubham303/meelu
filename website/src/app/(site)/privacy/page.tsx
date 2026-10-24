@@ -262,9 +262,10 @@ export default function PrivacyPage() {
             ask about, to fetch search volumes and rankings.
           </li>
           <li>
-            <strong className={strong}>Apify</strong> &mdash; the topics you watch in social
-            listening and the searches Find Leads runs, to find public posts and public profiles,
-            and the profile links of shortlisted people, to read their recent public posts.
+            <strong className={strong}>Web search</strong> (Exa through OpenRouter, or Anthropic
+            if you use your own key) &mdash; the topics you watch in social listening and the
+            searches Find Leads runs, to find public posts and public profiles in search results.
+            We keep the link, the title and the short text the search result shows.
           </li>
           <li>
             <strong className={strong}>Composio</strong> &mdash; only if you connect your own

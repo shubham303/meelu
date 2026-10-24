@@ -22,16 +22,14 @@ MAX_ROUNDS = 10
 DEFAULT_TARGET = 20
 MAX_TARGET = 100
 MAX_CANDIDATES_PER_SOURCE = 40
-LINKEDIN_PER_BRIEF = 25
 MAX_ENRICHED_PER_RUN = 60
 ACTIVITY_ITEMS = 5
 MAX_EVIDENCE = 3
-MINIMUM_BALANCE_USD = 5
+MINIMUM_BALANCE_USD = 1
 DEFAULT_SOURCES = ["posts", "linkedin"]
 SKIP_HOURS = 12
 WEB_CACHE_HOURS = 6
 SEARCH_RETENTION_DAYS = 30
-MAX_LINKEDIN_PAGES = 10
 WEB_PLATFORM = "web"
 
 
@@ -111,6 +109,7 @@ class Evidence(RequestModel):
 class CandidateItem(RequestModel):
     brief_id: str | None = None
     name: str | None = None
+    handle: str | None = None
     headline: str | None = None
     website: str | None = None
     profile_url: str | None = None
@@ -122,6 +121,8 @@ class CandidateItem(RequestModel):
 
 class CandidatesRequest(RequestModel):
     run_id: str
+    source: str = WEB_PLATFORM
+    platform: str = WEB_PLATFORM
     leads: list[CandidateItem]
 
 

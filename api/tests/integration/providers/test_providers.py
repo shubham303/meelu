@@ -138,7 +138,6 @@ async def test_status_and_platform_listing(client, email):
     assert set(domains) == {
         "seo-data",
         "social-listening",
-        "people-search",
         "json-data-extractor",
     }
     assert domains["seo-data"]["adapters"][0]["id"] == "dataforseo"
@@ -146,7 +145,9 @@ async def test_status_and_platform_listing(client, email):
     r = await client.get("/api/v1/providers/social-listening/platforms")
     platforms = {p["id"]: p for p in r.json()["data"]["platforms"]}
     assert platforms["hackernews"]["available"] is True
-    assert platforms["reddit"]["available"] == social_search.supports("search.reddit")
+    assert platforms["reddit"]["available"] is True
+    assert platforms["reddit"]["access"] == "web"
+    assert not social_search.supports("search.reddit")
     assert set(platforms) == {
         "hackernews",
         "stackexchange",
@@ -164,56 +165,6 @@ async def test_seo_tool_shapes_without_vendor(client, email):
     user_id = await user_id_of(client, email)
     caller = Caller(user_id=user_id)
     assert await seo_data.keyword_overview(caller, [], DEFAULT_LOCALE) == []
-
-
-async def test_social_search_falls_back_to_second_actor(client, email, monkeypatch):
-    from src.providers import apify
-    from src.settings import settings
-
-    monkeypatch.setattr(settings, "apify_api_key", "test-key")
-    calls = []
-
-    async def run_actor(provider_id, actor_id, actor_input, max_items, charges):
-        calls.append((actor_id, max_items, actor_input.get("maxPosts")))
-        if actor_id == "harshmaur~reddit-scraper-pro":
-            raise ProviderRequestError(provider_id, 502, "down")
-        return VendorResponse(
-            [
-                {
-                    "kind": "post",
-                    "id": "abc",
-                    "title": f"{actor_input['queries'][0]} question",
-                    "body": "body",
-                    "author": "amg",
-                    "subreddit": "SEO",
-                    "created_utc": "2099-01-01T00:00:00Z",
-                    "url": "https://www.reddit.com/r/SEO/comments/abc/q/",
-                }
-            ],
-            12_000,
-        )
-
-    monkeypatch.setattr(apify, "run_actor", run_actor)
-    user_id = await user_id_of(client, email)
-    before = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
-
-    keywords = [f"kw-{email}", "second", "third", "fourth"]
-    result = await social_search.search_platform(
-        Caller(user_id=user_id), "reddit", keywords, None, 25
-    )
-    assert [p["id"] for p in result["posts"]] == ["abc"]
-    assert result["failedKeywords"] == []
-
-    assert calls == [
-        ("harshmaur~reddit-scraper-pro", 100, None),
-        ("fatihtahta~reddit-scraper-search-fast", 100, 25),
-    ]
-    after = (await client.get("/api/v1/credits")).json()["data"]["balanceMicros"]
-    assert before - after == 12_000
-
-    r = await client.get("/api/v1/providers/calls?domain=social-listening")
-    providers = {c["provider"] for c in r.json()["data"]}
-    assert "apify/fatihtahta~reddit-scraper-search-fast" in providers
 
 
 async def test_public_api_reports_failed_keywords(client, email, monkeypatch):

@@ -12,7 +12,7 @@ export const SOURCE_OPTIONS: Array<{ id: LeadSource; label: string; hint: string
   {
     id: "linkedin",
     label: "LinkedIn people",
-    hint: "Profiles that match the job titles and industries in your brief",
+    hint: "Public LinkedIn profiles that match the job titles in your brief",
   },
   {
     id: "web",
@@ -77,7 +77,7 @@ export interface LiveRun {
   searches: number;
   sources: Record<string, SourceProgress>;
   screened: { screened: number; total: number; kept: number } | null;
-  enriched: { status: string; people: number; fromVendor: number; fromStore: number; error?: string } | null;
+  enriched: { status: string; people: number; fromStore: number; error?: string } | null;
   judged: { judged: number; total: number; kept: number } | null;
   error: string | null;
 }
@@ -137,7 +137,6 @@ export function liveAfter(prev: LiveRun, event: string, d: Record<string, unknow
       enriched: {
         status: String(d.status ?? "running"),
         people: n(d.people),
-        fromVendor: n(d.fromVendor),
         fromStore: n(d.fromStore),
         error: d.error ? String(d.error) : undefined,
       },

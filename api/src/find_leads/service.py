@@ -10,13 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits.service import credit_service
 from src.find_leads.collect import (
-    collect_linkedin_people,
     collect_post_authors,
     insert_fresh,
     normalize_keyword,
 )
 from src.find_leads.enrich import enrich_shortlist
-from src.find_leads.identity import web_key
+from src.find_leads.candidates import candidate_row, candidate_stats_key
 from src.find_leads.jobs import SILENT_ERROR, JobResult, is_silent, run_job, running_stats
 from src.find_leads.models.brief import LeadBrief
 from src.find_leads.models.run import LeadRun
@@ -65,7 +64,6 @@ from src.find_leads.schemas import (
     WebSearchRecord,
 )
 from src.find_leads.screening import classify_leads, drop_leads, screen_candidates
-from src.providers.people_search.service import people_search
 from src.providers.social_search.service import social_search
 
 QUIET_RUN_SECONDS = 120
@@ -339,17 +337,9 @@ class FindLeadsService:
                 f"posts:{platform}",
                 lambda: collect_post_authors(user_id, site_id, run_id, platform, keywords),
             )
-        if source == "linkedin":
-            if not people_search.supports("search.linkedin"):
-                raise HTTPException(400, "LinkedIn people search is not available right now.")
-            return await self._start_job(
-                db,
-                site_id,
-                run_id,
-                "linkedin",
-                lambda: collect_linkedin_people(user_id, site_id, run_id),
-            )
-        raise HTTPException(400, "source must be posts or linkedin; the app sends web leads.")
+        raise HTTPException(
+            400, "Only posts from public APIs are collected here; the app sends the rest."
+        )
 
     async def start_screen(
         self, db: AsyncSession, user_id: str, site_id: str, run_id: str
@@ -413,37 +403,25 @@ class FindLeadsService:
         self, db: AsyncSession, user_id: str, site_id: str, body: CandidatesRequest
     ) -> InsertedResponse:
         run = await self._running_run(db, site_id, body.run_id)
+        stats_key = candidate_stats_key(body.source, body.platform)
+        if stats_key is None:
+            raise HTTPException(
+                400, "source must be web, linkedin, or posts from a web-searched platform."
+            )
         briefs = {b.id for b in await lead_briefs.list(db, site_id)}
         rows = []
         for item in body.leads:
-            email = (item.email or "").strip().lower() or None
-            if email and not item.email_source_url:
-                email = None
-            key = web_key(email, item.website, item.profile_url)
-            if key is None:
+            row = candidate_row(body.source, body.platform, item)
+            if row is None:
                 continue
-            rows.append(
-                {
-                    "identity_key": key,
-                    "source": "web",
-                    "platform": "web",
-                    "brief_id": item.brief_id if item.brief_id in briefs else None,
-                    "name": item.name,
-                    "headline": item.headline,
-                    "website": item.website,
-                    "profile_url": item.profile_url,
-                    "email": email,
-                    "email_source_url": item.email_source_url if email else None,
-                    "snippet": item.snippet,
-                    "evidence": [e.model_dump() for e in item.evidence][:MAX_EVIDENCE],
-                }
-            )
+            row["brief_id"] = item.brief_id if item.brief_id in briefs else None
+            rows.append(row)
         inserted, skipped = await insert_fresh(db, user_id, site_id, run.id, rows)
-        previous = run.source_stats.get("web") or {}
+        previous = run.source_stats.get(stats_key) or {}
         await lead_runs.merge_source_stats(
             db,
             run.id,
-            "web",
+            stats_key,
             {
                 "status": "done",
                 "candidates": int(previous.get("candidates") or 0) + inserted,

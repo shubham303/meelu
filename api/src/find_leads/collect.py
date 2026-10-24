@@ -12,16 +12,13 @@ from src.find_leads.repositories.runs import lead_runs
 from src.find_leads.repositories.searches import lead_searches
 from src.find_leads.repositories.seen import lead_seen
 from src.find_leads.schemas import (
-    LINKEDIN_PER_BRIEF,
     LOOKBACK_DAYS,
     MAX_CANDIDATES_PER_RUN,
     MAX_CANDIDATES_PER_SOURCE,
     MAX_EVIDENCE,
-    MAX_LINKEDIN_PAGES,
     PER_KEYWORD,
     SKIP_HOURS,
 )
-from src.providers.people_search.service import people_search
 from src.providers.registry import Caller
 from src.providers.social_search.models.social_post import SocialPost
 from src.providers.social_search.repository import social_posts
@@ -76,31 +73,6 @@ def author_candidates(
     return list(by_author.values())
 
 
-def linkedin_candidates(people: list[dict], brief_id: str) -> list[dict[str, Any]]:
-    out = []
-    for person in people:
-        if not person.get("profileUrl"):
-            continue
-        snippet = " · ".join(
-            p for p in (person.get("headline"), person.get("location"), person.get("summary")) if p
-        )
-        out.append(
-            {
-                "identity_key": f"linkedin:{str(person['id']).lower()}",
-                "source": "linkedin",
-                "platform": "linkedin",
-                "brief_id": brief_id,
-                "name": person.get("name"),
-                "handle": None,
-                "headline": person.get("headline"),
-                "profile_url": person["profileUrl"],
-                "snippet": clip(snippet, SNIPPET_CHARS),
-                "evidence": [],
-            }
-        )
-    return out
-
-
 async def insert_fresh(
     db: AsyncSession, user_id: str, site_id: str, run_id: str, rows: list[dict[str, Any]]
 ) -> tuple[int, int]:
@@ -137,22 +109,6 @@ def recently_searched(rows: dict, now: datetime) -> list[dict[str, str]]:
         for query, row in rows.items()
         if row.searched_at >= cutoff
     ]
-
-
-def linkedin_query_key(plan: dict[str, Any]) -> str:
-    return " | ".join(
-        [
-            plan["query"],
-            ", ".join(plan.get("titles") or []),
-            ", ".join(plan.get("locations") or []),
-        ]
-    )
-
-
-def next_page(previous: int | None) -> int:
-    if previous is None or previous >= MAX_LINKEDIN_PAGES:
-        return 1
-    return previous + 1
 
 
 def round_keywords(brief, keywords_by_brief: dict[str, list[str]] | None) -> list[str]:
@@ -236,69 +192,4 @@ async def collect_post_authors(
     }
     if collected.error:
         stats["error"] = collected.error
-    return stats, inserted
-
-
-async def collect_linkedin_people(user_id: str, site_id: str, run_id: str) -> JobResult:
-    if not await _running(site_id, run_id):
-        return STOPPED, 0
-    async with unit_of_work() as db:
-        briefs = [
-            b
-            for b in await lead_briefs.list_enabled(db, site_id)
-            if "linkedin" in (b.sources or [])
-            and ((b.plan or {}).get("linkedin") or {}).get("query")
-        ]
-    keys = {brief.id: linkedin_query_key(brief.plan["linkedin"]) for brief in briefs}
-    async with unit_of_work() as db:
-        earlier = await lead_searches.by_query(db, site_id, "linkedin", list(keys.values()))
-    caller = Caller(user_id=user_id, site_id=site_id)
-    inserted = skipped = found = 0
-    failed: list[str] = []
-    pages: dict[str, int] = {}
-    last_error = None
-    for brief in briefs:
-        plan = brief.plan["linkedin"]
-        key = keys[brief.id]
-        previous = earlier.get(key)
-        page = next_page(previous.page if previous else None)
-        try:
-            people = await people_search.search_linkedin(
-                caller,
-                plan["query"],
-                plan.get("titles") or [],
-                plan.get("locations") or [],
-                LINKEDIN_PER_BRIEF,
-                page,
-            )
-        except Exception as exc:
-            failed.append(brief.id)
-            last_error = str(exc)
-            continue
-        found += len(people)
-        pages[key] = page if people else MAX_LINKEDIN_PAGES
-        added, passed = await save_candidates(
-            user_id, site_id, run_id, linkedin_candidates(people, brief.id)
-        )
-        inserted += added
-        skipped += passed
-    async with unit_of_work() as db:
-        await lead_searches.record(
-            db,
-            user_id,
-            site_id,
-            "linkedin",
-            [{"query": key, "page": page} for key, page in pages.items()],
-            datetime.now(UTC),
-        )
-    stats: dict[str, Any] = {
-        "status": "error" if briefs and len(failed) == len(briefs) else "done",
-        "briefs": len(briefs),
-        "people": found,
-        "candidates": inserted,
-        "skipped": skipped,
-        "failedBriefs": failed,
-    }
-    if last_error:
-        stats["error"] = last_error
     return stats, inserted

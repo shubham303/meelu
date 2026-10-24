@@ -17,7 +17,7 @@ import {
   siteContextOf,
   startCollect,
 } from "./store.js";
-import { recentLines, searchWebLines, WEB_PLATFORM } from "./web.js";
+import { recentLines, searchWebLines, WEB_PLATFORM, WEB_SEARCHED_PLATFORMS } from "./web.js";
 
 const KEYWORDS_PER_LINE = 2;
 const JUDGE_CONCURRENCY = 5;
@@ -173,41 +173,44 @@ async function vendorStage(platforms, runId, ctx) {
   }
 }
 
-async function webStage(lines, siteContext, platforms, runId, ctx) {
+async function webStage(source, lines, siteContext, selected, runId, ctx) {
   const { state, send, llm, siteId, cookieHeader } = ctx;
-  send("platform", { platform: WEB_PLATFORM, status: "fetching" });
+  send("platform", { platform: source, status: "fetching" });
   try {
-    const searches = await until(state, listSearches(siteId, WEB_PLATFORM, cookieHeader));
+    const searches = await until(state, listSearches(siteId, source, cookieHeader));
     const { fresh, skippedQueries } = recentLines(lines, searches);
     const found = fresh.length
       ? await until(
           state,
-          searchWebLines({ lines: fresh, siteContext, platforms, guard: () => guard(state) }, llm),
+          searchWebLines({ lines: fresh, siteContext, source, selected, guard: () => guard(state) }, llm),
         )
       : { posts: [], searchedLines: 0, failedLines: 0, searchedQueries: [], error: null };
     const run = await until(
       state,
-      saveWebPosts(siteId, runId, { ...found, skippedQueries }, cookieHeader),
+      saveWebPosts(siteId, runId, { platform: source, ...found, skippedQueries }, cookieHeader),
     );
-    send("platform", platformEvent(WEB_PLATFORM, run?.platformStats?.[WEB_PLATFORM] ?? {}));
+    send("platform", platformEvent(source, run?.platformStats?.[source] ?? {}));
     return null;
   } catch (err) {
     if (err instanceof Stopped) throw err;
     const message = err instanceof Error ? err.message : String(err);
-    send("platform", { platform: WEB_PLATFORM, status: "error", error: message });
-    return { status: "error", error: message };
+    send("platform", { platform: source, status: "error", error: message });
+    return [source, { status: "error", error: message }];
   }
+}
+
+function searchedOnTheWeb(platform) {
+  return platform === WEB_PLATFORM || WEB_SEARCHED_PLATFORMS.includes(platform);
 }
 
 async function collectStage(input, lines, siteContext, runId, ctx) {
   const { state, send, siteId, cookieHeader } = ctx;
   send("stage", { stage: "searching" });
-  const vendor = input.platforms.filter((p) => p !== WEB_PLATFORM);
-  const [, webFailure] = await Promise.all([
+  const vendor = input.platforms.filter((p) => !searchedOnTheWeb(p));
+  const web = input.platforms.filter(searchedOnTheWeb);
+  const [, ...webOutcomes] = await Promise.all([
     vendorStage(vendor, runId, ctx),
-    input.platforms.includes(WEB_PLATFORM)
-      ? webStage(lines, siteContext, vendor, runId, ctx)
-      : null,
+    ...web.map((source) => webStage(source, lines, siteContext, input.platforms, runId, ctx)),
   ]);
   const run = await until(state, getRun(siteId, runId, cookieHeader));
   const candidates = input.platforms.reduce(
@@ -215,7 +218,7 @@ async function collectStage(input, lines, siteContext, runId, ctx) {
     0,
   );
   send("saved", { fetched: run?.fetchedCount ?? 0, inserted: candidates });
-  const platforms = { ...run?.platformStats, ...(webFailure ? { [WEB_PLATFORM]: webFailure } : {}) };
+  const platforms = { ...run?.platformStats, ...Object.fromEntries(webOutcomes.filter(Boolean)) };
   return { fetched: run?.fetchedCount ?? 0, inserted: candidates, platforms };
 }
 
