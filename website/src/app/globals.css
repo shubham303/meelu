@@ -18,7 +18,7 @@
   --color-good: #15803d;
   --color-warn: #b45309;
   --color-bad: #dc2626;
-  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-display: var(--font-newsreader), Georgia, serif;
 
   --animate-crawl-sweep: crawl-sweep 1.5s ease-in-out infinite;
 
@@ -117,3 +117,4 @@ html {
   scrollbar-width: thin;
   scrollbar-color: var(--color-edge2) transparent;
 }
+
