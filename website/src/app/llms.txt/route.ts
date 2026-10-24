@@ -1,3 +1,4 @@
+import { listComparisons } from "@/lib/alternatives";
 import { listPosts } from "@/lib/blog";
 import { site } from "@/lib/site";
 
@@ -14,6 +15,10 @@ const tools = [
 export function GET() {
   const posts = listPosts()
     .map((post) => `- [${post.title}](${site.url}/blog/${post.slug}): ${post.metaDescription}`)
+    .join("\n");
+
+  const comparisons = listComparisons()
+    .map((comparison) => `- [Meelu vs ${comparison.competitor}](${site.url}/alternatives/${comparison.slug}): ${comparison.summary}`)
     .join("\n");
 
   const body = `# ${site.name}
@@ -38,7 +43,7 @@ Per website, through Composio: Gmail, Outlook, Mailchimp and Kit (drafts only), 
 
 ## Pricing
 
-- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 1 credit a day and every website after that 0.5; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for one day; the agent can also run on the user's own LLM key.
+- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 0.5 credits a day and every website after that 0.25; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for one day; the agent can also run on the user's own LLM key.
 
 ## Open source
 
@@ -50,6 +55,10 @@ All run without sign-up; most run entirely in the browser.
 
 - [All tools](${site.url}/tools)
 ${tools.map(([slug, line]) => `- [${line}](${site.url}/tools/${slug})`).join("\n")}
+
+## Comparisons
+
+${comparisons}
 
 ## Blog
 
