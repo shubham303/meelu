@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { reloadForStaleBuild, shouldReloadForStaleBuild } from "@/lib/stale-build";
 
 const button = {
   font: "inherit",
@@ -14,9 +15,12 @@ const button = {
 } as const;
 
 export default function GlobalError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  const [reloading] = useState(() => shouldReloadForStaleBuild(error));
+
   useEffect(() => {
     console.error(error);
-  }, [error]);
+    if (reloading) reloadForStaleBuild();
+  }, [error, reloading]);
 
   return (
     <html lang="en">
@@ -33,6 +37,9 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
         }}
       >
         <title>Meelu</title>
+        {reloading ? (
+          <p style={{ fontSize: 14, color: "#5b6b7f" }}>Meelu was updated. Loading the new version…</p>
+        ) : (
         <div style={{ textAlign: "center", maxWidth: 380, padding: 24 }}>
           <p style={{ fontSize: 18, fontWeight: 600, margin: "0 0 8px" }}>Meelu ran into a problem.</p>
           <p style={{ fontSize: 14, color: "#5b6b7f", margin: "0 0 20px", lineHeight: 1.55 }}>
@@ -55,6 +62,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
             </button>
           </div>
         </div>
+        )}
       </body>
     </html>
   );
