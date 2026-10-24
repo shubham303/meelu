@@ -27,6 +27,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${site.url}/pricing`, priority: 0.8 },
     { url: `${site.url}/tools`, priority: 0.7 },
     { url: `${site.url}/blog`, priority: 0.8 },
+    { url: `${site.url}/case-studies`, priority: 0.8 },
     { url: `${site.url}/contact`, priority: 0.5 },
     { url: `${site.url}/terms`, priority: 0.3 },
     { url: `${site.url}/privacy`, priority: 0.3 },
