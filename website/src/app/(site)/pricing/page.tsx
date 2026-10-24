@@ -5,7 +5,7 @@ import { softwareApplicationJson } from "@/lib/software-schema";
 
 const title = "Meelu pricing: pay per website, plus what you use";
 const description =
-  "One plan, no subscription. 1 credit is 1 US dollar, a website costs 1 credit a day (0.5 after five), and data and AI services are charged per use.";
+  "One plan, no subscription. 1 credit is 1 US dollar, a website costs 0.5 credits a day (0.25 after five), and data and AI services are charged per use.";
 
 export const metadata: Metadata = {
   title,
@@ -107,11 +107,11 @@ export default function PricingPage() {
               Per website
             </p>
             <p className="mt-4 font-display text-4xl tracking-tight text-ink">
-              1 <span className="text-lg text-sub">credit / day</span>
+              0.5 <span className="text-lg text-sub">credits / day</span>
             </p>
             <p className="mt-1 text-sm text-faint">
-              About 30 credits a month for each of your first five websites, then 0.5 credits a
-              day (about 15 a month) for every website after that
+              About 15 credits a month for each of your first five websites, then 0.25 credits a
+              day (about 7.5 a month) for every website after that
             </p>
             <p className="mt-4 text-sm text-sub text-pretty">
               Taken automatically every day for each website you add. It covers
@@ -163,12 +163,12 @@ export default function PricingPage() {
           </h2>
           <div className="mt-6 rounded-2xl border border-edge bg-panel p-6 text-sm">
             <div className="flex justify-between gap-4 py-2 text-sub">
-              <span>First 5 websites × 1 credit × 30 days</span>
-              <span className="shrink-0 whitespace-nowrap font-mono text-ink">150 credits</span>
+              <span>First 5 websites × 0.5 credits × 30 days</span>
+              <span className="shrink-0 whitespace-nowrap font-mono text-ink">75 credits</span>
             </div>
             <div className="flex justify-between gap-4 py-2 text-sub">
-              <span>2 more websites × 0.5 credits × 30 days</span>
-              <span className="shrink-0 whitespace-nowrap font-mono text-ink">30 credits</span>
+              <span>2 more websites × 0.25 credits × 30 days</span>
+              <span className="shrink-0 whitespace-nowrap font-mono text-ink">15 credits</span>
             </div>
             <div className="flex justify-between gap-4 py-2 text-sub">
               <span>External service calls that month</span>
@@ -176,7 +176,7 @@ export default function PricingPage() {
             </div>
             <div className="mt-2 flex justify-between gap-4 border-t border-edge pt-4 text-ink">
               <span>Total</span>
-              <span className="shrink-0 whitespace-nowrap font-mono">$180 + usage</span>
+              <span className="shrink-0 whitespace-nowrap font-mono">$90 + usage</span>
             </div>
           </div>
           <p className="mt-6 text-sm text-sub text-pretty">
