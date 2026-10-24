@@ -79,6 +79,25 @@ const timeRows = [
   { task: "Write a page", byHand: "Start from nothing", withMeelu: "Start from a draft" },
 ];
 
+const genericAiGaps = [
+  {
+    title: "It knows your site",
+    body: "Meelu reads every page on your website and remembers it between tasks. A chat starts from zero each time.",
+  },
+  {
+    title: "It tracks what changes",
+    body: "Each crawl records the pages you changed and the content you published, so Meelu can see what moved the numbers.",
+  },
+  {
+    title: "It reads your numbers",
+    body: "Meelu checks your Search Console and traffic data to find which pages work and which do not.",
+  },
+  {
+    title: "It uses the right tool",
+    body: "Counting, grouping and trends run as SQL and statistics. The AI does not spend its effort guessing at numbers.",
+  },
+];
+
 const promises = [
   {
     title: "Watch every step",
@@ -278,8 +297,8 @@ export default function Home() {
               <span className="text-accent">Skip the agency retainer.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-sub text-pretty sm:text-lg">
-              You know the basics. You don&apos;t have the time. Meelu crawls your site, reads your Search Console and
-              checks what ChatGPT says about your market. Then it gives you a short list of what to fix this week,
+              You know your product better than any marketing agency, so you should be the one doing the marketing.
+              Meelu crawls your site, reads your Search Console and checks what ChatGPT says about your market. Then it gives you a short list of what to fix this week,
               with the data behind each item.
             </p>
             <div className="mt-9">
@@ -365,6 +384,28 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-edge bg-panel/60">
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.2fr]">
+          <div>
+            <Eyebrow>Why not a general AI chat</Eyebrow>
+            <SectionTitle>Why not just ask ChatGPT or Claude?</SectionTitle>
+            <p className="mt-4 max-w-xl text-sub text-pretty">
+              A general AI chat does not keep enough context about your website. It also spends a lot of effort on
+              work that a dedicated tool does faster and cheaper. Meelu is an AI agent built for digital marketing. It
+              turns what it knows about your site into a short list of things to do to grow it.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {genericAiGaps.map((gap) => (
+              <div key={gap.title} className="rounded-2xl border border-edge bg-panel p-5">
+                <p className="font-medium text-ink">{gap.title}</p>
+                <p className="mt-1.5 text-sm text-sub text-pretty">{gap.body}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
