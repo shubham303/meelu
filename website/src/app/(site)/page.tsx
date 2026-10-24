@@ -522,7 +522,7 @@ export default function Home() {
         />
         <div className="relative mx-auto w-full max-w-6xl px-4 py-24 text-center sm:px-6">
           <h2 className="font-display text-3xl tracking-tight text-ink text-balance sm:text-5xl">
-            Start the crawl today. Read your list tomorrow.
+            See what Meelu finds on your site.
           </h2>
           <p className="mx-auto mt-4 max-w-md text-sub text-pretty">
             Free to download for Mac and Windows. Your first website is free for three days. Meelu is in beta.
