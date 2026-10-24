@@ -87,10 +87,10 @@ test("the JSON object is read out of the text blocks", () => {
 });
 
 test("web posts need a real url, a title or text and a date from the last 30 days, and skip hosts searched on their own", async () => {
-  const { skippedHosts, webPosts } = await import("../src/main/social-signals/web.js");
+  const { searchScope, webPosts } = await import("../src/main/social-signals/web.js");
   const now = Date.parse("2026-10-20T00:00:00Z");
-  const skipped = skippedHosts(["reddit", "hackernews", "web"]);
-  assert.deepEqual(skipped, ["reddit.com", "redd.it", "news.ycombinator.com"]);
+  const scope = searchScope("web", ["reddit", "hackernews", "web"]);
+  assert.deepEqual(scope.skipped, ["reddit.com", "redd.it", "news.ycombinator.com"]);
   const posts = webPosts(
     {
       posts: [
@@ -102,7 +102,7 @@ test("web posts need a real url, a title or text and a date from the last 30 day
         { url: "javascript:alert(1)", title: "Bad", published: "2026-10-18" },
       ],
     },
-    skipped,
+    scope,
     now,
   );
   assert.deepEqual(posts, [
@@ -111,7 +111,31 @@ test("web posts need a real url, a title or text and a date from the last 30 day
       title: "Site got slow",
       text: "help",
       authorName: "ana",
+      authorHandle: null,
       postedAt: "2026-10-12T00:00:00.000Z",
     },
   ]);
+});
+
+test("a platform search keeps only that platform's posts and finds the author's handle", async () => {
+  const { searchScope, webPosts } = await import("../src/main/social-signals/web.js");
+  const now = Date.parse("2026-10-20T00:00:00Z");
+  const posts = webPosts(
+    {
+      posts: [
+        { url: "https://x.com/ana_b/status/1849", text: "which seo tool?", published: "2026-10-18" },
+        { url: "https://www.reddit.com/r/SaaS/comments/abc/x", title: "SEO tool?", handle: "u/tom_k", published: "2026-10-18" },
+        { url: "https://forum.example.org/t/1", title: "Elsewhere", published: "2026-10-18" },
+      ],
+    },
+    searchScope("x", ["x", "web"]),
+    now,
+  );
+  assert.deepEqual(posts.map((p) => [p.url, p.authorHandle]), [["https://x.com/ana_b/status/1849", "ana_b"]]);
+  const reddit = webPosts(
+    { posts: [{ url: "https://www.reddit.com/r/SaaS/comments/abc/x", title: "SEO tool?", handle: "u/tom_k", published: "2026-10-18" }] },
+    searchScope("reddit", ["reddit"]),
+    now,
+  );
+  assert.equal(reddit[0].authorHandle, "tom_k");
 });

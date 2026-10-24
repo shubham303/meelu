@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.pagination import PaginatedApiResponse, PaginationParams
 from src.credits.service import credit_service
-from src.providers.social_search.platforms import PLATFORMS
+from src.providers.social_search.platforms import PLATFORMS, WEB_SEARCHED_PLATFORMS
 from src.providers.social_search.repository import social_posts
 from src.providers.social_search.service import social_search
 from src.providers.social_search.store import vendor_keywords
@@ -77,6 +77,7 @@ QUIET_RUN_SECONDS = 120
 QUIET_RUN_ERROR = "The app stopped working on this run before it finished, so it was closed."
 PLATFORM_IDS = tuple(p["id"] for p in PLATFORMS)
 SOURCE_IDS = (*PLATFORM_IDS, WEB_PLATFORM)
+WEB_SOURCE_IDS = (WEB_PLATFORM, *WEB_SEARCHED_PLATFORMS)
 
 
 class SocialListeningService:
@@ -269,9 +270,14 @@ class SocialListeningService:
             raise HTTPException(404, "Not found")
         if row.status != "running":
             raise HTTPException(409, "This run is no longer going.")
+        if body.platform not in WEB_SOURCE_IDS:
+            raise HTTPException(400, f"{body.platform} is not searched on the web.")
         now = datetime.now(UTC)
         rows = web_post_rows(
-            body.posts[:MAX_WEB_POSTS], now - timedelta(days=WEB_LOOKBACK_DAYS), now
+            body.platform,
+            body.posts[:MAX_WEB_POSTS],
+            now - timedelta(days=WEB_LOOKBACK_DAYS),
+            now,
         )
         await social_posts.insert_new(db, rows)
         post_ids = await social_posts.ids_by_keys(db, [r["post_key"] for r in rows])
@@ -287,12 +293,12 @@ class SocialListeningService:
             body.skipped_queries,
         )
         await social_listening_runs.merge_platform_stats(
-            db, run_id, WEB_PLATFORM, stats, fetched=len(rows)
+            db, run_id, body.platform, stats, fetched=len(rows)
         )
         searched = list(
             dict.fromkeys(q for q in (normalize_keyword(q) for q in body.searched_queries) if q)
         )
-        await social_listening_cursors.advance(db, user_id, site_id, WEB_PLATFORM, searched, now)
+        await social_listening_cursors.advance(db, user_id, site_id, body.platform, searched, now)
         await db.refresh(row)
         return RunResponse.model_validate(row)
 
@@ -352,7 +358,7 @@ class SocialListeningService:
         now = datetime.now(UTC)
         out = []
         for platform in social_search.available_platforms():
-            if not platform["available"]:
+            if not platform["available"] or platform["id"] in WEB_SEARCHED_PLATFORMS:
                 continue
             cursors = await social_listening_cursors.by_keyword(
                 db, site_id, platform["id"], keywords
@@ -370,19 +376,19 @@ class SocialListeningService:
                     ),
                 )
             )
-        web_cursors = await social_listening_cursors.by_keyword(
-            db, site_id, WEB_PLATFORM, [normalize_keyword(line.text) for line in lines]
-        )
-        web_skipped = {s["query"] for s in recently_searched(web_cursors, now)}
-        web_lines = [line for line in lines if normalize_keyword(line.text) not in web_skipped]
-        out.append(
-            PlatformEstimate(
-                platform=WEB_PLATFORM,
-                keywords=len(lines),
-                vendor_keywords=len(web_lines),
-                max_cost_micros=len(web_lines) * WEB_COST_PER_LINE_MICROS,
+        line_texts = [normalize_keyword(line.text) for line in lines]
+        for source in WEB_SOURCE_IDS:
+            web_cursors = await social_listening_cursors.by_keyword(db, site_id, source, line_texts)
+            web_skipped = {s["query"] for s in recently_searched(web_cursors, now)}
+            web_lines = [text for text in line_texts if text not in web_skipped]
+            out.append(
+                PlatformEstimate(
+                    platform=source,
+                    keywords=len(lines),
+                    vendor_keywords=len(web_lines),
+                    max_cost_micros=len(web_lines) * WEB_COST_PER_LINE_MICROS,
+                )
             )
-        )
         return EstimateResponse(platforms=out)
 
     async def gate_posts(self, db: AsyncSession, site_id: str) -> GateResponse:

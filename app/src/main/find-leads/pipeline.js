@@ -20,6 +20,8 @@ import {
   startScreen,
 } from "./store.js";
 import { queryKey, searchWeb } from "./web.js";
+import { linkedinQuery, searchLinkedinPeople, searchPostAuthors } from "./web-people.js";
+import { WEB_SEARCHED_PLATFORMS } from "../social-signals/web.js";
 
 const LLM_CONCURRENCY = 5;
 const WEB_CONCURRENCY = 2;
@@ -264,21 +266,6 @@ async function apiSources(briefs, platforms, runId, ctx) {
       }
     }
   }
-  if (briefs.some((b) => hasSource(b, "linkedin") && b.plan?.linkedin?.query)) {
-    try {
-      await until(state, startCollect(siteId, runId, { source: "linkedin" }, cookieHeader));
-      keys.push("linkedin");
-      send("source", { key: "linkedin", status: "running" });
-    } catch (err) {
-      if (err instanceof Stopped) throw err;
-      send("source", {
-        key: "linkedin",
-        status: "error",
-        candidates: 0,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
   const reported = new Set();
   while (reported.size < keys.length) {
     const run = await until(state, getRun(siteId, runId, cookieHeader));
@@ -293,11 +280,66 @@ async function apiSources(briefs, platforms, runId, ctx) {
   }
 }
 
+async function webPeopleSource(key, briefs, origin, search, ctx) {
+  const { state, send, llm, siteId, cookieHeader } = ctx;
+  if (briefs.length === 0) return;
+  send("source", { key, status: "running" });
+  let candidates = 0;
+  let failed = 0;
+  let fromCache = 0;
+  let lastError = null;
+  const skippedQueries = [];
+  const searches = await until(state, listSearches(siteId, "web", cookieHeader));
+  const earlier = new Map(searches.map((row) => [queryKey(row.query), row]));
+  const remember = (query, results) =>
+    until(state, recordWebSearch(siteId, query, results, cookieHeader)).catch((err) => {
+      if (err instanceof Stopped) throw err;
+    });
+  await pool(briefs, WEB_CONCURRENCY, async (brief) => {
+    try {
+      const found = await until(state, search({ brief, guard: () => guard(state), earlier, remember }, llm));
+      skippedQueries.push(...found.skipped);
+      fromCache += found.fromCache;
+      const saved = await until(state, saveCandidates(siteId, ctx.runId, found.candidates, cookieHeader, origin));
+      candidates += saved?.inserted ?? 0;
+    } catch (err) {
+      if (err instanceof Stopped) throw err;
+      failed += 1;
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+  });
+  send("source", {
+    key,
+    status: failed === briefs.length ? "error" : "done",
+    candidates,
+    ...(fromCache ? { fromCache } : {}),
+    ...(skippedQueries.length ? { skippedQueries } : {}),
+    ...(lastError ? { error: lastError } : {}),
+  });
+}
+
+function webPeopleSources(briefs, platforms, siteContext, runId, ctx) {
+  const own = { ...ctx, runId };
+  const linkedin = briefs.filter((b) => hasSource(b, "linkedin") && linkedinQuery(b.plan?.linkedin));
+  const posters = briefs.filter((b) => hasSource(b, "posts"));
+  return [
+    webPeopleSource("linkedin", linkedin, { source: "linkedin", platform: "linkedin" }, (args, llm) =>
+      searchLinkedinPeople({ ...args, siteContext }, llm), own),
+    ...platforms.map((platform) =>
+      webPeopleSource(`posts:${platform}`, posters, { source: "posts", platform }, (args, llm) =>
+        searchPostAuthors({ ...args, platform, siteContext }, llm), own),
+    ),
+  ];
+}
+
 async function collectStage(briefs, platforms, siteContext, runId, ctx) {
   ctx.send("stage", { stage: "collect" });
+  const onTheWeb = platforms.filter((p) => WEB_SEARCHED_PLATFORMS.includes(p));
+  const fromApis = platforms.filter((p) => !WEB_SEARCHED_PLATFORMS.includes(p));
   await Promise.all([
-    apiSources(briefs, platforms, runId, ctx),
+    apiSources(briefs, fromApis, runId, ctx),
     webSource(briefs, siteContext, runId, ctx),
+    ...webPeopleSources(briefs, onTheWeb, siteContext, runId, ctx),
   ]);
   const run = await until(ctx.state, getRun(ctx.siteId, runId, ctx.cookieHeader));
   return run?.foundCount ?? 0;

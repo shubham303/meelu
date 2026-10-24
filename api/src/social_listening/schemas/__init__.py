@@ -16,7 +16,7 @@ KEYWORDS_PER_LINE = 2
 MAX_LINES_PER_SITE = 30
 PER_KEYWORD = 25
 LOOKBACK_DAYS = 7
-MINIMUM_BALANCE_USD = 5
+MINIMUM_BALANCE_USD = 1
 WEB_PLATFORM = "web"
 WEB_LOOKBACK_DAYS = 30
 WEB_COST_PER_LINE_MICROS = 30_000
@@ -70,6 +70,7 @@ class WebPost(RequestModel):
 
 
 class WebPostsRequest(RequestModel):
+    platform: str = WEB_PLATFORM
     posts: list[WebPost]
     searched_lines: int = 0
     failed_lines: int = 0

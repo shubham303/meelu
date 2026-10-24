@@ -59,7 +59,7 @@ const heroFindings = [
 const problems = [
   {
     title: "“Data gathering takes half my day.”",
-    body: "A marketer on r/DigitalMarketing. Most founders say the same.",
+    body: "A marketer on r/DigitalMarketing. Founders say the same.",
   },
   {
     title: "You audit once, then never again.",
@@ -237,7 +237,7 @@ const listeningPlatforms = [
 
 const dataSources = [
   { name: "DataForSEO", what: "Keyword volumes, Google results, backlinks and AI answers" },
-  { name: "Apify", what: "Social search and LinkedIn people search" },
+  { name: "Web search", what: "Public posts and profiles for social listening and leads" },
   { name: "ChatGPT · Claude · AI Overview", what: "What AI search answers and cites" },
   { name: "Claude or OpenRouter", what: "The model behind the agent. You can bring your own Anthropic key." },
 ];
@@ -290,16 +290,15 @@ export default function Home() {
         />
         <div className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.15fr_1fr]">
           <div>
-            <Eyebrow>For small SaaS teams that do their own SEO</Eyebrow>
+            <Eyebrow>For founders and marketers</Eyebrow>
             <h1 className="mt-5 font-display text-4xl leading-[1.06] tracking-tight text-ink text-balance sm:text-5xl lg:text-6xl">
-              Do your own SEO.
+              SEO, AI search and social
               <br />
-              <span className="text-accent">Skip the agency retainer.</span>
+              <span className="text-accent">research in one app.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-sub text-pretty sm:text-lg">
-              You know your product better than any marketing agency, so you should be the one doing the marketing.
-              Meelu crawls your site, reads your Search Console and checks what ChatGPT says about your market. Then it gives you a short list of what to fix this week,
-              with the data behind each item.
+              Meelu does the reading and counting across your site, Search Console, ChatGPT answers and social
+              threads. You get a short list of what to do next, and you make the call.
             </p>
             <div className="mt-9">
               <HeroDownload align="start">
@@ -324,7 +323,7 @@ export default function Home() {
 
           <div className="rounded-2xl border border-edge bg-panel p-5 shadow-[0_24px_48px_-32px_rgba(31,45,61,0.35)] sm:p-6">
             <p className="font-mono text-[11px] uppercase tracking-widest text-faint">
-              This week on yoursaas.com · example
+              This week on yoursite.com · example
             </p>
             <div className="mt-4 flex flex-col gap-3">
               {heroFindings.map((finding) => (

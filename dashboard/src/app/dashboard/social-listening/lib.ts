@@ -9,7 +9,7 @@ import type {
 export interface PlatformInfo {
   id: string;
   label: string;
-  access: "direct" | "apify" | "web";
+  access: "direct" | "web";
   available: boolean;
 }
 
