@@ -154,7 +154,7 @@ def better_auth_keys(monkeypatch):
     monkeypatch.setattr(better_auth, "jwks", TestKeys())
 
 
-async def signup(client, email, name="Test User", credits=1.0, trial=False):
+async def signup(client, email, name="Test User", credits=5.0, trial=False):
     r = await client.post("/api/auth/session", json={"accessToken": mint_token(email, name)})
     assert r.status_code == 200, r.text
     from sqlalchemy import text

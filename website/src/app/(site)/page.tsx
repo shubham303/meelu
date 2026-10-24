@@ -311,7 +311,7 @@ export default function Home() {
                 </Link>
               </HeroDownload>
               <p className="mt-2 text-xs text-faint">
-                Free for your first 3 days.{" "}
+                Free for your first day.{" "}
                 <Link
                   href="/pricing"
                   className="text-sub underline decoration-edge underline-offset-4 transition-colors hover:text-ink hover:decoration-accent"
@@ -566,7 +566,7 @@ export default function Home() {
             See what Meelu finds on your site.
           </h2>
           <p className="mx-auto mt-4 max-w-md text-sub text-pretty">
-            Free to download for Mac and Windows. Your first website is free for three days. Meelu is in beta.
+            Free to download for Mac and Windows. Your first website is free for one day. Meelu is in beta.
           </p>
           <div className="mx-auto mt-8 flex flex-wrap justify-center gap-3">
             <Link

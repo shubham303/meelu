@@ -65,11 +65,11 @@ async def test_signup_grants_credits_and_ledger(client, email):
     await signup(client, email)
     r = await client.get("/api/v1/credits")
     assert r.status_code == 200
-    assert r.json()["data"]["balanceUsd"] == 1.0
+    assert r.json()["data"]["balanceUsd"] == 5.0
 
     await make_operator((await client.get("/api/auth/me")).json()["data"]["id"])
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 2.5, "note": "top up"})
-    assert r.json()["data"]["balanceUsd"] == 3.5
+    assert r.json()["data"]["balanceUsd"] == 7.5
 
     r = await client.get("/api/v1/credits/ledger")
     kinds = [e["kind"] for e in r.json()["data"]]
@@ -89,7 +89,7 @@ async def test_facade_falls_back_caches_and_charges(client, email):
     assert flaky.calls == 1 and stable.calls == 1
 
     r = await client.get("/api/v1/credits")
-    assert r.json()["data"]["balanceUsd"] == 0.75
+    assert r.json()["data"]["balanceUsd"] == 4.75
 
     r = await client.get("/api/v1/providers/calls?domain=things")
     calls = r.json()["data"]
