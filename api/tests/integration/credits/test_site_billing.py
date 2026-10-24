@@ -55,13 +55,13 @@ async def test_adding_a_site_charges_the_first_day(client, email):
     site = await add_site(client)
 
     assert site["status"] == "active"
-    assert await balance_usd(client) == pytest.approx(before - 1.0)
+    assert await balance_usd(client) == pytest.approx(before - 0.5)
 
     r = await client.get(f"/api/v1/credits/sites/{site['id']}")
     assert r.status_code == 200, r.text
     state = r.json()["data"]
     assert state["chargeCount"] == 1
-    assert state["chargedMicros"] == 1_000_000
+    assert state["chargedMicros"] == 500_000
     assert state["lastChargedAt"] is not None
     assert state["nextChargeAt"] is not None
 
@@ -79,7 +79,7 @@ async def test_sweep_charges_once_per_day(client, email):
     result = await site_billing_service.sweep()
     assert result.charged == 1
     assert result.disabled == 0
-    assert await balance_usd(client) == pytest.approx(after_create - 1.0)
+    assert await balance_usd(client) == pytest.approx(after_create - 0.5)
 
 
 async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(client, email):
@@ -107,7 +107,7 @@ async def test_site_is_disabled_when_credits_run_out_and_revives_on_top_up(clien
     await make_operator(user_id)
     r = await client.post("/api/v1/credits/grant", json={"amountUsd": 5})
     assert r.status_code == 200, r.text
-    assert r.json()["data"]["balanceUsd"] == pytest.approx(5.1 - 1.0)
+    assert r.json()["data"]["balanceUsd"] == pytest.approx(5.1 - 0.5)
 
     r = await client.get(f"/api/v1/sites/{site['id']}")
     assert r.status_code == 200
@@ -233,7 +233,7 @@ async def test_top_up_resumes_sites_in_order_until_credits_run_out(client, email
     await site_billing_service.sweep()
 
     await make_operator(user_id)
-    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 1.5})
+    r = await client.post("/api/v1/credits/grant", json={"amountUsd": 0.75})
     assert r.status_code == 200, r.text
     states = {s["id"]: s["status"] for s in (await client.get("/api/v1/sites")).json()["data"]}
     assert states == {first["id"]: "active", second["id"]: "disabled"}
@@ -335,9 +335,9 @@ async def test_sites_after_the_fifth_cost_half(client, email):
 
     added = [await add_site(client, f"tier{i}.com", f"Tier {i}") for i in range(7)]
 
-    assert await balance_usd(client) == pytest.approx(10 - 5 * 1.0 - 2 * 0.5)
+    assert await balance_usd(client) == pytest.approx(10 - 5 * 0.5 - 2 * 0.25)
     prices = []
     for site in added:
         r = await client.get(f"/api/v1/credits/sites/{site['id']}")
         prices.append(r.json()["data"]["dailyPriceMicros"])
-    assert prices == [1_000_000] * 5 + [500_000] * 2
+    assert prices == [500_000] * 5 + [250_000] * 2

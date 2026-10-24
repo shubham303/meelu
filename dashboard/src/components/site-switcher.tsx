@@ -296,7 +296,7 @@ function AddSiteModal({
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Example Co" />
         </Field>
         <p className="text-xs text-faint">
-          A website costs 1 credit a day, charged when you add it and every 24 hours after.
+          A website costs 0.5 credits a day, charged when you add it and every 24 hours after.
           It pauses if the balance runs out and picks up again once you top up.
         </p>
         <p className="text-xs text-faint">
