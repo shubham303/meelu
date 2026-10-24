@@ -2,11 +2,12 @@ import Link from "next/link";
 import { Logo } from "@/components/logo";
 
 const links = [
+  { href: "/use-cases", label: "Use cases", short: "Use cases" },
   { href: "/tools", label: "Free tools", short: "Tools" },
-  { href: "/docs", label: "Docs", short: "Docs" },
+  { href: "/docs", label: "Docs", short: null },
   { href: "/case-studies", label: "Case studies", short: null },
   { href: "/pricing", label: "Pricing", short: "Pricing" },
-  { href: "/blog", label: "Blog", short: "Blog" },
+  { href: "/blog", label: "Blog", short: null },
 ] as const;
 
 export function SiteHeader() {
