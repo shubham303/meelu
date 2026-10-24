@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { DemoFrame } from "@/components/demo-frame";
 import { HeroDownload } from "@/components/download-buttons";
 import { listCaseStudies } from "@/lib/blog";
+import { useCases } from "@/lib/use-cases";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -71,14 +72,6 @@ const problems = [
   },
 ];
 
-const timeRows = [
-  { task: "Audit the site", byHand: "A full day, once a month", withMeelu: "Every crawl" },
-  { task: "Keyword research", byHand: "Hours in a spreadsheet", withMeelu: "A sorted list" },
-  { task: "Check AI answers", byHand: "One question at a time", withMeelu: "Your questions, tracked" },
-  { task: "Find threads to answer", byHand: "Doom scrolling social media", withMeelu: "Found and sorted for you" },
-  { task: "Write a page", byHand: "Start from nothing", withMeelu: "Start from a draft" },
-];
-
 const genericAiGaps = [
   {
     title: "It knows your site",
@@ -98,6 +91,14 @@ const genericAiGaps = [
   },
 ];
 
+const cmoPrices = [
+  { name: "Okara", slug: "okara", price: "$129 to $249 a month", note: "Reddit, articles and publishing on the $249 plan" },
+  { name: "Indexly", slug: "indexly", price: "From $299 a month", note: "For the bundle; single modules from $49" },
+  { name: "RankAI", slug: "rankai", price: "From $199 a month", note: "10 pages a month on one website" },
+  { name: "Writesonic", slug: "writesonic", price: "From $99 a month", note: "$79 a month billed yearly" },
+  { name: "Search Atlas", slug: "search-atlas", price: "From $99 a month", note: "AI search tracking from $199" },
+];
+
 const promises = [
   {
     title: "Watch every step",
@@ -114,49 +115,6 @@ const promises = [
   {
     title: "Built in the open",
     body: "The blog shows how each feature is made.",
-  },
-];
-
-const features = [
-  {
-    name: "Site audit",
-    href: "/docs/site",
-    body: "Meelu crawls every page on your site and reads what it says. It finds broken links, missing tags and pages that look different on mobile.",
-  },
-  {
-    name: "SEO",
-    href: "/docs/seo",
-    body: "Meelu puts your Search Console data next to search volumes and Google's top 10. It shows which keywords you can win and which page should target each one.",
-  },
-  {
-    name: "AI search",
-    href: "/docs/geo",
-    body: "Meelu asks ChatGPT, Claude and Google's AI Overview the questions your buyers ask. It shows which sites they cite and what your page is missing.",
-  },
-  {
-    name: "Content",
-    href: "/docs/content",
-    body: "Meelu writes page drafts with a title, a meta description and a target keyword. It adds links to your other pages and can save the draft in Webflow or Contentful.",
-  },
-  {
-    name: "Social listening",
-    href: "/docs/social-listening",
-    body: "Meelu finds posts on Reddit, X, LinkedIn and Hacker News where people ask for a product like yours. You choose which ones to answer.",
-  },
-  {
-    name: "Find leads",
-    href: "/docs/find-leads",
-    body: "Meelu finds people who posted about the problem you solve and links their posts. You write and send the message yourself.",
-  },
-  {
-    name: "Analytics",
-    href: "/docs/analytics",
-    body: "Ask a question about your traffic, impressions or pages. Meelu answers in plain English and shows the numbers in a chart.",
-  },
-  {
-    name: "Reports",
-    href: "/docs/reports",
-    body: "Save the answers that matter. You can rename them, export them as files and share them with your team.",
   },
 ];
 
@@ -292,9 +250,9 @@ export default function Home() {
           <div>
             <Eyebrow>For founders and marketers</Eyebrow>
             <h1 className="mt-5 font-display text-4xl leading-[1.06] tracking-tight text-ink text-balance sm:text-5xl lg:text-6xl">
-              All your organic marketing
+              Meelu,
               <br />
-              <span className="text-accent">in one app.</span>
+              <span className="text-accent">your AI CMO.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-sub text-pretty sm:text-lg">
               SEO, AI search, content, social listening, lead finding and analytics for your website, in one app.
@@ -355,34 +313,30 @@ export default function Home() {
 
       <section className="border-b border-edge">
         <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-          <SectionTitle>Where your SEO time goes</SectionTitle>
-          <div className="mt-10 overflow-x-auto rounded-2xl border border-edge bg-panel">
-            <table className="w-full min-w-[640px] border-collapse text-left text-[15px]">
-              <thead>
-                <tr className="border-b border-edge">
-                  <th scope="col" className="px-5 py-4 font-medium text-sub">
-                    Task
-                  </th>
-                  <th scope="col" className="px-5 py-4 font-medium text-ink">
-                    By hand
-                  </th>
-                  <th scope="col" className="px-5 py-4 font-medium text-accent">
-                    With Meelu
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {timeRows.map((row) => (
-                  <tr key={row.task} className="border-b border-edge last:border-0">
-                    <th scope="row" className="px-5 py-4 font-medium text-ink">
-                      {row.task}
-                    </th>
-                    <td className="px-5 py-4 text-sub">{row.byHand}</td>
-                    <td className="px-5 py-4 text-ink">{row.withMeelu}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <Eyebrow>Use cases</Eyebrow>
+              <SectionTitle>Everything Meelu does for your site</SectionTitle>
+            </div>
+            <Link href="/use-cases" className="text-sm text-ink underline underline-offset-4 hover:text-accent">
+              All use cases
+            </Link>
+          </div>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {useCases.map((useCase, index) => (
+              <Link
+                key={useCase.slug}
+                href={`/use-cases/${useCase.slug}`}
+                className="group flex flex-col rounded-2xl border border-edge bg-panel p-5 transition-colors hover:border-edge2"
+              >
+                <p className="font-mono text-xs text-accent">{String(index + 1).padStart(2, "0")}</p>
+                <p className="mt-2 text-lg font-medium text-ink">{useCase.name}</p>
+                <p className="mt-2 text-sm text-sub text-pretty">{useCase.summary}</p>
+                <span className="mt-auto inline-flex items-center gap-1.5 pt-4 text-sm text-sub transition-colors group-hover:text-accent">
+                  See how <ArrowRight size={14} />
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
@@ -405,6 +359,50 @@ export default function Home() {
                 <p className="mt-1.5 text-sm text-sub text-pretty">{gap.body}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-edge">
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.2fr]">
+          <div>
+            <Eyebrow>Pricing</Eyebrow>
+            <SectionTitle>An AI CMO for $15 a month</SectionTitle>
+            <p className="mt-4 max-w-xl text-sub text-pretty">
+              Other AI CMO tools charge a flat monthly plan. Meelu charges 50 cents a day for each website, plus the
+              searches, data and AI it uses, at what they cost. You see every charge in the app.
+            </p>
+            <Link
+              href="/pricing"
+              className="mt-6 inline-flex items-center gap-1.5 text-sm text-ink underline underline-offset-4 hover:text-accent"
+            >
+              See how pricing works <ArrowRight size={14} />
+            </Link>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-edge bg-panel">
+            <div className="flex items-baseline justify-between gap-4 border-b border-edge bg-accent-soft px-5 py-4">
+              <p className="font-medium text-ink">Meelu</p>
+              <p className="text-right text-sm text-ink">
+                <span className="font-medium">$15 a month</span>
+                <span className="block text-xs text-sub">per website, plus usage at cost</span>
+              </p>
+            </div>
+            {cmoPrices.map((tool) => (
+              <Link
+                key={tool.slug}
+                href={`/alternatives/${tool.slug}`}
+                className="flex items-baseline justify-between gap-4 border-b border-edge px-5 py-4 transition-colors last:border-b-0 hover:bg-panel2"
+              >
+                <p className="text-ink">{tool.name}</p>
+                <p className="text-right text-sm text-ink">
+                  {tool.price}
+                  <span className="block text-xs text-sub">{tool.note}</span>
+                </p>
+              </Link>
+            ))}
+            <p className="border-t border-edge px-5 py-3 text-xs text-faint">
+              Prices from each tool&apos;s own pricing page, checked October 24, 2026.
+            </p>
           </div>
         </div>
       </section>
@@ -460,26 +458,6 @@ export default function Home() {
                 <p className="font-medium text-ink">{promise.title}</p>
                 <p className="mt-1.5 text-sm text-sub text-pretty">{promise.body}</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-edge bg-panel/60">
-        <div className="mx-auto w-full max-w-6xl px-4 py-20 sm:px-6">
-          <Eyebrow>What Meelu does while you ship</Eyebrow>
-          <SectionTitle>Everything Meelu does for your site</SectionTitle>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {features.map((feature, index) => (
-              <Link
-                key={feature.name}
-                href={feature.href}
-                className="rounded-2xl border border-edge bg-panel p-5 transition-colors hover:border-edge2"
-              >
-                <p className="font-mono text-xs text-accent">{String(index + 1).padStart(2, "0")}</p>
-                <p className="mt-2 text-lg font-medium text-ink">{feature.name}</p>
-                <p className="mt-2 text-sm text-sub text-pretty">{feature.body}</p>
-              </Link>
             ))}
           </div>
         </div>

@@ -11,6 +11,9 @@ export function SiteFooter() {
           <Logo size={18} />
         </Link>
         <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-sub">
+          <Link href="/use-cases" className="transition-colors hover:text-ink">
+            Use cases
+          </Link>
           <Link href="/tools" className="transition-colors hover:text-ink">
             Free tools
           </Link>
