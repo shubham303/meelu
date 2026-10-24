@@ -38,7 +38,7 @@ Per website, through Composio: Gmail, Outlook, Mailchimp and Kit (drafts only), 
 
 ## Pricing
 
-- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 0.4 credits a day and every website after that 0.2; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for three days; the agent can also run on the user's own LLM key.
+- [Pricing](${site.url}/pricing): one plan on credits (1 credit = 1 US dollar). Each of the first five websites costs 1 credit a day and every website after that 0.5; external services (DataForSEO, Apify, OpenRouter) are charged per use. A new account's first website is free for one day; the agent can also run on the user's own LLM key.
 
 ## Open source
 

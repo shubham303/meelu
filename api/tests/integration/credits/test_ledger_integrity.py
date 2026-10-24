@@ -54,7 +54,7 @@ async def test_concurrent_charges_keep_the_ledger_consistent(client, email):
 
     await asyncio.gather(*(charge(n) for n in range(20)))
 
-    assert await stored_balance_usd(user_id) == pytest.approx(1.0 - 0.2)
+    assert await stored_balance_usd(user_id) == pytest.approx(5.0 - 0.2)
     assert await stored_balance_usd(user_id) == pytest.approx(await ledger_sum_usd(user_id))
 
     async with unit_of_work() as db:
@@ -84,7 +84,7 @@ async def test_every_ledger_entry_explains_itself(client, email):
 
 
 async def test_amounts_are_exact_in_micros(client, email):
-    await signup(client, email, credits=5.0)
+    await signup(client, email, credits=10.0)
     user_id = await user_id_of(client)
 
     for _ in range(10):
@@ -98,4 +98,4 @@ async def test_amounts_are_exact_in_micros(client, email):
             ),
             {"u": user_id},
         )
-        assert int(row.scalar_one()) == -3_000_000
+        assert int(row.scalar_one()) == -7_500_000
