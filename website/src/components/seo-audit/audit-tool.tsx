@@ -9,7 +9,7 @@ import { AuditResults } from "./results";
 type Phase =
   | { kind: "idle" }
   | { kind: "running"; message: string; fetched: number; total: number }
-  | { kind: "done"; result: SlimResult }
+  | { kind: "done"; result: SlimResult; shareUrl: string | null }
   | { kind: "failed"; error: AuditError };
 
 const BLOCKED_CODES = new Set([
@@ -100,7 +100,11 @@ export function AuditTool() {
                 : prev,
             );
           } else if (event.type === "done") {
-            setPhase({ kind: "done", result: event.result as unknown as SlimResult });
+            setPhase({
+              kind: "done",
+              result: event.result as unknown as SlimResult,
+              shareUrl: event.shareUrl ?? null,
+            });
           } else if (event.type === "error") {
             setPhase({ kind: "failed", error: event.error });
           }
@@ -180,8 +184,8 @@ export function AuditTool() {
         </fieldset>
 
         <p className="mt-3 text-xs text-faint">
-          Free, no sign-up. We read your pages the way Googlebot does — nothing is
-          stored after the report is drawn.
+          Free, no sign-up. We read your pages the way Googlebot does. Each report is
+          saved under a private link you can share.
         </p>
       </form>
 
@@ -196,6 +200,7 @@ export function AuditTool() {
       {phase.kind === "done" && (
         <AuditResults
           result={phase.result}
+          shareUrl={phase.shareUrl}
           onReset={() => {
             setPhase({ kind: "idle" });
             setUrl("");

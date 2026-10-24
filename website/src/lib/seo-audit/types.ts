@@ -170,5 +170,5 @@ export type AuditError = { code: BlockedCode; message: string; hint?: string };
 export type StreamEvent =
   | { type: "phase"; message: string }
   | { type: "progress"; fetched: number; total: number; queued: number }
-  | { type: "done"; result: AuditResult }
+  | { type: "done"; result: AuditResult; shareUrl?: string | null }
   | { type: "error"; error: AuditError };
