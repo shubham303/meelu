@@ -49,12 +49,12 @@ async def test_re_adding_the_same_domain_the_same_day_is_not_charged_twice(clien
         r = await client.delete(f"/api/v1/sites/{site['id']}")
         assert r.status_code == 200, r.text
 
-    assert await balance_usd(client) == pytest.approx(start - 0.4)
+    assert await balance_usd(client) == pytest.approx(start - 1.0)
 
     site = await add_site(client, "example.com", "Example")
     await age_billing(site["id"], 25)
     await site_billing_service.sweep()
-    assert await balance_usd(client) == pytest.approx(start - 0.8)
+    assert await balance_usd(client) == pytest.approx(start - 2.0)
 
 
 async def test_a_second_domain_is_charged_separately(client, email):
@@ -64,7 +64,7 @@ async def test_a_second_domain_is_charged_separately(client, email):
     await add_site(client, "one.com", "One")
     await add_site(client, "two.com", "Two")
 
-    assert await balance_usd(client) == pytest.approx(start - 0.8)
+    assert await balance_usd(client) == pytest.approx(start - 2.0)
 
 
 async def test_deleting_a_site_leaves_a_ledger_entry_that_still_names_the_domain(client, email):
@@ -77,7 +77,7 @@ async def test_deleting_a_site_leaves_a_ledger_entry_that_still_names_the_domain
     entries = await ledger_kinds(client)
     charge = next(e for e in entries if e[0] == "site_day")
     assert "example.com" in charge[1]
-    assert charge[2] == pytest.approx(-0.4)
+    assert charge[2] == pytest.approx(-1.0)
 
 
 async def test_one_broke_site_cannot_starve_the_sweep(client, email, monkeypatch):
@@ -88,7 +88,7 @@ async def test_one_broke_site_cannot_starve_the_sweep(client, email, monkeypatch
     broke = await add_site(client, "broke.com", "Broke")
     payer = await add_site(client, "payer.com", "Payer")
 
-    await set_balance(user_id, 0.4)
+    await set_balance(user_id, 1.0)
     await age_billing(broke["id"], 25)
     await age_billing(payer["id"], 25)
 
@@ -111,7 +111,7 @@ async def test_concurrent_sweeps_charge_a_site_once(client, email):
     results = await asyncio.gather(*(site_billing_service.sweep() for _ in range(4)))
 
     assert sum(r.charged for r in results) == 1
-    assert await balance_usd(client) == pytest.approx(after_create - 0.4)
+    assert await balance_usd(client) == pytest.approx(after_create - 1.0)
 
 
 async def test_a_site_billing_row_survives_its_site(client, email):

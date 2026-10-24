@@ -1,9 +1,9 @@
 import { DAY, HOUR, NOW, between, int, pick, seeded } from "../rand";
 
-export const SITE_DAILY_USD = 0.4;
-export const SITE_DAILY_DISCOUNTED_USD = 0.2;
+export const SITE_DAILY_USD = 1;
+export const SITE_DAILY_DISCOUNTED_USD = 0.5;
 export const FULL_PRICE_SITES = 5;
-export const TRIAL_DAYS = 3;
+export const TRIAL_DAYS = 1;
 export const MIN_TOPUP_USD = 5;
 export const MAX_TOPUP_USD = 500;
 export const PAUSED_RETENTION_DAYS = 30;
