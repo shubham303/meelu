@@ -43,6 +43,8 @@ const PASSIVE_TYPES = new Set(["Image", "Media", "Font"]);
 const BEACON_PATH = /collect|beacon|track|log|analytics|pixel/i;
 const CORS_MESSAGE = /blocked by CORS policy|No 'Access-Control-Allow-Origin'/i;
 
+const RENDER_LOCALE = "en-US";
+
 const HTML_SCRIPT = "document.documentElement.outerHTML";
 
 const HELPERS = `
@@ -548,6 +550,8 @@ async function emulate(dbg, device) {
     await dbg.sendCommand("Emulation.clearDeviceMetricsOverride").catch(() => undefined);
     await dbg.sendCommand("Emulation.setTouchEmulationEnabled", { enabled: false }).catch(() => undefined);
   }
+  await dbg.sendCommand("Emulation.setLocaleOverride", {}).catch(() => undefined);
+  await dbg.sendCommand("Emulation.setLocaleOverride", { locale: RENDER_LOCALE });
 }
 
 function schemaHash(node) {
@@ -748,7 +752,7 @@ async function renderOnePage({
   const onHeaders = (details, callback) => {
     const headers = { ...details.requestHeaders };
     if (crawlToken && sameSite(details.url, url)) headers["x-meelu-crawl"] = crawlToken;
-    headers["Accept-Language"] = "en-US,en;q=0.9";
+    headers["Accept-Language"] = `${RENDER_LOCALE},en;q=0.9`;
     callback({ requestHeaders: headers });
   };
 
@@ -771,6 +775,8 @@ async function renderOnePage({
       "The render window did not answer the debugger.",
     );
     await withTimeout(emulate(dbg, device), 10_000, "The render window did not accept the device profile.");
+
+    await withTimeout(ses.clearStorageData(), 10_000, "The render window did not clear its storage.");
 
     const started = Date.now();
     await withTimeout(
