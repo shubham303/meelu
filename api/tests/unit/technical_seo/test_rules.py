@@ -275,6 +275,15 @@ def test_well_known_rules_read_the_site_record():
     )
     assert _held(well_known_rules(odd_sitemap)) == {"sitemap-not-at-standard-url"}
 
+    index_as_urlset = _site(
+        last_crawled_at=now,
+        sitemap_url_count=3000,
+        sitemap_urls=["https://example.com/sitemap.xml", "https://example.com/en/sitemap.xml"],
+        sitemap_at_root=True,
+        sitemaps_listing_sitemaps=["https://example.com/sitemap.xml"],
+    )
+    assert _held(well_known_rules(index_as_urlset)) == {"sitemap-index-as-urlset"}
+
     assert _held(well_known_rules(_site(llms_fetched_at=now, llms_status=404))) == {"llms-missing"}
     assert _held(
         well_known_rules(_site(llms_fetched_at=now, llms_status=200, llms_txt="<!doctype html>"))
@@ -409,7 +418,7 @@ def test_rule_set_is_complete_and_kinds_are_known():
     NO_RENDERS = RenderCounts(0, 0, 0, 0)
 
     assert len(PAGE_RULES) == 194
-    assert len(site_rules(_site(), NO_RENDERS)) == 25
+    assert len(site_rules(_site(), NO_RENDERS)) == 26
 
     for rule in PAGE_RULES:
         assert rule.kind in SITE_ISSUE_KINDS

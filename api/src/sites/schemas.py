@@ -140,6 +140,7 @@ class SiteUpdateRequest(RequestModel):
     sitemap_urls: list[str] | None = None
     sitemap_url_count: int | None = None
     sitemap_at_root: bool | None = None
+    sitemaps_listing_sitemaps: list[str] | None = None
     robots_txt: str | None = None
     robots_status: int | None = None
     robots_fetched_at: datetime | None = None
@@ -218,6 +219,7 @@ class SiteRecord(EntityModel):
     sitemap_urls: list[str]
     sitemap_url_count: int | None = None
     sitemap_at_root: bool | None = None
+    sitemaps_listing_sitemaps: list[str] = Field(default_factory=list)
     robots_txt: str | None = None
     robots_status: int | None = None
     robots_fetched_at: JsDateTime | None = None
@@ -255,6 +257,7 @@ class SiteResponse(EntityModel):
     sitemap_urls: list[str]
     sitemap_url_count: int | None = None
     sitemap_at_root: bool | None = None
+    sitemaps_listing_sitemaps: list[str] = Field(default_factory=list)
     robots_txt: str | None = None
     robots_status: int | None = None
     robots_fetched_at: JsDateTime | None = None

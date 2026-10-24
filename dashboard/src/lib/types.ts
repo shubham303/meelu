@@ -201,6 +201,7 @@ export const SITE_ISSUE_KINDS = [
   "robots-no-sitemap",
   "sitemap-missing",
   "sitemap-not-at-standard-url",
+  "sitemap-index-as-urlset",
   "llms-missing",
   "llms-not-plain-text",
   "robots-blocked-but-linked",
@@ -684,6 +685,7 @@ export interface SiteProfile extends BaseEntity {
   sitemapUrls: string[];
   sitemapUrlCount?: number;
   sitemapAtRoot?: boolean | null;
+  sitemapsListingSitemaps?: string[];
   robotsTxt?: string | null;
   robotsStatus?: number | null;
   robotsFetchedAt?: string | null;
