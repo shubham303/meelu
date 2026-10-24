@@ -83,8 +83,16 @@ const log = (...args) => console.log("[meelu]", ...args);
 
 async function serverUp() {
   try {
-    await fetch(BASE_URL, { signal: AbortSignal.timeout(2500) });
-    return true;
+    const response = await fetch(BASE_URL, { signal: AbortSignal.timeout(2500) });
+    return response.status < 500;
+  } catch {
+    return false;
+  }
+}
+
+function isDashboardUrl(url) {
+  try {
+    return new URL(url).origin === new URL(BASE_URL).origin;
   } catch {
     return false;
   }
@@ -731,6 +739,12 @@ function boot() {
   win.webContents.on("did-fail-load", (_ev, code, desc, url, isMainFrame) => {
     if (!isMainFrame || Math.abs(code) === 3) return;
     log(`load failed (${code} ${desc}) — reconnecting`);
+    void connect();
+  });
+
+  win.webContents.on("did-navigate", (_ev, url, httpResponseCode) => {
+    if (httpResponseCode < 500 || !isDashboardUrl(url)) return;
+    log(`dashboard answered ${httpResponseCode} — showing the waiting screen until it is back`);
     void connect();
   });
 
