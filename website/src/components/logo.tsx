@@ -77,7 +77,7 @@ export function Logo({
       {withWordmark && (
         <span
           className={cn(
-            "font-display text-lg font-light tracking-tight",
+            "font-[family-name:var(--font-fraunces)] text-lg font-light tracking-tight",
             tones[tone].text,
           )}
         >
