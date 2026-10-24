@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
+  Check,
   ChevronDown,
+  Link2,
   Download,
   ExternalLink,
   FileSpreadsheet,
@@ -37,12 +40,32 @@ function download(name: string, body: string) {
 
 type View = "checks" | "issues" | "pages";
 
+function CopyShareLink({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(new URL(path, window.location.origin).toString());
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-edge2 bg-panel px-3 py-2 text-sm text-ink transition-colors hover:bg-panel2"
+    >
+      {copied ? <Check size={14} /> : <Link2 size={14} />}
+      {copied ? "Link copied" : "Copy share link"}
+    </button>
+  );
+}
+
 export function AuditResults({
   result,
   onReset,
+  shareUrl,
 }: {
   result: SlimResult;
-  onReset: () => void;
+  onReset?: () => void;
+  shareUrl?: string | null;
 }) {
   const [view, setView] = useState<View>("checks");
   const [severity, setSeverity] = useState<Severity | "all">("all");
@@ -148,13 +171,23 @@ export function AuditResults({
               <FileSpreadsheet size={14} />
               Summary CSV
             </button>
-            <button
-              type="button"
-              onClick={onReset}
-              className="rounded-lg px-3 py-2 text-sm text-sub transition-colors hover:bg-panel2 hover:text-ink"
-            >
-              New audit
-            </button>
+            {shareUrl && <CopyShareLink path={shareUrl} />}
+            {onReset ? (
+              <button
+                type="button"
+                onClick={onReset}
+                className="rounded-lg px-3 py-2 text-sm text-sub transition-colors hover:bg-panel2 hover:text-ink"
+              >
+                New audit
+              </button>
+            ) : (
+              <Link
+                href="/tools/seo-audit"
+                className="rounded-lg px-3 py-2 text-sm text-sub transition-colors hover:bg-panel2 hover:text-ink"
+              >
+                Run your own audit
+              </Link>
+            )}
           </div>
         </div>
 

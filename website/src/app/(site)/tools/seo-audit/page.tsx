@@ -304,9 +304,9 @@ export default function SeoAuditPage() {
               rather than guessed at from a partial crawl.
             </li>
             <li className="rounded-xl border border-edge bg-panel p-4">
-              <strong className="font-medium">No history.</strong> Nothing is
-              stored, so there is no trend line and no shareable link. Download
-              the CSV if you want to keep the report.
+              <strong className="font-medium">A link, not a history.</strong> Each
+              report is saved under a private link you can share. There is no
+              trend line across runs. Download the CSV if you want the raw rows.
             </li>
           </ul>
         </div>

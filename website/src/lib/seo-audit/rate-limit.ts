@@ -6,10 +6,10 @@
  */
 
 export const LIMITS = {
-  perHour: 5,
-  perDay: 20,
+  perHour: 100,
+  perDay: 300,
   concurrent: 3,
-  globalPerHour: 120,
+  globalPerHour: 300,
 };
 
 const HOUR = 60 * 60 * 1000;
