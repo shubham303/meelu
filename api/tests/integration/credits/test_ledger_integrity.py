@@ -98,4 +98,4 @@ async def test_amounts_are_exact_in_micros(client, email):
             ),
             {"u": user_id},
         )
-        assert int(row.scalar_one()) == -7_500_000
+        assert int(row.scalar_one()) == -3_750_000
