@@ -119,8 +119,11 @@ export default function PrivacyPage() {
           address and country; you can skip this. If you give them, we store them with the build
           you chose so we can tell you about fixes and new versions. If you joined the download
           waitlist, we keep the email address and platform you gave so we can tell you about
-          Meelu. The free tools keep nothing you submit:
-          most run in your browser, and the ones that fetch a page do so once and discard it.
+          Meelu. Most free tools keep nothing you submit: they run in your browser, or fetch a
+          page once and discard it. The SEO audit is the exception. It saves each report, which
+          holds only what it read from the public pages of the site you audited, under a private
+          link so the report can be shared. Anyone with the link can open it, and search engines
+          are asked not to index it.
         </p>
       </LegalSection>
 
@@ -291,6 +294,10 @@ export default function PrivacyPage() {
       <LegalSection id="retention" heading="7. How long we keep it">
         <LegalList>
           <li>Account data is kept until you ask us to delete your account.</li>
+          <li>
+            Free SEO audit reports are kept until you ask us to delete one. Send the report link
+            to the contact address below.
+          </li>
           <li>
             Website data, including Google data, is kept until you delete the website. A website
             that stays paused for lack of credits for 30 days is deleted with all its data.

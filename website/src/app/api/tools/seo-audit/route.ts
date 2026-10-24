@@ -1,5 +1,6 @@
 import { MAX_PAGES, runAudit, slimResult } from "@/lib/seo-audit/audit";
 import { LIMITS, clientKey, takeSlot } from "@/lib/seo-audit/rate-limit";
+import { saveSharedAudit, shareUrlPath } from "@/lib/seo-audit/share";
 import type { StreamEvent } from "@/lib/seo-audit/types";
 import { parseInput } from "@/lib/seo-audit/url";
 
@@ -90,10 +91,13 @@ export async function POST(request: Request) {
         });
 
         if (outcome.ok) {
+          const result = slimResult(outcome.result);
+          const shareId = await saveSharedAudit(result).catch(() => null);
           send({
             type: "done",
-            result: slimResult(outcome.result),
+            result,
             remainingToday: slot.remainingToday,
+            shareUrl: shareId ? shareUrlPath(shareId) : null,
           });
         } else {
           send({ type: "error", error: outcome.error });
