@@ -292,13 +292,13 @@ export default function Home() {
           <div>
             <Eyebrow>For founders and marketers</Eyebrow>
             <h1 className="mt-5 font-display text-4xl leading-[1.06] tracking-tight text-ink text-balance sm:text-5xl lg:text-6xl">
-              SEO, AI search and social
+              All your organic marketing
               <br />
-              <span className="text-accent">research in one app.</span>
+              <span className="text-accent">in one app.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-sub text-pretty sm:text-lg">
-              Meelu does the reading and counting across your site, Search Console, ChatGPT answers and social
-              threads. You get a short list of what to do next, and you make the call.
+              SEO, AI search, content, social listening, lead finding and analytics for your website, in one app.
+              Every suggestion shows the data behind it, and you make the call.
             </p>
             <div className="mt-9">
               <HeroDownload align="start">
