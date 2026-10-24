@@ -91,6 +91,12 @@ export function listPosts(): PostMeta[] {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
+export const CASE_STUDY_TAG = "case-study";
+
+export function listCaseStudies(): PostMeta[] {
+  return listPosts().filter((post) => post.tags.includes(CASE_STUDY_TAG));
+}
+
 export async function getPost(slug: string): Promise<Post | null> {
   const file = path.join(postsDir, `${slug}.md`);
   if (!path.resolve(file).startsWith(postsDir) || !fs.existsSync(file)) {
